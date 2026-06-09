@@ -219,6 +219,193 @@ class TestModelLearn:
             mock_trainer.train.assert_called_once()
 
 
+class TestLearnDataFormats:
+    """learn() must route .csv and .parquet to the right load_dataset format."""
+
+    def _run_learn(self, patched_model, data_file: Path) -> MagicMock:
+        mock_trainer = MagicMock()
+        with (
+            patch("keel.model.load_dataset") as mock_ds,
+            patch("keel.model.Trainer", return_value=mock_trainer),
+            patch("keel.model.TrainingArguments"),
+            patch("keel.model.DataCollatorForLanguageModeling"),
+        ):
+            mock_dataset = MagicMock()
+            mock_dataset.column_names = ["text"]
+            mock_dataset.map.return_value = mock_dataset
+            mock_ds.return_value = mock_dataset
+
+            patched_model.learn(str(data_file), epochs=1)
+            return mock_ds
+
+    def test_jsonl_uses_json_format(self, patched_model, tmp_path: Path) -> None:
+        f = tmp_path / "data.jsonl"
+        f.write_text(json.dumps({"text": "hi"}) + "\n")
+        mock_ds = self._run_learn(patched_model, f)
+        mock_ds.assert_called_once()
+        assert mock_ds.call_args[0][0] == "json"
+
+    def test_csv_uses_csv_format(self, patched_model, tmp_path: Path) -> None:
+        f = tmp_path / "data.csv"
+        f.write_text("text\nhello world\n")
+        mock_ds = self._run_learn(patched_model, f)
+        mock_ds.assert_called_once()
+        assert mock_ds.call_args[0][0] == "csv"
+
+    def test_parquet_uses_parquet_format(self, patched_model, tmp_path: Path) -> None:
+        f = tmp_path / "data.parquet"
+        f.write_bytes(b"fake-parquet-bytes")
+        mock_ds = self._run_learn(patched_model, f)
+        mock_ds.assert_called_once()
+        assert mock_ds.call_args[0][0] == "parquet"
+
+    def test_unsupported_format_raises(self, patched_model, tmp_path: Path) -> None:
+        from keel.model import KeelError
+
+        f = tmp_path / "data.txt"
+        f.write_text("hello\n")
+        with pytest.raises(KeelError, match="Unsupported file format"):
+            patched_model.learn(str(f), epochs=1)
+
+
+class TestQLoRA:
+    def test_qlora_strategy_accepted(self, tmp_snapshot_dir: Path) -> None:
+        mock_tok = _make_mock_tokenizer()
+        mock_base = _make_mock_base_model()
+        mock_peft = _make_mock_peft_model()
+
+        with (
+            patch("keel.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
+            patch("keel.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
+            patch("keel.model.get_peft_model", return_value=mock_peft),
+            patch("keel.model.prepare_model_for_kbit_training", return_value=mock_base),
+            patch("keel.model.BitsAndBytesConfig") as mock_bnb,
+        ):
+            from keel.model import Model
+
+            m = Model(
+                "test/model",
+                strategy="qlora",
+                load_in_4bit=True,
+                snapshot_dir=tmp_snapshot_dir,
+            )
+            assert m.strategy == "qlora"
+            mock_bnb.assert_called_once()
+
+    def test_4bit_and_8bit_together_raises(self, tmp_snapshot_dir: Path) -> None:
+        mock_tok = _make_mock_tokenizer()
+        mock_base = _make_mock_base_model()
+        mock_peft = _make_mock_peft_model()
+
+        with (
+            patch("keel.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
+            patch("keel.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
+            patch("keel.model.get_peft_model", return_value=mock_peft),
+            patch("keel.model.BitsAndBytesConfig"),
+        ):
+            from keel.model import KeelError, Model
+
+            with pytest.raises(KeelError, match="Cannot use load_in_4bit and load_in_8bit"):
+                Model(
+                    "test/model",
+                    load_in_4bit=True,
+                    load_in_8bit=True,
+                    snapshot_dir=tmp_snapshot_dir,
+                )
+
+    def test_invalid_strategy_still_raises(self, tmp_snapshot_dir: Path) -> None:
+        mock_tok = _make_mock_tokenizer()
+        mock_base = _make_mock_base_model()
+        mock_peft = _make_mock_peft_model()
+
+        with (
+            patch("keel.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
+            patch("keel.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
+            patch("keel.model.get_peft_model", return_value=mock_peft),
+        ):
+            from keel.model import KeelError, Model
+
+            with pytest.raises(KeelError, match="strategy"):
+                Model("test/model", strategy="full", snapshot_dir=tmp_snapshot_dir)
+
+
+class TestResumeTraining:
+    def test_resume_true_with_checkpoint_passes_path(
+        self, patched_model, tmp_path: Path
+    ) -> None:
+        data_file = tmp_path / "train.jsonl"
+        data_file.write_text(json.dumps({"text": "hi"}) + "\n")
+
+        # Create a fake checkpoint directory that learn() will find
+        run_dir = Path.home() / ".keel" / "runs" / "test--model"
+        checkpoint = run_dir / "checkpoint-10"
+        checkpoint.mkdir(parents=True, exist_ok=True)
+
+        mock_trainer = MagicMock()
+        with (
+            patch("keel.model.load_dataset") as mock_ds,
+            patch("keel.model.Trainer", return_value=mock_trainer),
+            patch("keel.model.TrainingArguments"),
+            patch("keel.model.DataCollatorForLanguageModeling"),
+        ):
+            mock_dataset = MagicMock()
+            mock_dataset.column_names = ["text"]
+            mock_dataset.map.return_value = mock_dataset
+            mock_ds.return_value = mock_dataset
+
+            patched_model.learn(str(data_file), epochs=1, resume=True)
+            call_kwargs = mock_trainer.train.call_args
+            assert call_kwargs.kwargs.get("resume_from_checkpoint") == str(checkpoint)
+
+        # Cleanup
+        checkpoint.rmdir()
+
+    def test_resume_true_no_checkpoint_starts_fresh(
+        self, patched_model, tmp_path: Path
+    ) -> None:
+        data_file = tmp_path / "train.jsonl"
+        data_file.write_text(json.dumps({"text": "hi"}) + "\n")
+
+        mock_trainer = MagicMock()
+        with (
+            patch("keel.model.load_dataset") as mock_ds,
+            patch("keel.model.Trainer", return_value=mock_trainer),
+            patch("keel.model.TrainingArguments"),
+            patch("keel.model.DataCollatorForLanguageModeling"),
+            patch("keel.model.Path.glob", return_value=iter([])),
+        ):
+            mock_dataset = MagicMock()
+            mock_dataset.column_names = ["text"]
+            mock_dataset.map.return_value = mock_dataset
+            mock_ds.return_value = mock_dataset
+
+            patched_model.learn(str(data_file), epochs=1, resume=True)
+            call_kwargs = mock_trainer.train.call_args
+            assert call_kwargs.kwargs.get("resume_from_checkpoint") is None
+
+    def test_resume_false_never_passes_checkpoint(
+        self, patched_model, tmp_path: Path
+    ) -> None:
+        data_file = tmp_path / "train.jsonl"
+        data_file.write_text(json.dumps({"text": "hi"}) + "\n")
+
+        mock_trainer = MagicMock()
+        with (
+            patch("keel.model.load_dataset") as mock_ds,
+            patch("keel.model.Trainer", return_value=mock_trainer),
+            patch("keel.model.TrainingArguments"),
+            patch("keel.model.DataCollatorForLanguageModeling"),
+        ):
+            mock_dataset = MagicMock()
+            mock_dataset.column_names = ["text"]
+            mock_dataset.map.return_value = mock_dataset
+            mock_ds.return_value = mock_dataset
+
+            patched_model.learn(str(data_file), epochs=1, resume=False)
+            call_kwargs = mock_trainer.train.call_args
+            assert call_kwargs.kwargs.get("resume_from_checkpoint") is None
+
+
 class TestLoraTargets:
     def test_llama_targets(self) -> None:
         from keel.model import Model

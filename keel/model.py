@@ -7,11 +7,12 @@ from typing import Any, Optional
 
 import torch
 from datasets import load_dataset
-from peft import LoraConfig, PeftModel, TaskType, get_peft_model
+from peft import LoraConfig, PeftModel, TaskType, get_peft_model, prepare_model_for_kbit_training
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    BitsAndBytesConfig,
     DataCollatorForLanguageModeling,
     Trainer,
     TrainingArguments,
@@ -79,25 +80,29 @@ class Model:
         device: Optional[str] = None,
         snapshot_dir: Optional[Path] = None,
         forgetting_threshold: float = 0.10,
+        load_in_4bit: bool = False,
+        load_in_8bit: bool = False,
     ) -> None:
         """
         Load *model_name* from HuggingFace Hub (or local cache) and wrap it with LoRA.
 
         Args:
             model_name: HuggingFace model identifier, e.g. ``"meta-llama/Llama-3.2-1B"``.
-            strategy: Fine-tuning strategy. Only ``"lora"`` is supported.
+            strategy: Fine-tuning strategy — ``"lora"`` or ``"qlora"``.
             lora_r: LoRA rank (lower = fewer parameters, higher = more capacity).
             lora_alpha: LoRA scaling factor (usually 2× rank).
             lora_dropout: Dropout applied to LoRA layers.
             device: ``"cuda"``, ``"cpu"``, or ``"mps"``. Auto-detected when None.
             snapshot_dir: Override the default ``~/.keel/snapshots/<model>`` path.
             forgetting_threshold: Score drop fraction that counts as forgetting (0–1).
+            load_in_4bit: Load base model in 4-bit (QLoRA). Requires ``bitsandbytes``.
+            load_in_8bit: Load base model in 8-bit. Requires ``bitsandbytes``.
         """
-        if strategy != "lora":
+        if strategy not in ("lora", "qlora"):
             raise KeelError(
                 f"Unknown strategy '{strategy}'. "
-                "keelfit currently supports only strategy='lora'. "
-                "Example: Model('meta-llama/Llama-3.2-1B', strategy='lora')"
+                "keelfit supports strategy='lora' or strategy='qlora'. "
+                "Example: Model('meta-llama/Llama-3.2-1B', strategy='qlora', load_in_4bit=True)"
             )
 
         self.model_name = model_name
@@ -113,8 +118,29 @@ class Model:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
 
+        # QLoRA: quantize base weights, keep adapters in float16
+        bnb_config = None
+        if strategy == "qlora" or load_in_4bit or load_in_8bit:
+            if load_in_4bit and load_in_8bit:
+                raise KeelError("Cannot use load_in_4bit and load_in_8bit together.")
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=load_in_4bit,
+                load_in_8bit=load_in_8bit,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_use_double_quant=True,
+            )
+
         dtype = torch.float16 if self.device != "cpu" else torch.float32
-        base = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=dtype)
+        base = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=dtype,
+            quantization_config=bnb_config,
+            device_map="auto" if bnb_config else None,
+        )
+
+        if bnb_config:
+            base = prepare_model_for_kbit_training(base)
 
         target_modules = self._lora_targets(model_name)
         lora_cfg = LoraConfig(
@@ -126,7 +152,8 @@ class Model:
             bias="none",
         )
         self.model: PeftModel = get_peft_model(base, lora_cfg)
-        self.model = self.model.to(self.device)
+        if not bnb_config:
+            self.model = self.model.to(self.device)
         self.model.eval()
 
         self.rollback_manager = RollbackManager(
@@ -179,32 +206,47 @@ class Model:
         batch_size: int = 4,
         learning_rate: float = 2e-4,
         max_length: int = 512,
+        resume: bool = False,
     ) -> None:
         """
         Fine-tune the model on *data_path* using LoRA.
 
-        *data_path* must be a JSONL file where each line is a JSON object with
-        a ``"text"`` key containing the training text.  Example line::
+        *data_path* can be a ``.jsonl``, ``.csv``, or ``.parquet`` file.
+        Each row must have a ``"text"`` column containing the training text.
+        JSONL example line::
 
             {"text": "### Human: What is 2+2?\\n\\n### Assistant: 4"}
 
+        Checkpoints are saved every 20% of an epoch to ``~/.keel/runs/<model>/``.
+        Pass ``resume=True`` to continue from the latest checkpoint if a previous
+        run was interrupted.
+
         Args:
-            data_path: Path to the training JSONL file.
+            data_path: Path to the training data file (.jsonl, .csv, or .parquet).
             epochs: Number of full passes over the training data.
             batch_size: Per-device training batch size.
             learning_rate: AdamW learning rate.
             max_length: Tokenisation truncation length.
+            resume: If True, resume from the latest saved checkpoint (if one exists).
         """
         data_file = Path(data_path)
         if not data_file.exists():
             raise KeelError(
                 f"Training data not found at '{data_path}'. "
-                "Provide a valid JSONL file where each line has a 'text' key."
+                "Provide a JSONL, CSV, or Parquet file where each row has a 'text' column."
             )
 
         console.print(f"[info]Fine-tuning on '{data_path}' for {epochs} epoch(s)…[/info]")
 
-        dataset = load_dataset("json", data_files=str(data_file), split="train")
+        _FORMAT_MAP = {".jsonl": "json", ".json": "json", ".csv": "csv", ".parquet": "parquet"}
+        fmt = _FORMAT_MAP.get(data_file.suffix.lower())
+        if fmt is None:
+            raise KeelError(
+                f"Unsupported file format '{data_file.suffix}'. "
+                "Use .jsonl, .csv, or .parquet."
+            )
+
+        dataset = load_dataset(fmt, data_files=str(data_file), split="train")
 
         # Infer the text column — fall back to the first column if "text" is absent.
         text_col = "text" if "text" in dataset.column_names else dataset.column_names[0]
@@ -219,17 +261,21 @@ class Model:
 
         tokenized = dataset.map(_tokenize, batched=True, remove_columns=dataset.column_names)
 
-        run_dir = str(
-            Path.home() / ".keel" / "runs" / safe_model_name(self.model_name)
-        )
+        run_dir = Path.home() / ".keel" / "runs" / safe_model_name(self.model_name)
+
+        # Save a checkpoint roughly every 20% of an epoch so interrupted runs
+        # can be resumed without restarting from scratch.
+        save_steps = max(1, len(tokenized) // (batch_size * 5))
 
         args = TrainingArguments(
-            output_dir=run_dir,
+            output_dir=str(run_dir),
             num_train_epochs=epochs,
             per_device_train_batch_size=batch_size,
             learning_rate=learning_rate,
-            logging_steps=max(1, len(tokenized) // (batch_size * 5)),
-            save_strategy="no",
+            logging_steps=save_steps,
+            save_strategy="steps",
+            save_steps=save_steps,
+            save_total_limit=2,
             report_to="none",
             fp16=(self.device != "cpu"),
             dataloader_drop_last=False,
@@ -244,8 +290,18 @@ class Model:
             data_collator=collator,
         )
 
+        # Find latest checkpoint when resuming
+        resume_from = None
+        if resume:
+            checkpoints = sorted(run_dir.glob("checkpoint-*"), key=lambda p: int(p.name.split("-")[-1]))
+            if checkpoints:
+                resume_from = str(checkpoints[-1])
+                console.print(f"[info]Resuming from checkpoint '{checkpoints[-1].name}'…[/info]")
+            else:
+                console.print("[warning]No checkpoint found — starting from scratch.[/warning]")
+
         self.model.train()
-        trainer.train()
+        trainer.train(resume_from_checkpoint=resume_from)
         self.model.eval()
 
         console.print(f"[success]✓ Fine-tuning complete ({epochs} epoch(s)).[/success]")

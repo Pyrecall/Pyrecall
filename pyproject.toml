@@ -53,8 +53,8 @@ dev = [
 keel = "keel.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/keelfit/keelfit"
-"Bug Tracker" = "https://github.com/keelfit/keelfit/issues"
+Homepage = "https://github.com/Arths17/keel"
+"Bug Tracker" = "https://github.com/Arths17/keel/issues"
 PyPI = "https://pypi.org/project/keelfit"
 
 [tool.hatch.build.targets.wheel]
