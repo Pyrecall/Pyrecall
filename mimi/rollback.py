@@ -25,7 +25,7 @@ class RollbackManager:
             snapshot.json      ← benchmark scores
             adapter /          ← saved PEFT adapter weights
 
-    By default *base_dir* is ``~/.keel/snapshots``.
+    By default *base_dir* is ``~/.mimi/snapshots``.
     """
 
     def __init__(
@@ -37,7 +37,7 @@ class RollbackManager:
         self.base_dir: Path = (
             base_dir
             if base_dir is not None
-            else Path.home() / ".keel" / "snapshots" / safe_model_name(model_name)
+            else Path.home() / ".mimi" / "snapshots" / safe_model_name(model_name)
         )
         self.base_dir.mkdir(parents=True, exist_ok=True)
 

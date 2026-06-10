@@ -39,7 +39,7 @@ class LiveLearner:
        exported and :py:meth:`Model.learn` is called for one epoch.
     3. Trained rows are marked so they are never included in a future batch.
 
-    The SQLite database lives at ``~/.keel/live_data.db`` by default.
+    The SQLite database lives at ``~/.mimi/live_data.db`` by default.
     """
 
     def __init__(
@@ -51,7 +51,7 @@ class LiveLearner:
     ) -> None:
         self.model = model
         self.batch_size = batch_size
-        self.db_path: Path = db_path or Path.home() / ".keel" / "live_data.db"
+        self.db_path: Path = db_path or Path.home() / ".mimi" / "live_data.db"
         self.min_response_length = min_response_length
         self._init_db()
 

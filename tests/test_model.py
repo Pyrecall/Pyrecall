@@ -79,13 +79,13 @@ def patched_model(tmp_snapshot_dir: Path):
     mock_peft = _make_mock_peft_model()
 
     with (
-        patch("keel.model.AutoTokenizer.from_pretrained", return_value=mock_tokenizer),
-        patch("keel.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
-        patch("keel.model.get_peft_model", return_value=mock_peft),
-        patch("keel.model.compute_embeddings", return_value=torch.randn(32)),
-        patch("keel.model.cosine_similarity", return_value=0.75),
+        patch("mimi.model.AutoTokenizer.from_pretrained", return_value=mock_tokenizer),
+        patch("mimi.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
+        patch("mimi.model.get_peft_model", return_value=mock_peft),
+        patch("mimi.model.compute_embeddings", return_value=torch.randn(32)),
+        patch("mimi.model.cosine_similarity", return_value=0.75),
     ):
-        from keel.model import Model
+        from mimi.model import Model
 
         m = Model("test/model", snapshot_dir=tmp_snapshot_dir)
         m.model = mock_peft
@@ -102,11 +102,11 @@ class TestModelInit:
         mock_peft = _make_mock_peft_model()
 
         with (
-            patch("keel.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
-            patch("keel.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
-            patch("keel.model.get_peft_model", return_value=mock_peft),
+            patch("mimi.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
+            patch("mimi.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
+            patch("mimi.model.get_peft_model", return_value=mock_peft),
         ):
-            from keel.model import KeelError, Model
+            from mimi.model import KeelError, Model
 
             with pytest.raises(KeelError, match="strategy"):
                 Model("test/model", strategy="full", snapshot_dir=tmp_snapshot_dir)
@@ -137,13 +137,13 @@ class TestModelSnapshot:
         assert patched_model._baseline_snapshot_name == "baseline"
 
     def test_snapshot_returns_skill_snapshot(self, patched_model) -> None:
-        from keel.snapshot import SkillSnapshot
+        from mimi.snapshot import SkillSnapshot
 
         snap = patched_model.snapshot(name="v1")
         assert isinstance(snap, SkillSnapshot)
 
     def test_snapshot_has_correct_score_count(self, patched_model) -> None:
-        from keel.benchmarks.default import DEFAULT_BENCHMARKS
+        from mimi.benchmarks.default import DEFAULT_BENCHMARKS
 
         snap = patched_model.snapshot(name="count_test")
         assert len(snap.scores) == len(DEFAULT_BENCHMARKS)
@@ -161,20 +161,20 @@ class TestModelCheck:
         mock_peft = _make_mock_peft_model()
 
         with (
-            patch("keel.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
-            patch("keel.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
-            patch("keel.model.get_peft_model", return_value=mock_peft),
-            patch("keel.model.compute_embeddings", return_value=torch.randn(32)),
-            patch("keel.model.cosine_similarity", return_value=0.75),
+            patch("mimi.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
+            patch("mimi.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
+            patch("mimi.model.get_peft_model", return_value=mock_peft),
+            patch("mimi.model.compute_embeddings", return_value=torch.randn(32)),
+            patch("mimi.model.cosine_similarity", return_value=0.75),
         ):
-            from keel.model import KeelError, Model
+            from mimi.model import KeelError, Model
 
             m = Model("test/model", snapshot_dir=tmp_snapshot_dir)
             with pytest.raises(KeelError, match="snapshot"):
                 m.check()
 
     def test_check_returns_report(self, patched_model) -> None:
-        from keel.detector import ForgettingReport
+        from mimi.detector import ForgettingReport
 
         patched_model.snapshot(name="pre")
         report = patched_model.check()
@@ -188,7 +188,7 @@ class TestModelCheck:
 
 class TestModelLearn:
     def test_learn_raises_for_missing_file(self, patched_model) -> None:
-        from keel.model import KeelError
+        from mimi.model import KeelError
 
         with pytest.raises(KeelError, match="not found"):
             patched_model.learn("/nonexistent/data.jsonl")
@@ -205,10 +205,10 @@ class TestModelLearn:
         mock_trainer.train = MagicMock()
 
         with (
-            patch("keel.model.load_dataset") as mock_ds,
-            patch("keel.model.Trainer", return_value=mock_trainer),
-            patch("keel.model.TrainingArguments"),
-            patch("keel.model.DataCollatorForLanguageModeling"),
+            patch("mimi.model.load_dataset") as mock_ds,
+            patch("mimi.model.Trainer", return_value=mock_trainer),
+            patch("mimi.model.TrainingArguments"),
+            patch("mimi.model.DataCollatorForLanguageModeling"),
         ):
             mock_dataset = MagicMock()
             mock_dataset.column_names = ["text"]
@@ -225,10 +225,10 @@ class TestLearnDataFormats:
     def _run_learn(self, patched_model, data_file: Path) -> MagicMock:
         mock_trainer = MagicMock()
         with (
-            patch("keel.model.load_dataset") as mock_ds,
-            patch("keel.model.Trainer", return_value=mock_trainer),
-            patch("keel.model.TrainingArguments"),
-            patch("keel.model.DataCollatorForLanguageModeling"),
+            patch("mimi.model.load_dataset") as mock_ds,
+            patch("mimi.model.Trainer", return_value=mock_trainer),
+            patch("mimi.model.TrainingArguments"),
+            patch("mimi.model.DataCollatorForLanguageModeling"),
         ):
             mock_dataset = MagicMock()
             mock_dataset.column_names = ["text"]
@@ -260,7 +260,7 @@ class TestLearnDataFormats:
         assert mock_ds.call_args[0][0] == "parquet"
 
     def test_unsupported_format_raises(self, patched_model, tmp_path: Path) -> None:
-        from keel.model import KeelError
+        from mimi.model import KeelError
 
         f = tmp_path / "data.txt"
         f.write_text("hello\n")
@@ -275,13 +275,13 @@ class TestQLoRA:
         mock_peft = _make_mock_peft_model()
 
         with (
-            patch("keel.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
-            patch("keel.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
-            patch("keel.model.get_peft_model", return_value=mock_peft),
-            patch("keel.model.prepare_model_for_kbit_training", return_value=mock_base),
-            patch("keel.model.BitsAndBytesConfig") as mock_bnb,
+            patch("mimi.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
+            patch("mimi.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
+            patch("mimi.model.get_peft_model", return_value=mock_peft),
+            patch("mimi.model.prepare_model_for_kbit_training", return_value=mock_base),
+            patch("mimi.model.BitsAndBytesConfig") as mock_bnb,
         ):
-            from keel.model import Model
+            from mimi.model import Model
 
             m = Model(
                 "test/model",
@@ -298,12 +298,12 @@ class TestQLoRA:
         mock_peft = _make_mock_peft_model()
 
         with (
-            patch("keel.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
-            patch("keel.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
-            patch("keel.model.get_peft_model", return_value=mock_peft),
-            patch("keel.model.BitsAndBytesConfig"),
+            patch("mimi.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
+            patch("mimi.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
+            patch("mimi.model.get_peft_model", return_value=mock_peft),
+            patch("mimi.model.BitsAndBytesConfig"),
         ):
-            from keel.model import KeelError, Model
+            from mimi.model import KeelError, Model
 
             with pytest.raises(KeelError, match="Cannot use load_in_4bit and load_in_8bit"):
                 Model(
@@ -319,11 +319,11 @@ class TestQLoRA:
         mock_peft = _make_mock_peft_model()
 
         with (
-            patch("keel.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
-            patch("keel.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
-            patch("keel.model.get_peft_model", return_value=mock_peft),
+            patch("mimi.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
+            patch("mimi.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
+            patch("mimi.model.get_peft_model", return_value=mock_peft),
         ):
-            from keel.model import KeelError, Model
+            from mimi.model import KeelError, Model
 
             with pytest.raises(KeelError, match="strategy"):
                 Model("test/model", strategy="full", snapshot_dir=tmp_snapshot_dir)
@@ -337,16 +337,16 @@ class TestResumeTraining:
         data_file.write_text(json.dumps({"text": "hi"}) + "\n")
 
         # Create a fake checkpoint directory that learn() will find
-        run_dir = Path.home() / ".keel" / "runs" / "test--model"
+        run_dir = Path.home() / ".mimi" / "runs" / "test--model"
         checkpoint = run_dir / "checkpoint-10"
         checkpoint.mkdir(parents=True, exist_ok=True)
 
         mock_trainer = MagicMock()
         with (
-            patch("keel.model.load_dataset") as mock_ds,
-            patch("keel.model.Trainer", return_value=mock_trainer),
-            patch("keel.model.TrainingArguments"),
-            patch("keel.model.DataCollatorForLanguageModeling"),
+            patch("mimi.model.load_dataset") as mock_ds,
+            patch("mimi.model.Trainer", return_value=mock_trainer),
+            patch("mimi.model.TrainingArguments"),
+            patch("mimi.model.DataCollatorForLanguageModeling"),
         ):
             mock_dataset = MagicMock()
             mock_dataset.column_names = ["text"]
@@ -368,11 +368,11 @@ class TestResumeTraining:
 
         mock_trainer = MagicMock()
         with (
-            patch("keel.model.load_dataset") as mock_ds,
-            patch("keel.model.Trainer", return_value=mock_trainer),
-            patch("keel.model.TrainingArguments"),
-            patch("keel.model.DataCollatorForLanguageModeling"),
-            patch("keel.model.Path.glob", return_value=iter([])),
+            patch("mimi.model.load_dataset") as mock_ds,
+            patch("mimi.model.Trainer", return_value=mock_trainer),
+            patch("mimi.model.TrainingArguments"),
+            patch("mimi.model.DataCollatorForLanguageModeling"),
+            patch("mimi.model.Path.glob", return_value=iter([])),
         ):
             mock_dataset = MagicMock()
             mock_dataset.column_names = ["text"]
@@ -391,10 +391,10 @@ class TestResumeTraining:
 
         mock_trainer = MagicMock()
         with (
-            patch("keel.model.load_dataset") as mock_ds,
-            patch("keel.model.Trainer", return_value=mock_trainer),
-            patch("keel.model.TrainingArguments"),
-            patch("keel.model.DataCollatorForLanguageModeling"),
+            patch("mimi.model.load_dataset") as mock_ds,
+            patch("mimi.model.Trainer", return_value=mock_trainer),
+            patch("mimi.model.TrainingArguments"),
+            patch("mimi.model.DataCollatorForLanguageModeling"),
         ):
             mock_dataset = MagicMock()
             mock_dataset.column_names = ["text"]
@@ -408,20 +408,20 @@ class TestResumeTraining:
 
 class TestLoraTargets:
     def test_llama_targets(self) -> None:
-        from keel.model import Model
+        from mimi.model import Model
 
         targets = Model._lora_targets("meta-llama/Llama-3.2-1B")
         assert "q_proj" in targets
         assert "k_proj" in targets
 
     def test_gpt2_targets(self) -> None:
-        from keel.model import Model
+        from mimi.model import Model
 
         targets = Model._lora_targets("gpt2")
         assert "c_attn" in targets
 
     def test_unknown_model_uses_default(self) -> None:
-        from keel.model import Model
+        from mimi.model import Model
 
         targets = Model._lora_targets("some-unknown-model-xyz")
         assert targets == ["q_proj", "v_proj"]

@@ -46,7 +46,7 @@ _LORA_TARGETS: dict[str, list[str]] = {
 
 
 class KeelError(Exception):
-    """Raised for user-facing operational errors in keelfit."""
+    """Raised for user-facing operational errors in mimi."""
 
 
 class Model:
@@ -93,7 +93,7 @@ class Model:
             lora_alpha: LoRA scaling factor (usually 2× rank).
             lora_dropout: Dropout applied to LoRA layers.
             device: ``"cuda"``, ``"cpu"``, or ``"mps"``. Auto-detected when None.
-            snapshot_dir: Override the default ``~/.keel/snapshots/<model>`` path.
+            snapshot_dir: Override the default ``~/.mimi/snapshots/<model>`` path.
             forgetting_threshold: Score drop fraction that counts as forgetting (0–1).
             load_in_4bit: Load base model in 4-bit (QLoRA). Requires ``bitsandbytes``.
             load_in_8bit: Load base model in 8-bit. Requires ``bitsandbytes``.
@@ -101,7 +101,7 @@ class Model:
         if strategy not in ("lora", "qlora"):
             raise KeelError(
                 f"Unknown strategy '{strategy}'. "
-                "keelfit supports strategy='lora' or strategy='qlora'. "
+                "mimi supports strategy='lora' or strategy='qlora'. "
                 "Example: Model('meta-llama/Llama-3.2-1B', strategy='qlora', load_in_4bit=True)"
             )
 
@@ -183,7 +183,7 @@ class Model:
             name: A human-readable label for this snapshot, e.g. ``"before_v1"``.
 
         Returns:
-            The :class:`~keel.snapshot.SkillSnapshot` that was saved.
+            The :class:`~mimi.snapshot.SkillSnapshot` that was saved.
         """
         console.print(f"[info]Taking snapshot '{name}'…[/info]")
 
@@ -217,7 +217,7 @@ class Model:
 
             {"text": "### Human: What is 2+2?\\n\\n### Assistant: 4"}
 
-        Checkpoints are saved every 20% of an epoch to ``~/.keel/runs/<model>/``.
+        Checkpoints are saved every 20% of an epoch to ``~/.mimi/runs/<model>/``.
         Pass ``resume=True`` to continue from the latest checkpoint if a previous
         run was interrupted.
 
@@ -261,7 +261,7 @@ class Model:
 
         tokenized = dataset.map(_tokenize, batched=True, remove_columns=dataset.column_names)
 
-        run_dir = Path.home() / ".keel" / "runs" / safe_model_name(self.model_name)
+        run_dir = Path.home() / ".mimi" / "runs" / safe_model_name(self.model_name)
 
         # Save a checkpoint roughly every 20% of an epoch so interrupted runs
         # can be resumed without restarting from scratch.
@@ -314,7 +314,7 @@ class Model:
         Must be called after at least one :meth:`snapshot` call.
 
         Returns:
-            A :class:`~keel.detector.ForgettingReport` with per-category scores
+            A :class:`~mimi.detector.ForgettingReport` with per-category scores
             printed to the terminal automatically.
         """
         if not self._baseline_snapshot_name:
@@ -420,7 +420,7 @@ class Model:
         from pydantic import BaseModel as _Base
 
         app = FastAPI(
-            title="keelfit",
+            title="mimi",
             description=f"Serving {self.model_name}",
             version="0.1.0",
         )

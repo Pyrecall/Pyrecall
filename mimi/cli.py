@@ -1,4 +1,4 @@
-"""keel CLI — project management and snapshot inspection built with Typer."""
+"""mimi CLI — project management and snapshot inspection built with Typer."""
 
 from __future__ import annotations
 
@@ -12,17 +12,17 @@ from rich.console import Console
 from rich.table import Table
 
 app = typer.Typer(
-    name="keel",
+    name="mimi",
     help=(
-        "keelfit — continuous fine-tuning with automatic forgetting detection.\n\n"
+        "mimi — continuous fine-tuning with automatic forgetting detection.\n\n"
         "Quickstart:\n\n"
-        "  keel init --model meta-llama/Llama-3.2-1B\n\n"
+        "  mimi init --model meta-llama/Llama-3.2-1B\n\n"
         "  # take a snapshot before training\n"
-        "  keel snapshot before_v1\n\n"
+        "  mimi snapshot before_v1\n\n"
         "  # ... run your training script ...\n\n"
-        "  keel status   # inspect all snapshots\n"
-        "  keel check    # compare last two snapshots\n"
-        "  keel rollback before_v1  # if forgetting is detected"
+        "  mimi status   # inspect all snapshots\n"
+        "  mimi check    # compare last two snapshots\n"
+        "  mimi rollback before_v1  # if forgetting is detected"
     ),
     add_completion=False,
     rich_markup_mode="rich",
@@ -30,7 +30,7 @@ app = typer.Typer(
 
 console = Console()
 
-_CONFIG_FILE = ".keel.json"
+_CONFIG_FILE = ".mimi.json"
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
@@ -41,7 +41,7 @@ def _read_config() -> dict:
     if not cfg_path.exists():
         console.print(
             f"[bold red]Error:[/bold red] No {_CONFIG_FILE} found in the current directory.\n"
-            "Run [bold]keel init[/bold] first."
+            "Run [bold]mimi init[/bold] first."
         )
         raise typer.Exit(1)
     return json.loads(cfg_path.read_text())
@@ -52,7 +52,7 @@ def _write_config(data: dict) -> None:
 
 
 def _build_rollback_manager(config: dict):
-    from keel.rollback import RollbackManager
+    from mimi.rollback import RollbackManager
 
     return RollbackManager(model_name=config["model_name"])
 
@@ -71,7 +71,7 @@ def init(
         typer.Option("--strategy", "-s", help="Fine-tuning strategy (only 'lora' supported)"),
     ] = "lora",
 ) -> None:
-    """Initialise keelfit in the current project directory."""
+    """Initialise mimi in the current project directory."""
     cfg_path = Path(_CONFIG_FILE)
     if cfg_path.exists():
         console.print(
@@ -88,12 +88,12 @@ def init(
     }
     _write_config(config)
 
-    console.print(f"[green]✓ Initialised keelfit[/green] with [bold]{model}[/bold] ({strategy})")
+    console.print(f"[green]✓ Initialised mimi[/green] with [bold]{model}[/bold] ({strategy})")
     console.print(f"[dim]  Config saved to {_CONFIG_FILE}[/dim]")
     console.print()
     console.print("Next steps:")
-    console.print("  [bold]keel snapshot before_v1[/bold]   — take a baseline snapshot")
-    console.print("  [bold]keel status[/bold]               — view all snapshots")
+    console.print("  [bold]mimi snapshot before_v1[/bold]   — take a baseline snapshot")
+    console.print("  [bold]mimi status[/bold]               — view all snapshots")
 
 
 @app.command()
@@ -108,7 +108,7 @@ def snapshot(
     """
     config = _read_config()
 
-    from keel.model import Model
+    from mimi.model import Model
 
     model_obj = Model(config["model_name"], strategy=config.get("strategy", "lora"))
     model_obj.snapshot(name=name)
@@ -145,7 +145,7 @@ def check(
     if len(all_snaps) < 2:
         console.print(
             "[red]Error:[/red] Need at least two snapshots to run a forgetting check.\n"
-            "Run [bold]keel snapshot <name>[/bold] to create snapshots."
+            "Run [bold]mimi snapshot <name>[/bold] to create snapshots."
         )
         raise typer.Exit(1)
 
@@ -162,7 +162,7 @@ def check(
         snap_before = mgr.load_snapshot(before)
         snap_after = mgr.load_snapshot(after)
 
-    from keel.detector import ForgettingDetector
+    from mimi.detector import ForgettingDetector
 
     detector = ForgettingDetector(threshold=0.10)
     report = detector.compare(snap_before, snap_after)
@@ -181,7 +181,7 @@ def rollback(
     """
     Update the project config to point at a previous snapshot.
 
-    This does not reload the model in memory — it updates .keel.json so that
+    This does not reload the model in memory — it updates .mimi.json so that
     the next Python session loading Model() will start from this snapshot's
     adapter weights via model.rollback(to='<name>').
 
@@ -221,7 +221,7 @@ def status() -> None:
     if not all_snaps:
         console.print(
             "[yellow]No snapshots found.[/yellow] "
-            "Run [bold]keel snapshot <name>[/bold] to create one."
+            "Run [bold]mimi snapshot <name>[/bold] to create one."
         )
         return
 

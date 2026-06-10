@@ -43,7 +43,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           pytest \
-            --cov=keel \
+            --cov=mimi \
             --cov-report=term-missing \
             --cov-report=xml \
             -v

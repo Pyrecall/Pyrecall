@@ -1,11 +1,11 @@
 """
-keelfit — Keep your models balanced.
+mimi — Keep your models balanced.
 
 Continuous fine-tuning with automatic forgetting detection and skill rollback.
 
 Quick start::
 
-    from keel import Model
+    from mimi import Model
 
     model = Model("meta-llama/Llama-3.2-1B", strategy="lora")
     model.snapshot(name="before_v1")

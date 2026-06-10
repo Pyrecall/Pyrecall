@@ -3,12 +3,12 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "keelfit"
+name = "mimi"
 version = "0.1.0"
 description = "Keep your models balanced. Continuous fine-tuning with automatic forgetting detection and skill rollback."
 readme = "README.md"
 license = { file = "LICENSE" }
-authors = [{ name = "keelfit contributors" }]
+authors = [{ name = "mimi contributors" }]
 keywords = [
     "llm",
     "fine-tuning",
@@ -50,15 +50,15 @@ dev = [
 ]
 
 [project.scripts]
-keel = "keel.cli:app"
+mimi = "mimi.cli:app"
 
 [project.urls]
 Homepage = "https://github.com/Arths17/keel"
 "Bug Tracker" = "https://github.com/Arths17/keel/issues"
-PyPI = "https://pypi.org/project/keelfit"
+PyPI = "https://pypi.org/project/mimi"
 
 [tool.hatch.build.targets.wheel]
-packages = ["keel"]
+packages = ["mimi"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

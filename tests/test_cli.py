@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from keel.cli import _CONFIG_FILE, app
-from keel.snapshot import SkillScore, SkillSnapshot
+from mimi.cli import _CONFIG_FILE, app
+from mimi.snapshot import SkillScore, SkillSnapshot
 
 runner = CliRunner()
 
@@ -184,7 +184,7 @@ class TestSnapshot:
         mock_model = MagicMock()
         mock_model.snapshot.return_value = mock_snap
 
-        with patch("keel.model.Model", return_value=mock_model):
+        with patch("mimi.model.Model", return_value=mock_model):
             runner.invoke(app, ["snapshot", "v1"])
 
         mock_model.snapshot.assert_called_once_with(name="v1")
@@ -198,7 +198,7 @@ class TestSnapshot:
         mock_model = MagicMock()
         mock_model.snapshot.return_value = mock_snap
 
-        with patch("keel.model.Model", return_value=mock_model):
+        with patch("mimi.model.Model", return_value=mock_model):
             runner.invoke(app, ["snapshot", "my_baseline"])
 
         config = json.loads((tmp_path / _CONFIG_FILE).read_text())
@@ -213,7 +213,7 @@ class TestSnapshot:
         mock_model = MagicMock()
         mock_model.snapshot.return_value = mock_snap
 
-        with patch("keel.model.Model", return_value=mock_model) as mock_cls:
+        with patch("mimi.model.Model", return_value=mock_model) as mock_cls:
             runner.invoke(app, ["snapshot", "v1"])
 
         mock_cls.assert_called_once()
@@ -229,7 +229,7 @@ class TestSnapshot:
         mock_model = MagicMock()
         mock_model.snapshot.return_value = mock_snap
 
-        with patch("keel.model.Model", return_value=mock_model) as mock_cls:
+        with patch("mimi.model.Model", return_value=mock_model) as mock_cls:
             runner.invoke(app, ["snapshot", "v1"])
 
         assert mock_cls.call_args[1]["strategy"] == "lora"
@@ -253,7 +253,7 @@ class TestCheck:
         _write_config(tmp_path)
         mgr = _make_mock_manager(snapshots=[_make_snapshot("only_one")])
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             result = runner.invoke(app, ["check"])
 
         assert result.exit_code == 1
@@ -265,7 +265,7 @@ class TestCheck:
         _write_config(tmp_path)
         mgr = _make_mock_manager(snapshots=[])
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             result = runner.invoke(app, ["check"])
 
         assert result.exit_code == 1
@@ -279,7 +279,7 @@ class TestCheck:
         snap_b = _make_snapshot("after", {"reasoning": 0.85})
         mgr = _make_mock_manager(snapshots=[snap_a, snap_b])
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             result = runner.invoke(app, ["check"])
 
         assert result.exit_code == 0
@@ -293,7 +293,7 @@ class TestCheck:
         snap_b = _make_snapshot("after", {"coding": 0.50})  # drop > 0.10 threshold
         mgr = _make_mock_manager(snapshots=[snap_a, snap_b])
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             result = runner.invoke(app, ["check"])
 
         assert result.exit_code == 2
@@ -315,7 +315,7 @@ class TestCheck:
         # list_snapshots returns oldest-first; check should compare second and third
         mgr = _make_mock_manager(snapshots=[snap_a, snap_b, snap_c])
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             runner.invoke(app, ["check"])
 
         # list_snapshots is called but load_snapshot should NOT be called
@@ -331,7 +331,7 @@ class TestCheck:
         snap_b = _make_snapshot("b")
         mgr = _make_mock_manager(snapshots=[snap_a, snap_b])
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             result = runner.invoke(app, ["check", "--before", "a"])
 
         assert result.exit_code == 1
@@ -345,7 +345,7 @@ class TestCheck:
         snap_b = _make_snapshot("b")
         mgr = _make_mock_manager(snapshots=[snap_a, snap_b])
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             result = runner.invoke(app, ["check", "--after", "b"])
 
         assert result.exit_code == 1
@@ -362,7 +362,7 @@ class TestCheck:
             snapshot_map={"snap_a": snap_a, "snap_b": snap_b},
         )
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             result = runner.invoke(
                 app, ["check", "--before", "snap_a", "--after", "snap_b"]
             )
@@ -390,7 +390,7 @@ class TestRollback:
         _write_config(tmp_path)
         mgr = _make_mock_manager(snapshots=[])
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             result = runner.invoke(app, ["rollback", "nonexistent"])
 
         assert result.exit_code == 1
@@ -405,7 +405,7 @@ class TestRollback:
             snapshots=[snap], snapshot_map={"real_snap": snap}
         )
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             result = runner.invoke(app, ["rollback", "ghost"])
 
         assert "ghost" in result.output
@@ -420,7 +420,7 @@ class TestRollback:
             snapshots=[snap], snapshot_map={"new_snap": snap}
         )
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             result = runner.invoke(app, ["rollback", "new_snap"])
 
         assert result.exit_code == 0
@@ -437,7 +437,7 @@ class TestRollback:
             snapshots=[snap], snapshot_map={"target": snap}
         )
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             result = runner.invoke(app, ["rollback", "target"])
 
         assert result.exit_code == 0
@@ -452,7 +452,7 @@ class TestRollback:
             snapshots=[snap], snapshot_map={"v2": snap}
         )
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             result = runner.invoke(app, ["rollback", "v2"])
 
         assert "v2" in result.output
@@ -467,7 +467,7 @@ class TestRollback:
             snapshots=[snap], snapshot_map={"new": snap}
         )
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             runner.invoke(app, ["rollback", "new"])
 
         config = json.loads((tmp_path / _CONFIG_FILE).read_text())
@@ -493,7 +493,7 @@ class TestStatus:
         _write_config(tmp_path)
         mgr = _make_mock_manager(snapshots=[])
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             result = runner.invoke(app, ["status"])
 
         assert result.exit_code == 0
@@ -506,7 +506,7 @@ class TestStatus:
         _write_config(tmp_path, model="test/model")
         mgr = _make_mock_manager(snapshots=[_make_snapshot("v1")])
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             result = runner.invoke(app, ["status"])
 
         assert result.exit_code == 0
@@ -518,7 +518,7 @@ class TestStatus:
         _write_config(tmp_path)
         mgr = _make_mock_manager(snapshots=[_make_snapshot("release_v3")])
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             result = runner.invoke(app, ["status"])
 
         assert "release_v3" in result.output
@@ -531,7 +531,7 @@ class TestStatus:
         snaps = [_make_snapshot("alpha"), _make_snapshot("beta"), _make_snapshot("gamma")]
         mgr = _make_mock_manager(snapshots=snaps)
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             result = runner.invoke(app, ["status"])
 
         assert "alpha" in result.output
@@ -545,7 +545,7 @@ class TestStatus:
         _write_config(tmp_path, baseline="v1")
         mgr = _make_mock_manager(snapshots=[_make_snapshot("v1")])
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             result = runner.invoke(app, ["status"])
 
         # The baseline marker (★) should appear somewhere in output
@@ -558,7 +558,7 @@ class TestStatus:
         _write_config(tmp_path)
         mgr = _make_mock_manager(snapshots=[])
 
-        with patch("keel.rollback.RollbackManager", return_value=mgr):
+        with patch("mimi.rollback.RollbackManager", return_value=mgr):
             runner.invoke(app, ["status"])
 
         mgr.list_snapshots.assert_called_once()

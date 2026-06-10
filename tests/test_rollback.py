@@ -8,8 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from keel.rollback import RollbackManager
-from keel.snapshot import SkillScore, SkillSnapshot
+from mimi.rollback import RollbackManager
+from mimi.snapshot import SkillScore, SkillSnapshot
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
@@ -67,7 +67,7 @@ class TestRollbackManagerInit:
 
     def test_default_dir_under_home(self) -> None:
         mgr = RollbackManager(model_name="test/model")
-        assert ".keel" in str(mgr.base_dir)
+        assert ".mimi" in str(mgr.base_dir)
         assert "test--model" in str(mgr.base_dir)
 
     def test_safe_model_name_replaces_slash(self) -> None:

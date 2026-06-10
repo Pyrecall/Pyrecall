@@ -6,8 +6,8 @@ from datetime import datetime
 
 import pytest
 
-from keel.detector import CategoryComparison, ForgettingDetector, ForgettingReport
-from keel.snapshot import SkillScore, SkillSnapshot
+from mimi.detector import CategoryComparison, ForgettingDetector, ForgettingReport
+from mimi.snapshot import SkillScore, SkillSnapshot
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────

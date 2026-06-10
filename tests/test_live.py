@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from keel.live import LiveLearner
+from mimi.live import LiveLearner
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
