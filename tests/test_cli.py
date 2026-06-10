@@ -475,6 +475,141 @@ class TestRollback:
         assert config["baseline_snapshot"] != "old"
 
 
+# ── delete ────────────────────────────────────────────────────────────────────
+
+
+class TestDelete:
+    def test_fails_without_config_file(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        result = runner.invoke(app, ["delete", "v1", "--yes"])
+        assert result.exit_code == 1
+
+    def test_fails_when_snapshot_not_found(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        mgr = _make_mock_manager(snapshots=[])
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["delete", "ghost", "--yes"])
+
+        assert result.exit_code == 1
+
+    def test_error_output_contains_snapshot_name(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        mgr = _make_mock_manager(snapshots=[])
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["delete", "ghost", "--yes"])
+
+        assert "ghost" in result.output
+
+    def test_delete_calls_manager_delete(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap = _make_snapshot("v1")
+        mgr = _make_mock_manager(snapshots=[snap], snapshot_map={"v1": snap})
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            runner.invoke(app, ["delete", "v1", "--yes"])
+
+        mgr.delete_snapshot.assert_called_once_with("v1")
+
+    def test_success_exit_code_zero(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap = _make_snapshot("v1")
+        mgr = _make_mock_manager(snapshots=[snap], snapshot_map={"v1": snap})
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["delete", "v1", "--yes"])
+
+        assert result.exit_code == 0
+
+    def test_success_output_contains_snapshot_name(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap = _make_snapshot("v2")
+        mgr = _make_mock_manager(snapshots=[snap], snapshot_map={"v2": snap})
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["delete", "v2", "--yes"])
+
+        assert "v2" in result.output
+
+    def test_deleting_baseline_clears_config(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path, baseline="current_base")
+        snap = _make_snapshot("current_base")
+        mgr = _make_mock_manager(
+            snapshots=[snap], snapshot_map={"current_base": snap}
+        )
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["delete", "current_base", "--yes"])
+
+        assert result.exit_code == 0
+        config = json.loads((tmp_path / _CONFIG_FILE).read_text())
+        assert config["baseline_snapshot"] is None
+
+    def test_deleting_non_baseline_preserves_baseline_config(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path, baseline="keeper")
+        snap = _make_snapshot("other")
+        mgr = _make_mock_manager(snapshots=[snap], snapshot_map={"other": snap})
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            runner.invoke(app, ["delete", "other", "--yes"])
+
+        config = json.loads((tmp_path / _CONFIG_FILE).read_text())
+        assert config["baseline_snapshot"] == "keeper"
+
+    def test_aborted_without_yes_does_not_delete(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap = _make_snapshot("v1")
+        mgr = _make_mock_manager(snapshots=[snap], snapshot_map={"v1": snap})
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            # Simulate user typing "n" at the confirmation prompt
+            result = runner.invoke(app, ["delete", "v1"], input="n\n")
+
+        mgr.delete_snapshot.assert_not_called()
+        assert result.exit_code == 0
+
+    def test_short_flag_y_skips_prompt(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap = _make_snapshot("v1")
+        mgr = _make_mock_manager(snapshots=[snap], snapshot_map={"v1": snap})
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["delete", "v1", "-y"])
+
+        mgr.delete_snapshot.assert_called_once_with("v1")
+        assert result.exit_code == 0
+
+
 # ── status ────────────────────────────────────────────────────────────────────
 
 

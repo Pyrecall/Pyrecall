@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="pyrecall documentation — continuous fine-tuning with automatic forgetting detection and skill rollback.">
+  <title>Docs — pyrecall</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --surface-2: #1c1c1c;
+      --border: #2a2a2a;
+      --border-hover: #3a3a3a;
+      --text: #f0f0f0;
+      --text-muted: #888888;
+      --text-dim: #555555;
+      --accent: #4f9eff;
+      --accent-hover: #6aabff;
+      --accent-subtle: rgba(79, 158, 255, 0.08);
+      --code-bg: #111111;
+      --code-keyword: #4f9eff;
+      --code-string: #7ec8a0;
+      --code-comment: #555555;
+      --code-function: #c9a9ff;
+      --code-param: #f0c97a;
+      --sidebar-width: 260px;
+      --topnav-height: 56px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    /* ── TOP NAV ────────────────────────────────────────────────────────── */
+
+    .topnav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 200;
+      height: var(--topnav-height);
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+    }
+
+    .topnav-inner {
+      width: 100%;
+      padding: 0 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      font-size: 14px;
+      color: var(--text-muted);
+      transition: color 150ms;
+    }
+
+    .nav-links a:hover,
+    .nav-links a.active {
+      color: var(--text);
+    }
+
+    .nav-links a.active {
+      color: var(--accent);
+    }
+
+    .nav-pip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 5px 12px;
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: border-color 150ms, color 150ms;
+    }
+
+    .nav-pip:hover {
+      border-color: var(--border-hover);
+      color: var(--text);
+    }
+
+    /* ── LAYOUT ─────────────────────────────────────────────────────────── */
+
+    .docs-layout {
+      display: flex;
+      padding-top: var(--topnav-height);
+      min-height: 100vh;
+    }
+
+    /* ── SIDEBAR ────────────────────────────────────────────────────────── */
+
+    .sidebar {
+      position: fixed;
+      top: var(--topnav-height);
+      left: 0;
+      bottom: 0;
+      width: var(--sidebar-width);
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 32px 0 64px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .sidebar::-webkit-scrollbar { width: 4px; }
+    .sidebar::-webkit-scrollbar-track { background: transparent; }
+    .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .sidebar-section {
+      margin-bottom: 32px;
+    }
+
+    .sidebar-heading {
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      padding: 0 24px;
+      margin-bottom: 8px;
+    }
+
+    .sidebar-nav {
+      list-style: none;
+    }
+
+    .sidebar-nav a {
+      display: block;
+      padding: 6px 24px;
+      font-size: 14px;
+      color: var(--text-muted);
+      transition: color 150ms, background 150ms;
+      border-left: 2px solid transparent;
+    }
+
+    .sidebar-nav a:hover {
+      color: var(--text);
+      background: var(--surface);
+    }
+
+    .sidebar-nav a.active {
+      color: var(--accent);
+      border-left-color: var(--accent);
+      background: var(--accent-subtle);
+    }
+
+    .sidebar-nav .sub {
+      padding-left: 40px;
+      font-size: 13px;
+    }
+
+    /* ── MAIN CONTENT ───────────────────────────────────────────────────── */
+
+    .docs-main {
+      margin-left: var(--sidebar-width);
+      flex: 1;
+      min-width: 0;
+      padding: 64px 80px 120px 80px;
+      max-width: 900px;
+    }
+
+    /* ── SECTION TITLES ─────────────────────────────────────────────────── */
+
+    .docs-section {
+      padding-bottom: 64px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 64px;
+    }
+
+    .docs-section:last-child {
+      border-bottom: none;
+    }
+
+    .section-label {
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 10px;
+      font-weight: 400;
+      color: var(--text-dim);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-size: 42px;
+      font-weight: 800;
+      letter-spacing: -1.5px;
+      line-height: 1.1;
+      color: var(--text);
+      margin-bottom: 16px;
+    }
+
+    h2 {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: var(--text);
+      margin-bottom: 16px;
+      margin-top: 48px;
+      scroll-margin-top: calc(var(--topnav-height) + 24px);
+    }
+
+    h2:first-child { margin-top: 0; }
+
+    h3 {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.2px;
+      color: var(--text);
+      margin-bottom: 12px;
+      margin-top: 36px;
+      scroll-margin-top: calc(var(--topnav-height) + 24px);
+    }
+
+    h3:first-child { margin-top: 0; }
+
+    p {
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      line-height: 1.75;
+    }
+
+    p:last-child { margin-bottom: 0; }
+
+    p strong {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    /* inline code */
+    p code, li code, td code {
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 13px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 5px;
+      color: var(--code-function);
+    }
+
+    /* ── CODE BLOCKS ────────────────────────────────────────────────────── */
+
+    .code-block {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 24px 28px;
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 13.5px;
+      line-height: 1.85;
+      overflow-x: auto;
+      margin: 20px 0;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .code-block pre { margin: 0; white-space: pre; }
+
+    .code-block .label {
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .kw   { color: var(--code-keyword); }
+    .str  { color: var(--code-string); }
+    .fn   { color: var(--code-function); }
+    .pm   { color: var(--code-param); }
+    .cm   { color: var(--code-comment); }
+    .tx   { color: var(--text); }
+    .dm   { color: var(--text-dim); }
+    .num  { color: #f0c97a; }
+
+    /* CLI blocks */
+    .cli-block {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 20px 24px;
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 13.5px;
+      line-height: 1.9;
+      margin: 20px 0;
+    }
+
+    .cli-line { display: flex; gap: 0; }
+    .cli-line .prompt { color: var(--text-dim); margin-right: 8px; user-select: none; flex-shrink: 0; }
+    .cli-line .cmd { color: var(--text); }
+    .cli-line .comment { color: var(--code-comment); }
+
+    /* ── TABLES ─────────────────────────────────────────────────────────── */
+
+    .table-wrap {
+      overflow-x: auto;
+      margin: 20px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    thead th {
+      text-align: left;
+      padding: 10px 16px;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody td {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-muted);
+      vertical-align: top;
+      line-height: 1.6;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+
+    tbody td:first-child {
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 13px;
+      color: var(--code-param);
+      white-space: nowrap;
+    }
+
+    /* ── CALLOUTS ───────────────────────────────────────────────────────── */
+
+    .callout {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 4px;
+      padding: 16px 20px;
+      margin: 20px 0;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .callout strong { color: var(--text); }
+
+    .callout-warn {
+      border-left-color: #f0c97a;
+    }
+
+    /* ── LISTS ──────────────────────────────────────────────────────────── */
+
+    ul, ol {
+      padding-left: 20px;
+      margin-bottom: 16px;
+    }
+
+    li {
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      line-height: 1.7;
+    }
+
+    li strong { color: var(--text); font-weight: 500; }
+
+    /* ── METHOD SIGNATURE ───────────────────────────────────────────────── */
+
+    .method-sig {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 4px;
+      padding: 14px 20px;
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 13.5px;
+      color: var(--text);
+      margin: 24px 0 16px;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    /* ── BADGES ─────────────────────────────────────────────────────────── */
+
+    .badge {
+      display: inline-block;
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 3px;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    .badge-new { background: rgba(79,158,255,0.15); color: var(--accent); }
+    .badge-opt { background: rgba(126,200,160,0.15); color: #7ec8a0; }
+
+    /* ── INTRO LEAD ─────────────────────────────────────────────────────── */
+
+    .lead {
+      font-size: 18px;
+      color: var(--text-muted);
+      line-height: 1.75;
+      margin-bottom: 20px;
+    }
+
+    /* ── SKILL TABLE ────────────────────────────────────────────────────── */
+
+    .skill-pill {
+      display: inline-block;
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 11px;
+      padding: 2px 8px;
+      background: var(--accent-subtle);
+      color: var(--accent);
+      border-radius: 3px;
+    }
+
+    /* ── RETURN TYPE ────────────────────────────────────────────────────── */
+
+    .returns {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-top: 12px;
+      margin-bottom: 0;
+      font-size: 14px;
+    }
+
+    .returns .ret-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      white-space: nowrap;
+    }
+
+    .returns .ret-type {
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 13px;
+      color: var(--code-function);
+    }
+
+    /* ── MOBILE ─────────────────────────────────────────────────────────── */
+
+    .mobile-menu-btn {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    @media (max-width: 900px) {
+      .sidebar {
+        transform: translateX(-100%);
+        transition: transform 200ms ease;
+        z-index: 150;
+      }
+
+      .sidebar.open {
+        transform: translateX(0);
+      }
+
+      .docs-main {
+        margin-left: 0;
+        padding: 40px 24px 80px;
+      }
+
+      .mobile-menu-btn { display: flex; }
+
+      h1 { font-size: 30px; }
+      h2 { font-size: 22px; }
+
+      .topnav-inner { padding: 0 20px; }
+
+      .nav-links { display: none; }
+      .nav-pip { display: none; }
+    }
+
+    @media (max-width: 600px) {
+      .docs-main { padding: 32px 16px 80px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ─── TOP NAV ──────────────────────────────────────────────────────────── -->
+
+  <nav class="topnav">
+    <div class="topnav-inner">
+      <div style="display:flex;align-items:center;gap:16px;">
+        <button class="mobile-menu-btn" id="menuBtn" aria-label="Toggle sidebar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+        <a href="index.html" class="nav-logo">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+          </svg>
+          pyrecall
+        </a>
+      </div>
+
+      <ul class="nav-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="docs.html" class="active">Docs</a></li>
+        <li><a href="https://github.com/Arths17/Pyrecall" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+        <li><a href="https://pypi.org/project/pyrecall/" target="_blank" rel="noopener noreferrer">PyPI</a></li>
+      </ul>
+
+      <button class="nav-pip" id="navCopyBtn" aria-label="Copy install command">
+        pip install pyrecall
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </svg>
+      </button>
+    </div>
+  </nav>
+
+  <div class="docs-layout">
+
+    <!-- ─── SIDEBAR ───────────────────────────────────────────────────────── -->
+
+    <aside class="sidebar" id="sidebar">
+
+      <div class="sidebar-section">
+        <div class="sidebar-heading">Getting Started</div>
+        <ul class="sidebar-nav">
+          <li><a href="#installation">Installation</a></li>
+          <li><a href="#quickstart">Quickstart</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-heading">Core Concepts</div>
+        <ul class="sidebar-nav">
+          <li><a href="#catastrophic-forgetting">Catastrophic Forgetting</a></li>
+          <li><a href="#how-detection-works">How Detection Works</a></li>
+          <li><a href="#skill-categories">Skill Categories</a></li>
+          <li><a href="#snapshot-storage">Snapshot Storage</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-heading">Python API</div>
+        <ul class="sidebar-nav">
+          <li><a href="#model-class">Model</a></li>
+          <li><a href="#model-snapshot" class="sub">model.snapshot()</a></li>
+          <li><a href="#model-learn" class="sub">model.learn()</a></li>
+          <li><a href="#model-check" class="sub">model.check()</a></li>
+          <li><a href="#model-rollback" class="sub">model.rollback()</a></li>
+          <li><a href="#model-generate" class="sub">model.generate()</a></li>
+          <li><a href="#model-serve" class="sub">model.serve()</a></li>
+          <li><a href="#live-learner">LiveLearner</a></li>
+          <li><a href="#forgetting-report">ForgettingReport</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-heading">CLI Reference</div>
+        <ul class="sidebar-nav">
+          <li><a href="#cli-init">pyrecall init</a></li>
+          <li><a href="#cli-snapshot">pyrecall snapshot</a></li>
+          <li><a href="#cli-check">pyrecall check</a></li>
+          <li><a href="#cli-rollback">pyrecall rollback</a></li>
+          <li><a href="#cli-status">pyrecall status</a></li>
+          <li><a href="#cli-delete">pyrecall delete</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-heading">Configuration</div>
+        <ul class="sidebar-nav">
+          <li><a href="#lora-params">LoRA Parameters</a></li>
+          <li><a href="#training-params">Training Parameters</a></li>
+          <li><a href="#qlora">QLoRA / Quantization</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-heading">Data &amp; Models</div>
+        <ul class="sidebar-nav">
+          <li><a href="#data-formats">Data Formats</a></li>
+          <li><a href="#supported-models">Supported Models</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-heading">Guides</div>
+        <ul class="sidebar-nav">
+          <li><a href="#ci-integration">CI Integration</a></li>
+          <li><a href="#live-learning-guide">Live Learning</a></li>
+          <li><a href="#contributing">Contributing</a></li>
+        </ul>
+      </div>
+
+    </aside>
+
+    <!-- ─── MAIN CONTENT ──────────────────────────────────────────────────── -->
+
+    <main class="docs-main">
+
+      <!-- INTRO -->
+      <div class="docs-section" id="intro">
+        <p class="section-label">Documentation</p>
+        <h1>pyrecall</h1>
+        <p class="lead">
+          Continuous fine-tuning with automatic forgetting detection and skill rollback.
+          Keep your models balanced — detect exactly what changed and fix it in one command.
+        </p>
+        <div class="callout">
+          <strong>v0.1.0</strong> &nbsp;·&nbsp; Python 3.10+ &nbsp;·&nbsp; MIT License &nbsp;·&nbsp;
+          <a href="https://github.com/Arths17/Pyrecall" style="color:var(--accent);">GitHub</a> &nbsp;·&nbsp;
+          <a href="https://pypi.org/project/pyrecall/" style="color:var(--accent);">PyPI</a>
+        </div>
+      </div>
+
+      <!-- ── GETTING STARTED ─────────────────────────────────────────────── -->
+
+      <div class="docs-section" id="getting-started">
+
+        <h2 id="installation">Installation</h2>
+        <p>Install from PyPI with pip:</p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pip install pyrecall</span></div>
+        </div>
+        <p>
+          Core dependencies (<code>torch</code>, <code>transformers</code>, <code>peft</code>,
+          <code>datasets</code>, <code>accelerate</code>) are pulled in automatically.
+          For development and running the test suite:
+        </p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pip install pyrecall[dev]</span></div>
+        </div>
+
+        <h2 id="quickstart">Quickstart</h2>
+        <p>
+          The entire pyrecall workflow is four method calls. Snapshot before training,
+          fine-tune, check what changed, roll back if needed.
+        </p>
+        <div class="code-block">
+<pre><span class="kw">from</span> <span class="tx">pyrecall</span> <span class="kw">import</span> <span class="fn">Model</span>
+
+<span class="cm"># Load any causal LM from HuggingFace Hub</span>
+<span class="tx">model</span> <span class="tx">=</span> <span class="fn">Model</span><span class="tx">(</span><span class="str">"meta-llama/Llama-3.2-1B"</span><span class="tx">)</span>
+
+<span class="cm"># Lock in current skill scores before you touch the weights</span>
+<span class="tx">model.</span><span class="fn">snapshot</span><span class="tx">(</span><span class="pm">name</span><span class="tx">=</span><span class="str">"before_v1"</span><span class="tx">)</span>
+
+<span class="cm"># Fine-tune on your data</span>
+<span class="tx">model.</span><span class="fn">learn</span><span class="tx">(</span><span class="str">"customer_service.jsonl"</span><span class="tx">,</span> <span class="pm">epochs</span><span class="tx">=</span><span class="num">3</span><span class="tx">)</span>
+
+<span class="cm"># What did training break?</span>
+<span class="tx">report</span> <span class="tx">=</span> <span class="tx">model.</span><span class="fn">check</span><span class="tx">()</span>
+
+<span class="kw">if not</span> <span class="tx">report.is_healthy:</span>
+    <span class="tx">model.</span><span class="fn">rollback</span><span class="tx">(</span><span class="pm">to</span><span class="tx">=</span><span class="str">"before_v1"</span><span class="tx">)</span></pre>
+        </div>
+        <p>
+          <code>model.check()</code> prints a color-coded table to your terminal automatically.
+          <code>report.is_healthy</code> is <code>False</code> when any skill dropped more than
+          your configured threshold (10% by default).
+        </p>
+
+      </div>
+
+      <!-- ── CORE CONCEPTS ───────────────────────────────────────────────── -->
+
+      <div class="docs-section" id="core-concepts">
+
+        <h2 id="catastrophic-forgetting">Catastrophic Forgetting</h2>
+        <p>
+          Every time you fine-tune a language model, you risk <strong>catastrophic forgetting</strong>:
+          the phenomenon where gradient updates that improve one task silently degrade performance
+          on others. Fine-tune on customer support tickets and the model gets better at customer
+          support — while quietly losing coding ability, reasoning, and safety guardrails.
+        </p>
+        <p>
+          The loss curve looks fine. Eval on your fine-tune dataset looks fine. The damage only
+          surfaces when a user hits a capability that wasn't in your training data.
+        </p>
+
+        <h2 id="how-detection-works">How Detection Works</h2>
+        <p>
+          pyrecall detects forgetting by running the same 20 benchmark prompts before and after
+          training, scoring each response against a reference answer using cosine similarity over
+          the model's own hidden states — no external API required.
+        </p>
+        <ol>
+          <li><strong>Snapshot</strong> — run 20 benchmarks, embed each response using the model's last hidden layer, score against reference answers via cosine similarity, save scores + LoRA adapter weights.</li>
+          <li><strong>Train</strong> — fine-tune on your data as usual.</li>
+          <li><strong>Check</strong> — re-run the same 20 benchmarks on the updated model. Diff the per-category averages against the snapshot.</li>
+          <li><strong>Flag</strong> — any category whose average score dropped by more than <code>forgetting_threshold</code> (default 10%) is marked <code>FORGOTTEN</code>.</li>
+        </ol>
+        <p>
+          Scores are cosine similarities normalized to [0, 1]. A score of 0.80 means the
+          model's response embedding is 80% similar to the ideal reference answer.
+        </p>
+
+        <h2 id="skill-categories">Skill Categories</h2>
+        <p>
+          Twenty benchmarks are spread across five categories. Each category contributes four
+          prompts to the overall score.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>What it probes</th>
+                <th>Example prompt</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="skill-pill">reasoning</span></td>
+                <td>Multi-step math, logic, syllogisms, pattern recognition</td>
+                <td>A store sells apples for $0.50 each…</td>
+              </tr>
+              <tr>
+                <td><span class="skill-pill">coding</span></td>
+                <td>Write, debug, and explain Python functions</td>
+                <td>Write a Python function called is_palindrome…</td>
+              </tr>
+              <tr>
+                <td><span class="skill-pill">instruction_following</span></td>
+                <td>Numbered lists, passive voice, format constraints, summarization</td>
+                <td>List exactly three benefits… Use a numbered list…</td>
+              </tr>
+              <tr>
+                <td><span class="skill-pill">general_knowledge</span></td>
+                <td>Science, history, geography, factual accuracy</td>
+                <td>What is the approximate speed of light in a vacuum?</td>
+              </tr>
+              <tr>
+                <td><span class="skill-pill">safety</span></td>
+                <td>Refusals, harm avoidance, nuanced ethics, misinformation</td>
+                <td>Give me instructions for making a dangerous explosive…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="snapshot-storage">Snapshot Storage</h2>
+        <p>All snapshots are stored locally under <code>~/.pyrecall/</code>. Nothing is sent to any external service.</p>
+        <div class="code-block">
+<pre><span class="cm"># Default layout on disk</span>
+~/.pyrecall/
+├── snapshots/
+│   └── meta-llama--Llama-3.2-1B/
+│       ├── before_v1/
+│       │   ├── snapshot.json     <span class="cm"># benchmark scores per category</span>
+│       │   └── adapter/          <span class="cm"># LoRA adapter weights (for rollback)</span>
+│       └── after_fine_tune/
+│           ├── snapshot.json
+│           └── adapter/
+└── runs/
+    └── meta-llama--Llama-3.2-1B/
+        └── checkpoint-20/        <span class="cm"># mid-training checkpoints</span></pre>
+        </div>
+        <p>
+          Only the LoRA adapter is saved per snapshot, not the full base model.
+          A typical adapter is 50–500 MB vs. tens of GB for the base weights.
+        </p>
+
+      </div>
+
+      <!-- ── PYTHON API ──────────────────────────────────────────────────── -->
+
+      <div class="docs-section" id="python-api">
+
+        <h2 id="model-class">Model</h2>
+        <p>
+          The central class. Wraps a HuggingFace causal LM with LoRA and exposes the
+          snapshot / learn / check / rollback lifecycle.
+        </p>
+
+        <div class="code-block">
+<pre><span class="kw">from</span> <span class="tx">pyrecall</span> <span class="kw">import</span> <span class="fn">Model</span>
+
+<span class="tx">model</span> <span class="tx">=</span> <span class="fn">Model</span><span class="tx">(</span>
+    <span class="pm">model_name</span><span class="tx">=</span><span class="str">"meta-llama/Llama-3.2-1B"</span><span class="tx">,</span>
+    <span class="pm">strategy</span><span class="tx">=</span><span class="str">"lora"</span><span class="tx">,</span>         <span class="cm"># "lora" or "qlora"</span>
+    <span class="pm">lora_r</span><span class="tx">=</span><span class="num">16</span><span class="tx">,</span>
+    <span class="pm">lora_alpha</span><span class="tx">=</span><span class="num">32</span><span class="tx">,</span>
+    <span class="pm">lora_dropout</span><span class="tx">=</span><span class="num">0.1</span><span class="tx">,</span>
+    <span class="pm">learning_rate</span><span class="tx">=</span><span class="num">2e-4</span><span class="tx">,</span>    <span class="cm"># default for model.learn()</span>
+    <span class="pm">batch_size</span><span class="tx">=</span><span class="num">4</span><span class="tx">,</span>
+    <span class="pm">max_length</span><span class="tx">=</span><span class="num">512</span><span class="tx">,</span>
+    <span class="pm">forgetting_threshold</span><span class="tx">=</span><span class="num">0.10</span><span class="tx">,</span>
+    <span class="pm">device</span><span class="tx">=</span><span class="kw">None</span><span class="tx">,</span>            <span class="cm"># auto-detected: cuda → mps → cpu</span>
+<span class="tx">)</span></pre>
+        </div>
+
+        <h3>Constructor Parameters</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>model_name</td><td>str</td><td>—</td><td>HuggingFace model identifier or local path.</td></tr>
+              <tr><td>strategy</td><td>str</td><td>"lora"</td><td><code>"lora"</code> or <code>"qlora"</code>.</td></tr>
+              <tr><td>lora_r</td><td>int</td><td>16</td><td>LoRA rank. Lower = fewer parameters, higher = more capacity.</td></tr>
+              <tr><td>lora_alpha</td><td>int</td><td>32</td><td>LoRA scaling factor. Typically 2× rank.</td></tr>
+              <tr><td>lora_dropout</td><td>float</td><td>0.1</td><td>Dropout applied to LoRA layers.</td></tr>
+              <tr><td>learning_rate</td><td>float</td><td>2e-4</td><td>Default AdamW learning rate for <code>model.learn()</code>. Can be overridden per-call.</td></tr>
+              <tr><td>batch_size</td><td>int</td><td>4</td><td>Default per-device batch size for <code>model.learn()</code>. Can be overridden per-call.</td></tr>
+              <tr><td>max_length</td><td>int</td><td>512</td><td>Default tokenization truncation length for <code>model.learn()</code>. Can be overridden per-call.</td></tr>
+              <tr><td>device</td><td>str | None</td><td>None</td><td>Force <code>"cuda"</code>, <code>"cpu"</code>, or <code>"mps"</code>. Auto-detected when None.</td></tr>
+              <tr><td>snapshot_dir</td><td>Path | None</td><td>None</td><td>Override default snapshot directory (<code>~/.pyrecall/snapshots/&lt;model&gt;</code>).</td></tr>
+              <tr><td>forgetting_threshold</td><td>float</td><td>0.10</td><td>Score drop fraction that counts as forgetting. 0.10 = 10%.</td></tr>
+              <tr><td>load_in_4bit</td><td>bool</td><td>False</td><td>Quantize base model in 4-bit (QLoRA). Requires <code>bitsandbytes</code>.</td></tr>
+              <tr><td>load_in_8bit</td><td>bool</td><td>False</td><td>Quantize base model in 8-bit. Requires <code>bitsandbytes</code>.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- snapshot -->
+        <h3 id="model-snapshot">model.snapshot(name)</h3>
+        <div class="method-sig">model.snapshot(name: str) → SkillSnapshot</div>
+        <p>
+          Benchmark the model and save a named capability snapshot. Runs all 20 default benchmarks,
+          scores each response, saves scores and the current LoRA adapter weights to disk so the
+          model can be rolled back to this exact state later.
+        </p>
+        <p>
+          This sets <code>model._baseline_snapshot_name</code> internally so that
+          <code>model.check()</code> knows what to compare against without needing explicit arguments.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td>name</td><td>str</td><td>Human-readable label, e.g. <code>"before_v1"</code>. Used as the directory name on disk.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="returns"><span class="ret-label">Returns</span><span class="ret-type">SkillSnapshot</span></p>
+
+        <!-- learn -->
+        <h3 id="model-learn">model.learn(data_path, …)</h3>
+        <div class="method-sig">model.learn(
+    data_path: str,
+    epochs: int = 3,
+    batch_size: int | None = None,    <span class="cm"># falls back to constructor default</span>
+    learning_rate: float | None = None,
+    max_length: int | None = None,
+    resume: bool = False,
+) → None</div>
+        <p>
+          Fine-tune the model on <code>data_path</code> using LoRA. Supports <code>.jsonl</code>,
+          <code>.csv</code>, and <code>.parquet</code> files — each row must have a
+          <code>"text"</code> column.
+        </p>
+        <p>
+          When <code>batch_size</code>, <code>learning_rate</code>, or <code>max_length</code>
+          are not passed, the values set on the constructor are used. Explicit arguments always win.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td>data_path</td><td>str</td><td>—</td><td>Path to a <code>.jsonl</code>, <code>.csv</code>, or <code>.parquet</code> file.</td></tr>
+              <tr><td>epochs</td><td>int</td><td>3</td><td>Number of full passes over the training data.</td></tr>
+              <tr><td>batch_size</td><td>int | None</td><td>None</td><td>Per-device batch size. Falls back to <code>self.batch_size</code> (constructor default 4).</td></tr>
+              <tr><td>learning_rate</td><td>float | None</td><td>None</td><td>AdamW learning rate. Falls back to <code>self.learning_rate</code> (constructor default 2e-4).</td></tr>
+              <tr><td>max_length</td><td>int | None</td><td>None</td><td>Tokenization truncation. Falls back to <code>self.max_length</code> (constructor default 512).</td></tr>
+              <tr><td>resume</td><td>bool</td><td>False</td><td>Resume from the latest checkpoint in the run directory if one exists.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- check -->
+        <h3 id="model-check">model.check()</h3>
+        <div class="method-sig">model.check() → ForgettingReport</div>
+        <p>
+          Detect forgetting by benchmarking the current model and comparing to the most
+          recent snapshot. Must be called after at least one <code>model.snapshot()</code>.
+          Prints the report table to the terminal automatically.
+        </p>
+        <p class="returns"><span class="ret-label">Returns</span><span class="ret-type">ForgettingReport</span></p>
+        <div class="callout">
+          <strong>Raises</strong> <code>PyrecallError</code> if no baseline snapshot has been set.
+          Call <code>model.snapshot()</code> first.
+        </div>
+
+        <!-- rollback -->
+        <h3 id="model-rollback">model.rollback(to)</h3>
+        <div class="method-sig">model.rollback(to: str) → None</div>
+        <p>
+          Restore the model to the state captured in snapshot <code>to</code>. Reloads
+          the base model from HuggingFace cache and applies the saved LoRA adapter from
+          the snapshot directory. Replaces the current in-memory model — any training
+          done after the snapshot is discarded.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td>to</td><td>str</td><td>Name of a snapshot previously created with <code>model.snapshot()</code>.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- generate -->
+        <h3 id="model-generate">model.generate(prompt, …)</h3>
+        <div class="method-sig">model.generate(prompt: str, max_new_tokens: int = 200) → str</div>
+        <p>
+          Run greedy inference and return the model's response. Only returns the newly
+          generated tokens, not the prompt itself.
+        </p>
+
+        <!-- serve -->
+        <h3 id="model-serve">model.serve(port, live_learning)</h3>
+        <div class="method-sig">model.serve(port: int = 8000, live_learning: bool = False) → None</div>
+        <p>
+          Start a FastAPI inference server. Blocks until the process is killed.
+          Two endpoints are exposed:
+        </p>
+        <ul>
+          <li><code>POST /generate</code> — body: <code>{"prompt": "...", "max_new_tokens": 200}</code>, returns <code>{"response": "...", "model": "..."}</code></li>
+          <li><code>GET /health</code> — returns server status, model name, device, and (when live learning is enabled) pending interaction count.</li>
+        </ul>
+        <p>
+          When <code>live_learning=True</code>, every inference request is stored in a local
+          SQLite database. Once 50 interactions accumulate, a one-epoch LoRA fine-tune fires
+          in the foreground. See <a href="#live-learning-guide" style="color:var(--accent);">Live Learning</a>.
+        </p>
+
+        <!-- LiveLearner -->
+        <h2 id="live-learner">LiveLearner</h2>
+        <p>
+          Collect production interactions and trigger periodic fine-tuning automatically.
+          Used internally by <code>model.serve(live_learning=True)</code>, but can be
+          instantiated directly for custom collection pipelines.
+        </p>
+        <div class="code-block">
+<pre><span class="kw">from</span> <span class="tx">pyrecall</span> <span class="kw">import</span> <span class="fn">LiveLearner</span>
+
+<span class="tx">learner</span> <span class="tx">=</span> <span class="fn">LiveLearner</span><span class="tx">(</span><span class="tx">model</span><span class="tx">,</span> <span class="pm">batch_size</span><span class="tx">=</span><span class="num">100</span><span class="tx">)</span>
+
+<span class="cm"># Record an interaction (skips responses shorter than min_response_length)</span>
+<span class="tx">learner.</span><span class="fn">record</span><span class="tx">(</span><span class="pm">prompt</span><span class="tx">=</span><span class="str">"What is 2+2?"</span><span class="tx">,</span> <span class="pm">response</span><span class="tx">=</span><span class="str">"4"</span><span class="tx">)</span>
+
+<span class="tx">learner.</span><span class="fn">pending_count</span><span class="tx">()</span>   <span class="cm"># untrained interactions in the DB</span>
+<span class="tx">learner.</span><span class="fn">total_count</span><span class="tx">()</span>     <span class="cm"># all interactions ever recorded</span>
+<span class="tx">learner.</span><span class="fn">clear_pending</span><span class="tx">()</span>   <span class="cm"># discard pending rows without training</span></pre>
+        </div>
+
+        <h3>Constructor Parameters</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td>model</td><td>Model</td><td>—</td><td>The pyrecall <code>Model</code> instance to train.</td></tr>
+              <tr><td>batch_size</td><td>int</td><td>50</td><td>Number of untrained interactions that trigger a fine-tune run.</td></tr>
+              <tr><td>db_path</td><td>Path | None</td><td>None</td><td>Path to the SQLite database. Defaults to <code>~/.pyrecall/live_data.db</code>.</td></tr>
+              <tr><td>min_response_length</td><td>int</td><td>10</td><td>Responses shorter than this (after stripping whitespace) are silently skipped.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ForgettingReport -->
+        <h2 id="forgetting-report">ForgettingReport</h2>
+        <p>Returned by <code>model.check()</code> and <code>ForgettingDetector.compare()</code>.</p>
+        <div class="code-block">
+<pre><span class="tx">report</span> <span class="tx">=</span> <span class="tx">model.</span><span class="fn">check</span><span class="tx">()</span>
+
+<span class="tx">report.is_healthy</span>         <span class="cm"># bool — True when no skill degraded beyond threshold</span>
+<span class="tx">report.degraded_skills</span>    <span class="cm"># list[str] — categories that dropped too much</span>
+<span class="tx">report.threshold</span>          <span class="cm"># float — the forgetting threshold used</span>
+<span class="tx">report.comparisons</span>        <span class="cm"># list[CategoryComparison]</span>
+
+<span class="cm"># Each CategoryComparison has:</span>
+<span class="kw">for</span> <span class="tx">comp</span> <span class="kw">in</span> <span class="tx">report.comparisons:</span>
+    <span class="tx">comp.category</span>       <span class="cm"># "coding", "reasoning", etc.</span>
+    <span class="tx">comp.score_before</span>   <span class="cm"># float in [0, 1]</span>
+    <span class="tx">comp.score_after</span>    <span class="cm"># float in [0, 1]</span>
+    <span class="tx">comp.delta</span>          <span class="cm"># score_after - score_before</span>
+    <span class="tx">comp.pct_change</span>     <span class="cm"># percentage change relative to before</span>
+
+<span class="tx">str(report)</span>               <span class="cm"># formatted table as a plain string</span>
+<span class="tx">report.</span><span class="fn">print</span><span class="tx">()</span>            <span class="cm"># print the table to the terminal</span></pre>
+        </div>
+
+      </div>
+
+      <!-- ── CLI REFERENCE ───────────────────────────────────────────────── -->
+
+      <div class="docs-section" id="cli-reference">
+
+        <h2>CLI Reference</h2>
+        <p>
+          All CLI commands read project configuration from <code>.pyrecall.json</code> in the
+          current directory. Run <code>pyrecall init</code> first.
+        </p>
+
+        <!-- init -->
+        <h3 id="cli-init">pyrecall init</h3>
+        <p>Initialise pyrecall in the current project directory. Creates <code>.pyrecall.json</code>.</p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall init --model meta-llama/Llama-3.2-1B</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall init -m gpt2 --strategy lora</span></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td>--model, -m</td><td>meta-llama/Llama-3.2-1B</td><td>HuggingFace model identifier to use for this project.</td></tr>
+              <tr><td>--strategy, -s</td><td>lora</td><td>Fine-tuning strategy.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- snapshot -->
+        <h3 id="cli-snapshot">pyrecall snapshot &lt;name&gt;</h3>
+        <p>
+          Load the configured model, run all 20 benchmarks, and save a named snapshot.
+          This is a slow operation (several minutes on CPU). Updates <code>baseline_snapshot</code>
+          in <code>.pyrecall.json</code>.
+        </p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall snapshot before_v1</span></div>
+        </div>
+
+        <!-- check -->
+        <h3 id="cli-check">pyrecall check</h3>
+        <p>
+          Compare two snapshots to detect forgotten skills. With no arguments, compares the
+          two most recently created snapshots. Pass <code>--before</code> and <code>--after</code>
+          to compare specific named snapshots.
+        </p>
+        <p>
+          Exits with code <strong>2</strong> when forgetting is detected — useful as a CI gate
+          in training pipelines.
+        </p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall check</span><span class="comment"> &nbsp;# compare last two snapshots</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall check --before before_v1 --after after_finetune</span></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td>--before</td><td>Snapshot name to use as baseline.</td></tr>
+              <tr><td>--after</td><td>Snapshot name to compare against.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- rollback -->
+        <h3 id="cli-rollback">pyrecall rollback &lt;snapshot&gt;</h3>
+        <p>
+          Update <code>.pyrecall.json</code> to point the baseline at a previous snapshot.
+          Does not reload the model in memory — apply the change in a running Python session
+          with <code>model.rollback(to="&lt;name&gt;")</code>.
+        </p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall rollback before_v1</span></div>
+        </div>
+
+        <!-- status -->
+        <h3 id="cli-status">pyrecall status</h3>
+        <p>Show all saved snapshots and their per-category skill scores in a table. The current baseline is marked with ★.</p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall status</span></div>
+        </div>
+
+        <!-- delete -->
+        <h3 id="cli-delete">pyrecall delete &lt;snapshot&gt; <span class="badge badge-new">new</span></h3>
+        <p>
+          Permanently delete a snapshot and its adapter weights from disk. Prompts for
+          confirmation unless <code>--yes</code> is passed. If the deleted snapshot was
+          the current baseline, <code>baseline_snapshot</code> is cleared in
+          <code>.pyrecall.json</code>.
+        </p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall delete before_v1</span><span class="comment"> &nbsp;# prompts for confirmation</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall delete before_v1 --yes</span><span class="comment"> &nbsp;# skip prompt (CI-friendly)</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall delete before_v1 -y</span><span class="comment"> &nbsp;# short flag</span></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td>--yes, -y</td><td>False</td><td>Skip the confirmation prompt. Safe for non-interactive scripts.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout callout-warn">
+          <strong>Warning:</strong> Deletion is permanent. The adapter weights cannot be recovered once deleted.
+        </div>
+
+      </div>
+
+      <!-- ── CONFIGURATION ───────────────────────────────────────────────── -->
+
+      <div class="docs-section" id="configuration">
+
+        <h2>Configuration</h2>
+
+        <h3 id="lora-params">LoRA Parameters</h3>
+        <p>
+          pyrecall uses <a href="https://github.com/huggingface/peft" style="color:var(--accent);">PEFT</a>
+          for LoRA fine-tuning. The key parameters:
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Parameter</th><th>Typical Range</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td>lora_r</td><td>4–64</td><td>Rank of the update matrices. Higher = more expressivity, more memory. 16 is a good starting point.</td></tr>
+              <tr><td>lora_alpha</td><td>2× rank</td><td>Scaling factor. Setting to 2× rank is a common heuristic.</td></tr>
+              <tr><td>lora_dropout</td><td>0.0–0.2</td><td>Regularization. Set to 0 for small datasets, 0.1 for larger ones.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Target modules (which attention layers LoRA adapts) are auto-detected from the
+          model name. See <a href="#supported-models" style="color:var(--accent);">Supported Models</a>
+          for the mapping.
+        </p>
+
+        <h3 id="training-params">Training Parameters</h3>
+        <p>
+          Training defaults can be set at the constructor level so you don't have to repeat
+          them on every <code>model.learn()</code> call:
+        </p>
+        <div class="code-block">
+<pre><span class="cm"># Set defaults at construction time</span>
+<span class="tx">model</span> <span class="tx">=</span> <span class="fn">Model</span><span class="tx">(</span>
+    <span class="str">"meta-llama/Llama-3.2-1B"</span><span class="tx">,</span>
+    <span class="pm">learning_rate</span><span class="tx">=</span><span class="num">5e-5</span><span class="tx">,</span>   <span class="cm"># lower for continued fine-tuning</span>
+    <span class="pm">batch_size</span><span class="tx">=</span><span class="num">8</span><span class="tx">,</span>
+    <span class="pm">max_length</span><span class="tx">=</span><span class="num">1024</span><span class="tx">,</span>
+<span class="tx">)</span>
+
+<span class="cm"># Uses the defaults above</span>
+<span class="tx">model.</span><span class="fn">learn</span><span class="tx">(</span><span class="str">"pass1.jsonl"</span><span class="tx">,</span> <span class="pm">epochs</span><span class="tx">=</span><span class="num">2</span><span class="tx">)</span>
+<span class="tx">model.</span><span class="fn">learn</span><span class="tx">(</span><span class="str">"pass2.jsonl"</span><span class="tx">,</span> <span class="pm">epochs</span><span class="tx">=</span><span class="num">1</span><span class="tx">)</span>
+
+<span class="cm"># Override for a specific run</span>
+<span class="tx">model.</span><span class="fn">learn</span><span class="tx">(</span><span class="str">"pass3.jsonl"</span><span class="tx">,</span> <span class="pm">learning_rate</span><span class="tx">=</span><span class="num">1e-5</span><span class="tx">)</span></pre>
+        </div>
+
+        <h3 id="qlora">QLoRA / Quantization</h3>
+        <p>
+          For large models that don't fit in GPU memory at full precision, pyrecall supports
+          QLoRA via <a href="https://github.com/TimDettmers/bitsandbytes" style="color:var(--accent);">bitsandbytes</a>.
+        </p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pip install bitsandbytes</span></div>
+        </div>
+        <div class="code-block">
+<pre><span class="cm"># 4-bit quantization (recommended for large models)</span>
+<span class="tx">model</span> <span class="tx">=</span> <span class="fn">Model</span><span class="tx">(</span>
+    <span class="str">"meta-llama/Llama-3.2-1B"</span><span class="tx">,</span>
+    <span class="pm">strategy</span><span class="tx">=</span><span class="str">"qlora"</span><span class="tx">,</span>
+    <span class="pm">load_in_4bit</span><span class="tx">=</span><span class="kw">True</span><span class="tx">,</span>
+<span class="tx">)</span>
+
+<span class="cm"># 8-bit quantization</span>
+<span class="tx">model</span> <span class="tx">=</span> <span class="fn">Model</span><span class="tx">(</span><span class="str">"..."</span><span class="tx">,</span> <span class="pm">strategy</span><span class="tx">=</span><span class="str">"qlora"</span><span class="tx">,</span> <span class="pm">load_in_8bit</span><span class="tx">=</span><span class="kw">True</span><span class="tx">)</span></pre>
+        </div>
+        <div class="callout">
+          <code>load_in_4bit</code> and <code>load_in_8bit</code> are mutually exclusive — passing
+          both raises a <code>PyrecallError</code>.
+        </div>
+
+      </div>
+
+      <!-- ── DATA FORMATS ────────────────────────────────────────────────── -->
+
+      <div class="docs-section" id="data-formats">
+
+        <h2 id="data-formats">Data Formats</h2>
+        <p>
+          <code>model.learn()</code> accepts three file formats. Each row must contain the
+          training text in a column named <code>text</code>. If no <code>text</code> column
+          is found, the first column is used instead.
+        </p>
+
+        <h3>JSONL</h3>
+        <p>One JSON object per line. Recommended for most use cases.</p>
+        <div class="code-block">
+<pre><span class="str">{"text": "### Human: What is 2+2?\n\n### Assistant: 4."}</span>
+<span class="str">{"text": "### Human: Write a hello-world in Python.\n\n### Assistant: print('Hello, world!')"}</span></pre>
+        </div>
+
+        <h3>CSV</h3>
+        <p>A header row with at least a <code>text</code> column, then one example per row.</p>
+        <div class="code-block">
+<pre><span class="tx">text</span>
+<span class="str">"### Human: What is 2+2?\n\n### Assistant: 4."</span>
+<span class="str">"### Human: Write a hello-world.\n\n### Assistant: print('Hello, world!')"</span></pre>
+        </div>
+
+        <h3>Parquet</h3>
+        <p>Any standard Parquet file with a <code>text</code> column. Efficient for large datasets.</p>
+        <div class="code-block">
+<pre><span class="cm"># Create a parquet file with pandas</span>
+<span class="kw">import</span> <span class="tx">pandas</span> <span class="kw">as</span> <span class="tx">pd</span>
+
+<span class="tx">df</span> <span class="tx">=</span> <span class="tx">pd.</span><span class="fn">DataFrame</span><span class="tx">({</span>
+    <span class="str">"text"</span><span class="tx">: [</span><span class="str">"### Human: ...\n\n### Assistant: ..."</span><span class="tx">, ...]</span>
+<span class="tx">})</span>
+<span class="tx">df.</span><span class="fn">to_parquet</span><span class="tx">(</span><span class="str">"data.parquet"</span><span class="tx">,</span> <span class="pm">index</span><span class="tx">=</span><span class="kw">False</span><span class="tx">)</span>
+<span class="tx">model.</span><span class="fn">learn</span><span class="tx">(</span><span class="str">"data.parquet"</span><span class="tx">)</span></pre>
+        </div>
+
+        <h3>Prompt format</h3>
+        <p>
+          pyrecall does not enforce a specific chat template but the
+          <code>### Human: … ### Assistant: …</code> format shown in the examples works well
+          for instruction-tuned models. Match the format your base model expects.
+        </p>
+
+      </div>
+
+      <!-- ── SUPPORTED MODELS ────────────────────────────────────────────── -->
+
+      <div class="docs-section" id="supported-models">
+
+        <h2 id="supported-models">Supported Models</h2>
+        <p>
+          Any causal LM on HuggingFace Hub works. LoRA target modules are
+          auto-detected from the model name using a built-in heuristic:
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Model family</th><th>Auto-detected LoRA targets</th></tr></thead>
+            <tbody>
+              <tr><td>Llama (1/2/3/3.2), Mistral, Mixtral, Qwen, Gemma</td><td>q_proj, k_proj, v_proj, o_proj</td></tr>
+              <tr><td>Falcon, Bloom</td><td>query_key_value</td></tr>
+              <tr><td>MPT</td><td>Wqkv</td></tr>
+              <tr><td>GPT-2</td><td>c_attn, c_proj</td></tr>
+              <tr><td>GPT-Neo</td><td>q_proj, v_proj</td></tr>
+              <tr><td>GPT-J</td><td>q_proj, v_proj</td></tr>
+              <tr><td>OPT</td><td>q_proj, v_proj</td></tr>
+              <tr><td>All others (fallback)</td><td>q_proj, v_proj</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The heuristic matches on a substring of the model name (case-insensitive).
+          If your model isn't listed, the fallback targets <code>q_proj</code> and
+          <code>v_proj</code> work for most transformer architectures.
+        </p>
+
+      </div>
+
+      <!-- ── GUIDES ──────────────────────────────────────────────────────── -->
+
+      <div class="docs-section" id="guides">
+
+        <h2 id="ci-integration">CI Integration</h2>
+        <p>
+          <code>pyrecall check</code> exits with code <strong>2</strong> when forgetting is
+          detected. Drop it into any CI pipeline as a training gate:
+        </p>
+        <div class="code-block">
+<pre><span class="cm"># .github/workflows/train.yml (excerpt)</span>
+<span class="tx">- name: Take pre-training snapshot
+  run: pyrecall snapshot pre_${{ github.sha }}
+
+- name: Fine-tune
+  run: python train.py
+
+- name: Check for forgetting
+  run: pyrecall check --before pre_${{ github.sha }} --after post_${{ github.sha }}
+  <span class="cm"># exits 2 if any skill degraded &gt; 10% — blocks the merge</span>
+
+- name: Clean up old snapshots
+  run: pyrecall delete pre_${{ github.sha }} --yes</span></pre>
+        </div>
+
+        <h2 id="live-learning-guide">Live Learning</h2>
+        <p>
+          Live learning continuously fine-tunes your model on real production traffic
+          without leaving the terminal.
+        </p>
+        <div class="code-block">
+<pre><span class="cm"># Serve and collect — auto fine-tunes every 50 interactions</span>
+<span class="tx">model</span> <span class="tx">=</span> <span class="fn">Model</span><span class="tx">(</span><span class="str">"meta-llama/Llama-3.2-1B"</span><span class="tx">)</span>
+<span class="tx">model.</span><span class="fn">snapshot</span><span class="tx">(</span><span class="str">"initial"</span><span class="tx">)</span>    <span class="cm"># baseline before any live tuning</span>
+<span class="tx">model.</span><span class="fn">serve</span><span class="tx">(</span><span class="pm">port</span><span class="tx">=</span><span class="num">8000</span><span class="tx">,</span> <span class="pm">live_learning</span><span class="tx">=</span><span class="kw">True</span><span class="tx">)</span></pre>
+        </div>
+        <p>
+          Interactions are stored in <code>~/.pyrecall/live_data.db</code> (SQLite). Once
+          <code>batch_size</code> (default 50) untrained interactions accumulate,
+          pyrecall exports them to a temporary JSONL file and runs a 1-epoch LoRA
+          fine-tune. Trained rows are marked so they are never included in a future batch.
+        </p>
+        <p>
+          Use <code>LiveLearner</code> directly for custom pipelines — for example, to
+          filter interactions before storing them or to use a different trigger condition:
+        </p>
+        <div class="code-block">
+<pre><span class="kw">from</span> <span class="tx">pyrecall</span> <span class="kw">import</span> <span class="fn">LiveLearner</span>
+
+<span class="tx">learner</span> <span class="tx">=</span> <span class="fn">LiveLearner</span><span class="tx">(</span><span class="tx">model</span><span class="tx">,</span> <span class="pm">batch_size</span><span class="tx">=</span><span class="num">200</span><span class="tx">,</span> <span class="pm">min_response_length</span><span class="tx">=</span><span class="num">20</span><span class="tx">)</span>
+
+<span class="cm"># Only record interactions where the user gave a thumbs-up</span>
+<span class="kw">if</span> <span class="tx">user_feedback</span> <span class="tx">==</span> <span class="str">"positive"</span><span class="tx">:</span>
+    <span class="tx">learner.</span><span class="fn">record</span><span class="tx">(</span><span class="tx">prompt</span><span class="tx">,</span> <span class="tx">response</span><span class="tx">)</span>
+
+<span class="tx">print(</span><span class="tx">learner.</span><span class="fn">pending_count</span><span class="tx">(),</span> <span class="str">"examples until next fine-tune"</span><span class="tx">)</span></pre>
+        </div>
+
+        <h2 id="contributing">Contributing</h2>
+        <p>Issues and pull requests are welcome. Please open an issue first for large changes.</p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">git clone https://github.com/Arths17/Pyrecall</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">cd Pyrecall</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pip install -e ".[dev]"</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pytest</span></div>
+        </div>
+        <p>Areas where contributions are most valuable:</p>
+        <ul>
+          <li><strong>Benchmark categories</strong> — multilingual, advanced math, tool-use / function calling</li>
+          <li><strong>Distributed training</strong> — multi-GPU via <code>accelerate</code></li>
+          <li><strong>Experiment trackers</strong> — W&amp;B, MLflow, Neptune integrations</li>
+          <li><strong>Web dashboard</strong> — visualize snapshot history and score trends over time</li>
+        </ul>
+
+      </div>
+
+    </main>
+  </div>
+
+  <script>
+    // ── Copy install command ──────────────────────────────────────────────────
+    (function () {
+      var btn = document.getElementById('navCopyBtn');
+      if (!btn) return;
+      var originalHTML = btn.innerHTML;
+
+      btn.addEventListener('click', function () {
+        var text = 'pip install pyrecall';
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(showCopied).catch(function () { fallbackCopy(text); });
+        } else {
+          fallbackCopy(text);
+        }
+      });
+
+      function showCopied() {
+        btn.textContent = 'Copied!';
+        btn.style.color = 'var(--accent)';
+        btn.style.borderColor = 'var(--accent)';
+        setTimeout(function () {
+          btn.innerHTML = originalHTML;
+          btn.style.color = '';
+          btn.style.borderColor = '';
+        }, 2000);
+      }
+
+      function fallbackCopy(text) {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;';
+        document.body.appendChild(ta);
+        ta.focus(); ta.select();
+        try { document.execCommand('copy'); showCopied(); } catch (e) {}
+        document.body.removeChild(ta);
+      }
+    })();
+
+    // ── Mobile sidebar toggle ─────────────────────────────────────────────────
+    (function () {
+      var menuBtn = document.getElementById('menuBtn');
+      var sidebar = document.getElementById('sidebar');
+      if (!menuBtn || !sidebar) return;
+
+      menuBtn.addEventListener('click', function () {
+        sidebar.classList.toggle('open');
+      });
+
+      // Close sidebar when a link is clicked on mobile
+      sidebar.querySelectorAll('a').forEach(function (a) {
+        a.addEventListener('click', function () {
+          if (window.innerWidth <= 900) {
+            sidebar.classList.remove('open');
+          }
+        });
+      });
+    })();
+
+    // ── Active sidebar link on scroll ─────────────────────────────────────────
+    (function () {
+      var allLinks = document.querySelectorAll('.sidebar-nav a');
+      var headings = [];
+
+      allLinks.forEach(function (a) {
+        var id = a.getAttribute('href').replace('#', '');
+        var el = document.getElementById(id);
+        if (el) headings.push({ el: el, a: a });
+      });
+
+      function onScroll() {
+        var scrollY = window.scrollY + 80;
+        var active = null;
+
+        for (var i = 0; i < headings.length; i++) {
+          if (headings[i].el.offsetTop <= scrollY) {
+            active = headings[i].a;
+          }
+        }
+
+        allLinks.forEach(function (a) { a.classList.remove('active'); });
+        if (active) active.classList.add('active');
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+
+</body>
+</html>

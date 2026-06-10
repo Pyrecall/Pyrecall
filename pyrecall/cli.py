@@ -212,6 +212,56 @@ def rollback(
 
 
 @app.command()
+def delete(
+    snapshot_name: Annotated[
+        str, typer.Argument(help="Snapshot to permanently delete")
+    ],
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Skip confirmation prompt"),
+    ] = False,
+) -> None:
+    """
+    Permanently delete a snapshot and its adapter weights.
+
+    This cannot be undone.  Pass --yes to skip the confirmation prompt,
+    which is useful in non-interactive scripts and CI pipelines.
+    """
+    config = _read_config()
+    mgr = _build_rollback_manager(config)
+
+    if not mgr.has_snapshot(snapshot_name):
+        available = [s.name for s in mgr.list_snapshots()]
+        console.print(
+            f"[bold red]Error:[/bold red] Snapshot '{snapshot_name}' not found.\n"
+            f"Available: {available}"
+        )
+        raise typer.Exit(1)
+
+    if not yes:
+        confirmed = typer.confirm(
+            f"Permanently delete snapshot '{snapshot_name}' and its adapter weights?",
+            default=False,
+        )
+        if not confirmed:
+            console.print("[dim]Aborted.[/dim]")
+            raise typer.Exit(0)
+
+    mgr.delete_snapshot(snapshot_name)
+
+    was_baseline = config.get("baseline_snapshot") == snapshot_name
+    if was_baseline:
+        config["baseline_snapshot"] = None
+        _write_config(config)
+        console.print(
+            f"[green]✓ Deleted '{snapshot_name}'.[/green] "
+            "[dim]It was the current baseline — baseline cleared.[/dim]"
+        )
+    else:
+        console.print(f"[green]✓ Deleted snapshot '{snapshot_name}'.[/green]")
+
+
+@app.command()
 def status() -> None:
     """Show all saved snapshots and their per-category skill scores."""
     config = _read_config()
