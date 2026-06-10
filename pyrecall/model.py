@@ -32,6 +32,8 @@ logger = get_logger(__name__)
 _LORA_TARGETS: dict[str, list[str]] = {
     "llama": ["q_proj", "v_proj", "k_proj", "o_proj"],
     "mistral": ["q_proj", "v_proj", "k_proj", "o_proj"],
+    "mixtral": ["q_proj", "v_proj", "k_proj", "o_proj"],
+    "phi": ["q_proj", "v_proj", "k_proj", "dense"],
     "qwen": ["q_proj", "v_proj", "k_proj", "o_proj"],
     "gemma": ["q_proj", "v_proj", "k_proj", "o_proj"],
     "falcon": ["query_key_value"],
@@ -411,7 +413,12 @@ class Model:
         new_tokens = output_ids[0][inputs["input_ids"].shape[1]:]
         return self.tokenizer.decode(new_tokens, skip_special_tokens=True)
 
-    def serve(self, port: int = 8000, live_learning: bool = False) -> None:
+    def serve(
+        self,
+        port: int = 8000,
+        live_learning: bool = False,
+        live_batch_size: int = 50,
+    ) -> None:
         """
         Start a FastAPI inference server.
 
@@ -425,7 +432,10 @@ class Model:
         Args:
             port: TCP port to bind.
             live_learning: When True, every inference request is stored and the
-                model is fine-tuned automatically once 50 interactions accumulate.
+                model is fine-tuned automatically once *live_batch_size* interactions
+                accumulate.
+            live_batch_size: Number of interactions that trigger a live fine-tune run.
+                Only used when *live_learning* is True.
         """
         import uvicorn
         from fastapi import FastAPI
@@ -447,7 +457,7 @@ class Model:
         learner = None
         if live_learning:
             from .live import LiveLearner
-            learner = LiveLearner(self)
+            learner = LiveLearner(self, batch_size=live_batch_size)
             console.print(
                 "[info]Live learning enabled — interactions will be collected "
                 "for automatic fine-tuning.[/info]"

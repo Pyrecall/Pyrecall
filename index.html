@@ -669,7 +669,7 @@
 
   <div class="container">
     <section class="hero">
-      <p class="hero-eyebrow">Open source &middot; MIT License &middot; v0.1.0</p>
+      <p class="hero-eyebrow">Open source &middot; MIT License &middot; v0.0.1</p>
       <h1>Keep your models balanced.</h1>
       <p class="hero-sub">
         Fine-tuning silently degrades what your model already knows.
@@ -787,7 +787,7 @@
   <div class="container">
     <section class="cli-section">
       <p class="section-label">The CLI</p>
-      <h2>Five commands. Everything you need.</h2>
+      <h2>Six commands. Everything you need.</h2>
 
       <div class="cli-block">
         <div class="cli-line">
@@ -814,6 +814,11 @@
           <span class="prompt">$</span>
           <span class="cli-cmd">pyrecall status</span>
           <span class="cli-comment"># view all snapshots and scores</span>
+        </div>
+        <div class="cli-line">
+          <span class="prompt">$</span>
+          <span class="cli-cmd">pyrecall delete v1 --yes</span>
+          <span class="cli-comment"># permanently remove a snapshot</span>
         </div>
         <div class="cli-line" style="margin-top:4px;">
           <span class="prompt" style="opacity:0">$</span>

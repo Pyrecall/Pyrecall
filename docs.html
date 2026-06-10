@@ -968,8 +968,12 @@
         </p>
 
         <!-- serve -->
-        <h3 id="model-serve">model.serve(port, live_learning)</h3>
-        <div class="method-sig">model.serve(port: int = 8000, live_learning: bool = False) → None</div>
+        <h3 id="model-serve">model.serve(port, live_learning, live_batch_size)</h3>
+        <div class="method-sig">model.serve(
+    port: int = 8000,
+    live_learning: bool = False,
+    live_batch_size: int = 50,
+) → None</div>
         <p>
           Start a FastAPI inference server. Blocks until the process is killed.
           Two endpoints are exposed:
@@ -980,8 +984,9 @@
         </ul>
         <p>
           When <code>live_learning=True</code>, every inference request is stored in a local
-          SQLite database. Once 50 interactions accumulate, a one-epoch LoRA fine-tune fires
-          in the foreground. See <a href="#live-learning-guide" style="color:var(--accent);">Live Learning</a>.
+          SQLite database. Once <code>live_batch_size</code> interactions accumulate, a
+          one-epoch LoRA fine-tune fires in the foreground. See
+          <a href="#live-learning-guide" style="color:var(--accent);">Live Learning</a>.
         </p>
 
         <!-- LiveLearner -->
@@ -1311,23 +1316,47 @@
 
         <h2 id="ci-integration">CI Integration</h2>
         <p>
-          <code>pyrecall check</code> exits with code <strong>2</strong> when forgetting is
-          detected. Drop it into any CI pipeline as a training gate:
+          The recommended CI pattern is to run snapshot, training, and check inside a
+          single Python script. This keeps the trained weights in memory so that
+          <code>model.check()</code> benchmarks the <em>trained</em> model, not a
+          freshly loaded base. The script exits with code <strong>2</strong> when
+          forgetting is detected — use that as your merge gate.
         </p>
         <div class="code-block">
+<pre><span class="cm"># train_and_check.py  ← run this from CI</span>
+<span class="kw">import</span> <span class="tx">sys</span>
+<span class="kw">from</span> <span class="tx">pyrecall</span> <span class="kw">import</span> <span class="fn">Model</span>
+
+<span class="tx">model</span> <span class="tx">=</span> <span class="fn">Model</span><span class="tx">(</span><span class="str">"meta-llama/Llama-3.2-1B"</span><span class="tx">)</span>
+
+<span class="cm"># Lock in pre-training skill scores + save adapter weights</span>
+<span class="tx">model.</span><span class="fn">snapshot</span><span class="tx">(</span><span class="str">"pre_training"</span><span class="tx">)</span>
+
+<span class="cm"># Fine-tune — trained weights stay in memory</span>
+<span class="tx">model.</span><span class="fn">learn</span><span class="tx">(</span><span class="str">"data.jsonl"</span><span class="tx">,</span> <span class="pm">epochs</span><span class="tx">=</span><span class="num">3</span><span class="tx">)</span>
+
+<span class="cm"># Benchmark the trained model and diff against pre_training</span>
+<span class="tx">report</span> <span class="tx">=</span> <span class="tx">model.</span><span class="fn">check</span><span class="tx">()</span>
+
+<span class="kw">if not</span> <span class="tx">report.is_healthy:</span>
+    <span class="tx">sys.</span><span class="fn">exit</span><span class="tx">(</span><span class="num">2</span><span class="tx">)</span>  <span class="cm"># non-zero exit blocks the CI job</span></pre>
+        </div>
+        <div class="code-block">
 <pre><span class="cm"># .github/workflows/train.yml (excerpt)</span>
-<span class="tx">- name: Take pre-training snapshot
-  run: pyrecall snapshot pre_${{ github.sha }}
-
-- name: Fine-tune
-  run: python train.py
-
-- name: Check for forgetting
-  run: pyrecall check --before pre_${{ github.sha }} --after post_${{ github.sha }}
+<span class="tx">- name: Train and check for forgetting
+  run: python train_and_check.py
   <span class="cm"># exits 2 if any skill degraded &gt; 10% — blocks the merge</span>
 
-- name: Clean up old snapshots
-  run: pyrecall delete pre_${{ github.sha }} --yes</span></pre>
+- name: Clean up pre-training snapshot (optional)
+  run: pyrecall delete pre_training --yes
+  if: always()</span></pre>
+        </div>
+        <p>
+          You can also compare two already-saved snapshots with the CLI if both were
+          captured within the same Python session using <code>model.snapshot()</code>:
+        </p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall check --before pre_training --after post_training</span></div>
         </div>
 
         <h2 id="live-learning-guide">Live Learning</h2>
@@ -1336,10 +1365,10 @@
           without leaving the terminal.
         </p>
         <div class="code-block">
-<pre><span class="cm"># Serve and collect — auto fine-tunes every 50 interactions</span>
+<pre><span class="cm"># Serve and collect — auto fine-tunes every 100 interactions</span>
 <span class="tx">model</span> <span class="tx">=</span> <span class="fn">Model</span><span class="tx">(</span><span class="str">"meta-llama/Llama-3.2-1B"</span><span class="tx">)</span>
 <span class="tx">model.</span><span class="fn">snapshot</span><span class="tx">(</span><span class="str">"initial"</span><span class="tx">)</span>    <span class="cm"># baseline before any live tuning</span>
-<span class="tx">model.</span><span class="fn">serve</span><span class="tx">(</span><span class="pm">port</span><span class="tx">=</span><span class="num">8000</span><span class="tx">,</span> <span class="pm">live_learning</span><span class="tx">=</span><span class="kw">True</span><span class="tx">)</span></pre>
+<span class="tx">model.</span><span class="fn">serve</span><span class="tx">(</span><span class="pm">port</span><span class="tx">=</span><span class="num">8000</span><span class="tx">,</span> <span class="pm">live_learning</span><span class="tx">=</span><span class="kw">True</span><span class="tx">,</span> <span class="pm">live_batch_size</span><span class="tx">=</span><span class="num">100</span><span class="tx">)</span></pre>
         </div>
         <p>
           Interactions are stored in <code>~/.pyrecall/live_data.db</code> (SQLite). Once

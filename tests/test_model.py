@@ -516,3 +516,26 @@ class TestLoraTargets:
 
         targets = Model._lora_targets("some-unknown-model-xyz")
         assert targets == ["q_proj", "v_proj"]
+
+    def test_mixtral_targets_explicit(self) -> None:
+        from pyrecall.model import Model
+
+        targets = Model._lora_targets("mistralai/Mixtral-8x7B-v0.1")
+        assert "q_proj" in targets
+        assert "k_proj" in targets
+        assert "o_proj" in targets
+
+    def test_phi_targets_explicit(self) -> None:
+        from pyrecall.model import Model
+
+        targets = Model._lora_targets("microsoft/phi-2")
+        assert "q_proj" in targets
+        assert "dense" in targets
+
+    def test_mistral_not_matched_by_mixtral_key(self) -> None:
+        from pyrecall.model import Model
+
+        # Both Mistral and Mixtral should get the full 4-projection set
+        mistral_targets = Model._lora_targets("mistralai/Mistral-7B-v0.1")
+        mixtral_targets = Model._lora_targets("mistralai/Mixtral-8x7B-v0.1")
+        assert set(mistral_targets) == set(mixtral_targets)
