@@ -18,6 +18,7 @@ Quick start::
 from .detector import ForgettingDetector, ForgettingReport, CategoryComparison
 from .live import LiveLearner
 from .model import Model, PyrecallError
+from .replay import ReplayBuffer
 from .rollback import RollbackManager
 from .snapshot import SkillScore, SkillSnapshot
 
@@ -31,6 +32,7 @@ __all__ = [
     "CategoryComparison",
     "RollbackManager",
     "LiveLearner",
+    "ReplayBuffer",
 ]
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"

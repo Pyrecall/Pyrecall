@@ -105,6 +105,14 @@ def init(
         float,
         typer.Option("--threshold", help="Score drop fraction that counts as forgetting (0–1)"),
     ] = 0.10,
+    replay_buffer_size: Annotated[
+        int,
+        typer.Option("--replay-buffer-size", help="Max past examples stored for replay (0 = disabled)"),
+    ] = 500,
+    replay_mix_ratio: Annotated[
+        float,
+        typer.Option("--replay-mix-ratio", help="Fraction of each training batch filled with replayed examples (0–1)"),
+    ] = 0.3,
 ) -> None:
     """Initialise pyrecall in the current project directory."""
     errors: list[str] = []
@@ -122,6 +130,10 @@ def init(
         errors.append(f"--max-length must be >= 1, got {max_length}")
     if not 0.0 < threshold <= 1.0:
         errors.append(f"--threshold must be between 0 and 1, got {threshold}")
+    if replay_buffer_size < 0:
+        errors.append(f"--replay-buffer-size must be >= 0, got {replay_buffer_size}")
+    if not 0.0 <= replay_mix_ratio < 1.0:
+        errors.append(f"--replay-mix-ratio must be in [0, 1), got {replay_mix_ratio}")
     if errors:
         for msg in errors:
             console.print(f"[red]Error:[/red] {msg}")
@@ -145,6 +157,8 @@ def init(
         "batch_size": batch_size,
         "max_length": max_length,
         "forgetting_threshold": threshold,
+        "replay_buffer_size": replay_buffer_size,
+        "replay_mix_ratio": replay_mix_ratio,
         "created_at": datetime.now().isoformat(),
         "baseline_snapshot": None,
     }
@@ -182,6 +196,8 @@ def snapshot(
         batch_size=config.get("batch_size", 4),
         max_length=config.get("max_length", 512),
         forgetting_threshold=config.get("forgetting_threshold", 0.10),
+        replay_buffer_size=config.get("replay_buffer_size", 500),
+        replay_mix_ratio=config.get("replay_mix_ratio", 0.3),
     )
     model_obj.snapshot(name=name)
 

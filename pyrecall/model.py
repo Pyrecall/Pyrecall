@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import torch
-from datasets import load_dataset
+from datasets import Dataset as _HFDataset, concatenate_datasets, load_dataset
 from peft import LoraConfig, PeftModel, TaskType, get_peft_model, prepare_model_for_kbit_training
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from transformers import (
@@ -20,6 +20,7 @@ from transformers import (
 
 from .benchmarks.default import DEFAULT_BENCHMARKS
 from .detector import ForgettingDetector, ForgettingReport
+from .replay import ReplayBuffer
 from .rollback import RollbackManager
 from .snapshot import SkillScore, SkillSnapshot
 from .utils import compute_embeddings, console, cosine_similarity, get_logger, safe_model_name
@@ -87,6 +88,8 @@ class Model:
         learning_rate: float = 2e-4,
         batch_size: int = 4,
         max_length: int = 512,
+        replay_buffer_size: int = 500,
+        replay_mix_ratio: float = 0.3,
     ) -> None:
         """
         Load *model_name* from HuggingFace Hub (or local cache) and wrap it with LoRA.
@@ -105,6 +108,10 @@ class Model:
             learning_rate: Default AdamW learning rate used by :meth:`learn`.
             batch_size: Default per-device training batch size used by :meth:`learn`.
             max_length: Default tokenisation truncation length used by :meth:`learn`.
+            replay_buffer_size: Maximum number of past training examples to retain in
+                the replay buffer. Set to 0 to disable the buffer entirely.
+            replay_mix_ratio: Fraction of each training batch to fill with replayed
+                examples, e.g. 0.3 means 30 % of examples come from the buffer.
         """
         if strategy not in ("lora", "qlora"):
             raise PyrecallError(
@@ -119,8 +126,16 @@ class Model:
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.max_length = max_length
+        self._replay_mix_ratio = replay_mix_ratio
 
         self._baseline_snapshot_name: Optional[str] = None
+
+        self.replay_buffer: Optional[ReplayBuffer] = (
+            ReplayBuffer(model_name=model_name, max_size=replay_buffer_size,
+                         base_dir=snapshot_dir)
+            if replay_buffer_size > 0
+            else None
+        )
 
         console.print(f"[info]Loading {model_name} on {self.device}…[/info]")
 
@@ -266,6 +281,30 @@ class Model:
         # Infer the text column — fall back to the first column if "text" is absent.
         text_col = "text" if "text" in dataset.column_names else dataset.column_names[0]
 
+        # Collect the raw new texts now (before any mixing) so we can add them
+        # to the replay buffer after training without including replayed examples.
+        new_texts: list[str] = dataset[text_col] if self.replay_buffer is not None else []
+
+        # Mix in replay examples before tokenisation.
+        if self.replay_buffer is not None and len(self.replay_buffer) > 0:
+            n_replay = min(
+                len(self.replay_buffer),
+                max(1, int(len(dataset) * self._replay_mix_ratio)),
+            )
+            replay_texts = self.replay_buffer.sample(n_replay)
+            replay_ds = _HFDataset.from_dict({"text": replay_texts})
+            new_only = (
+                dataset.select_columns([text_col]).rename_column(text_col, "text")
+                if text_col != "text"
+                else dataset.select_columns(["text"])
+            )
+            dataset = concatenate_datasets([new_only, replay_ds])
+            text_col = "text"
+            console.print(
+                f"[info]Replay: mixed in {n_replay} past examples "
+                f"({n_replay / len(dataset):.0%} of batch).[/info]"
+            )
+
         def _tokenize(batch: dict[str, list]) -> dict:
             return self.tokenizer(
                 batch[text_col],
@@ -318,6 +357,13 @@ class Model:
         self.model.train()
         trainer.train(resume_from_checkpoint=resume_from)
         self.model.eval()
+
+        if self.replay_buffer is not None and new_texts:
+            self.replay_buffer.add(new_texts)
+            console.print(
+                f"[dim]  Replay buffer updated: {len(self.replay_buffer)} / "
+                f"{self.replay_buffer.max_size} examples stored.[/dim]"
+            )
 
         console.print(f"[success]✓ Fine-tuning complete ({epochs} epoch(s)).[/success]")
 
