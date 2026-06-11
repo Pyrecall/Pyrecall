@@ -1451,3 +1451,109 @@ class TestExport:
         record = json.loads(result.output)[0]
         assert "coding" in record["categories"]
         assert "reasoning" in record["categories"]
+
+
+# ── live ───────────────────────────────────────────────────────────────────────
+
+
+def _seed_live_db(db_path: Path, pending: int = 3, trained: int = 2) -> None:
+    """Create a live_data.db with a known number of pending and trained rows."""
+    import sqlite3
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS interactions "
+        "(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt TEXT, response TEXT, "
+        "timestamp TEXT, trained INTEGER NOT NULL DEFAULT 0)"
+    )
+    for i in range(pending):
+        conn.execute(
+            "INSERT INTO interactions (prompt, response, timestamp, trained) VALUES (?,?,?,0)",
+            (f"prompt_{i}", f"response_{i}", "2024-01-01T00:00:00"),
+        )
+    for i in range(trained):
+        conn.execute(
+            "INSERT INTO interactions (prompt, response, timestamp, trained) VALUES (?,?,?,1)",
+            (f"trained_prompt_{i}", f"trained_response_{i}", "2024-01-02T00:00:00"),
+        )
+    conn.commit()
+    conn.close()
+
+
+class TestLive:
+    def test_status_no_db(self, tmp_path: Path) -> None:
+        fake_home = tmp_path
+        with patch("pyrecall.cli._default_live_db", return_value=fake_home / "missing.db"):
+            result = runner.invoke(app, ["live", "status"])
+        assert result.exit_code == 0
+        assert "No live-learning database found" in result.output
+
+    def test_status_shows_counts(self, tmp_path: Path) -> None:
+        db = tmp_path / ".pyrecall" / "live_data.db"
+        _seed_live_db(db, pending=3, trained=2)
+        with patch("pyrecall.cli._default_live_db", return_value=db):
+            result = runner.invoke(app, ["live", "status"])
+        assert result.exit_code == 0
+        assert "5" in result.output   # total
+        assert "3" in result.output   # pending
+        assert "2" in result.output   # trained
+
+    def test_clear_pending_only(self, tmp_path: Path) -> None:
+        db = tmp_path / ".pyrecall" / "live_data.db"
+        _seed_live_db(db, pending=3, trained=2)
+        with patch("pyrecall.cli._default_live_db", return_value=db):
+            result = runner.invoke(app, ["live", "clear", "--yes"])
+        assert result.exit_code == 0
+        assert "3" in result.output
+
+        import sqlite3
+        conn = sqlite3.connect(db)
+        remaining = conn.execute("SELECT COUNT(*) FROM interactions").fetchone()[0]
+        trained_remaining = conn.execute(
+            "SELECT COUNT(*) FROM interactions WHERE trained=1"
+        ).fetchone()[0]
+        conn.close()
+        assert remaining == 2
+        assert trained_remaining == 2
+
+    def test_clear_all(self, tmp_path: Path) -> None:
+        db = tmp_path / ".pyrecall" / "live_data.db"
+        _seed_live_db(db, pending=2, trained=3)
+        with patch("pyrecall.cli._default_live_db", return_value=db):
+            result = runner.invoke(app, ["live", "clear", "--all", "--yes"])
+        assert result.exit_code == 0
+
+        import sqlite3
+        conn = sqlite3.connect(db)
+        remaining = conn.execute("SELECT COUNT(*) FROM interactions").fetchone()[0]
+        conn.close()
+        assert remaining == 0
+
+    def test_clear_no_db(self, tmp_path: Path) -> None:
+        with patch("pyrecall.cli._default_live_db", return_value=tmp_path / "missing.db"):
+            result = runner.invoke(app, ["live", "clear", "--yes"])
+        assert result.exit_code == 0
+        assert "nothing to clear" in result.output
+
+    def test_clear_aborted_without_yes(self, tmp_path: Path) -> None:
+        db = tmp_path / ".pyrecall" / "live_data.db"
+        _seed_live_db(db, pending=1, trained=0)
+        with patch("pyrecall.cli._default_live_db", return_value=db):
+            result = runner.invoke(app, ["live", "clear"], input="n\n")
+        assert result.exit_code == 0
+        assert "Aborted" in result.output
+
+        import sqlite3
+        conn = sqlite3.connect(db)
+        remaining = conn.execute("SELECT COUNT(*) FROM interactions").fetchone()[0]
+        conn.close()
+        assert remaining == 1
+
+    def test_clear_empty_pending_noop(self, tmp_path: Path) -> None:
+        db = tmp_path / ".pyrecall" / "live_data.db"
+        _seed_live_db(db, pending=0, trained=2)
+        with patch("pyrecall.cli._default_live_db", return_value=db):
+            result = runner.invoke(app, ["live", "clear", "--yes"])
+        assert result.exit_code == 0
+        assert "No" in result.output

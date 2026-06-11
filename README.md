@@ -243,6 +243,23 @@ learner.record(prompt="...", response="...")
 print(learner.pending_count())   # how many examples until next fine-tune
 ```
 
+Use the `live` CLI subcommands to inspect and manage the interaction database without writing Python:
+
+```bash
+# Show interaction counts (total, pending, trained) and timestamps
+pyrecall live status
+
+# Remove pending (untrained) interactions
+pyrecall live clear
+
+# Wipe everything including already-trained rows
+pyrecall live clear --all
+
+# Skip the confirmation prompt (useful in scripts)
+pyrecall live clear --yes
+pyrecall live clear --all --yes
+```
+
 ---
 
 ## Supported models

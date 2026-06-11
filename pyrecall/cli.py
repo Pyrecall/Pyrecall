@@ -52,6 +52,14 @@ replay_app = typer.Typer(
 )
 app.add_typer(replay_app, name="replay")
 
+live_app = typer.Typer(
+    name="live",
+    help="Inspect and manage the live-learning interaction database.",
+    add_completion=False,
+    rich_markup_mode="rich",
+)
+app.add_typer(live_app, name="live")
+
 
 @app.callback()
 def _main(
@@ -869,3 +877,124 @@ def export(
             writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(rows)
+
+
+# ── live subcommands ───────────────────────────────────────────────────────────
+
+
+def _default_live_db() -> Path:
+    return Path.home() / ".pyrecall" / "live_data.db"
+
+
+@live_app.command("status")
+def live_status() -> None:
+    """Show statistics for the live-learning interaction database."""
+    db_path = _default_live_db()
+
+    if not db_path.exists():
+        console.print(
+            "[yellow]No live-learning database found.[/yellow]\n"
+            "Start recording interactions via [bold]LiveLearner.record()[/bold] "
+            "or [bold]model.serve()[/bold] to populate it."
+        )
+        return
+
+    import sqlite3
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS total, "
+            "SUM(CASE WHEN trained = 0 THEN 1 ELSE 0 END) AS pending, "
+            "SUM(CASE WHEN trained = 1 THEN 1 ELSE 0 END) AS trained "
+            "FROM interactions"
+        ).fetchone()
+        total: int = row["total"] or 0
+        pending: int = row["pending"] or 0
+        trained: int = row["trained"] or 0
+
+        newest = conn.execute(
+            "SELECT timestamp FROM interactions ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        oldest = conn.execute(
+            "SELECT timestamp FROM interactions ORDER BY id ASC LIMIT 1"
+        ).fetchone()
+    finally:
+        conn.close()
+
+    console.print(f"\n  Database  [bold]{db_path}[/bold]")
+    console.print(f"  Total     {total} interactions")
+    console.print(f"  Pending   {pending} (not yet used for training)")
+    console.print(f"  Trained   {trained}")
+    if oldest:
+        console.print(f"  Oldest    {oldest['timestamp']}")
+    if newest:
+        console.print(f"  Newest    {newest['timestamp']}")
+    console.print()
+
+    if pending == 0 and total == 0:
+        console.print("[dim]  Database is empty.[/dim]")
+
+
+@live_app.command("clear")
+def live_clear(
+    all_: Annotated[
+        bool,
+        typer.Option("--all", help="Delete ALL interactions including already-trained ones (default: pending only)"),
+    ] = False,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Skip confirmation prompt"),
+    ] = False,
+) -> None:
+    """
+    Clear interactions from the live-learning database.
+
+    By default only pending (untrained) interactions are removed.
+    Pass --all to wipe the entire database including trained rows.
+    """
+    db_path = _default_live_db()
+
+    if not db_path.exists():
+        console.print("[dim]No live-learning database found — nothing to clear.[/dim]")
+        return
+
+    import sqlite3
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        if all_:
+            count = conn.execute("SELECT COUNT(*) FROM interactions").fetchone()[0]
+        else:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM interactions WHERE trained = 0"
+            ).fetchone()[0]
+    finally:
+        conn.close()
+
+    if count == 0:
+        label = "interactions" if all_ else "pending interactions"
+        console.print(f"[dim]No {label} to clear.[/dim]")
+        return
+
+    scope = "ALL interactions (including trained)" if all_ else f"{count} pending interactions"
+    if not yes:
+        confirmed = typer.confirm(f"Permanently delete {scope}?", default=False)
+        if not confirmed:
+            console.print("[dim]Aborted.[/dim]")
+            raise typer.Exit(0)
+
+    conn = sqlite3.connect(db_path)
+    try:
+        if all_:
+            conn.execute("DELETE FROM interactions")
+        else:
+            conn.execute("DELETE FROM interactions WHERE trained = 0")
+        conn.commit()
+    finally:
+        conn.close()
+
+    label = "all interactions" if all_ else f"{count} pending interactions"
+    console.print(f"[green]✓ Cleared {label}[/green] from live-learning database.")
