@@ -11,6 +11,19 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+try:
+    from importlib.metadata import version as _pkg_version
+    _VERSION = _pkg_version("pyrecall")
+except Exception:
+    _VERSION = "unknown"
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"pyrecall {_VERSION}")
+        raise typer.Exit()
+
+
 app = typer.Typer(
     name="pyrecall",
     help=(
@@ -36,6 +49,17 @@ replay_app = typer.Typer(
     rich_markup_mode="rich",
 )
 app.add_typer(replay_app, name="replay")
+
+
+@app.callback()
+def _main(
+    version: Annotated[
+        Optional[bool],
+        typer.Option("--version", "-V", callback=_version_callback, is_eager=True, help="Show version and exit"),
+    ] = None,
+) -> None:
+    pass
+
 
 console = Console()
 
