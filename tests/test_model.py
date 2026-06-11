@@ -184,6 +184,43 @@ class TestModelCheck:
         assert len(report.comparisons) > 0
 
 
+class TestModelDiff:
+    def test_diff_returns_report(self, patched_model) -> None:
+        from pyrecall.detector import ForgettingReport
+
+        patched_model.snapshot(name="v1")
+        patched_model.snapshot(name="v2")
+        report = patched_model.diff("v1", "v2")
+        assert isinstance(report, ForgettingReport)
+
+    def test_diff_report_has_comparisons(self, patched_model) -> None:
+        patched_model.snapshot(name="a")
+        patched_model.snapshot(name="b")
+        report = patched_model.diff("a", "b")
+        assert len(report.comparisons) > 0
+
+    def test_diff_raises_for_missing_snap1(self, patched_model) -> None:
+        from pyrecall.model import PyrecallError
+
+        patched_model.snapshot(name="exists")
+        with pytest.raises(PyrecallError, match="missing_snap"):
+            patched_model.diff("missing_snap", "exists")
+
+    def test_diff_raises_for_missing_snap2(self, patched_model) -> None:
+        from pyrecall.model import PyrecallError
+
+        patched_model.snapshot(name="exists")
+        with pytest.raises(PyrecallError, match="missing_snap"):
+            patched_model.diff("exists", "missing_snap")
+
+    def test_diff_does_not_run_benchmarks(self, patched_model) -> None:
+        patched_model.snapshot(name="x")
+        patched_model.snapshot(name="y")
+        with patch.object(patched_model, "_run_benchmarks") as mock_bench:
+            patched_model.diff("x", "y")
+        mock_bench.assert_not_called()
+
+
 class TestModelConstructorDefaults:
     def test_constructor_defaults_stored(self, patched_model) -> None:
         assert patched_model.learning_rate == 2e-4

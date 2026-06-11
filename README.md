@@ -171,6 +171,9 @@ pyrecall check --verbose
 # Or compare specific named snapshots
 pyrecall check --before before_v1 --after after_v1
 
+# Diff any two snapshots without loading the model (fast, works offline)
+pyrecall diff before_v1 after_v2
+
 # Rollback to a previous snapshot
 pyrecall rollback before_v1
 

@@ -835,6 +835,176 @@ class TestCheckJson:
         assert result.exit_code == 2
 
 
+# ── diff ──────────────────────────────────────────────────────────────────────
+
+
+class TestDiff:
+    def test_fails_without_config_file(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        result = runner.invoke(app, ["diff", "snap1", "snap2"])
+        assert result.exit_code == 1
+
+    def test_exit_code_zero_when_no_forgetting(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap_a = _make_snapshot("snap_a", {"reasoning": 0.80})
+        snap_b = _make_snapshot("snap_b", {"reasoning": 0.82})
+        mgr = _make_mock_manager(
+            snapshots=[snap_a, snap_b],
+            snapshot_map={"snap_a": snap_a, "snap_b": snap_b},
+        )
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["diff", "snap_a", "snap_b"])
+
+        assert result.exit_code == 0
+
+    def test_exit_code_two_when_forgetting_detected(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap_a = _make_snapshot("snap_a", {"coding": 0.90})
+        snap_b = _make_snapshot("snap_b", {"coding": 0.50})
+        mgr = _make_mock_manager(
+            snapshots=[snap_a, snap_b],
+            snapshot_map={"snap_a": snap_a, "snap_b": snap_b},
+        )
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["diff", "snap_a", "snap_b"])
+
+        assert result.exit_code == 2
+
+    def test_fails_when_snap1_not_found(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        mgr = _make_mock_manager()
+        mgr.load_snapshot.side_effect = FileNotFoundError("missing")
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["diff", "missing", "snap_b"])
+
+        assert result.exit_code == 1
+        assert "missing" in result.output
+
+    def test_fails_when_snap2_not_found(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap_a = _make_snapshot("snap_a", {"coding": 0.8})
+        mgr = _make_mock_manager(snapshots=[snap_a], snapshot_map={"snap_a": snap_a})
+
+        def _load(name: str) -> object:
+            if name == "snap_a":
+                return snap_a
+            raise FileNotFoundError(name)
+
+        mgr.load_snapshot.side_effect = _load
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["diff", "snap_a", "missing"])
+
+        assert result.exit_code == 1
+        assert "missing" in result.output
+
+    def test_loads_both_named_snapshots(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap_a = _make_snapshot("snap_a", {"reasoning": 0.8})
+        snap_b = _make_snapshot("snap_b", {"reasoning": 0.79})
+        mgr = _make_mock_manager(
+            snapshots=[snap_a, snap_b],
+            snapshot_map={"snap_a": snap_a, "snap_b": snap_b},
+        )
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            runner.invoke(app, ["diff", "snap_a", "snap_b"])
+
+        mgr.load_snapshot.assert_any_call("snap_a")
+        mgr.load_snapshot.assert_any_call("snap_b")
+
+    def test_json_flag_outputs_valid_json(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap_a = _make_snapshot("snap_a", {"coding": 0.8})
+        snap_b = _make_snapshot("snap_b", {"coding": 0.79})
+        mgr = _make_mock_manager(
+            snapshots=[snap_a, snap_b],
+            snapshot_map={"snap_a": snap_a, "snap_b": snap_b},
+        )
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["diff", "snap_a", "snap_b", "--json"])
+
+        parsed = json.loads(result.output)
+        assert "comparisons" in parsed
+
+    def test_custom_threshold_respected(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        # 5% drop — below default threshold (10%) but above a 3% custom threshold
+        snap_a = _make_snapshot("snap_a", {"reasoning": 0.80})
+        snap_b = _make_snapshot("snap_b", {"reasoning": 0.74})
+        mgr = _make_mock_manager(
+            snapshots=[snap_a, snap_b],
+            snapshot_map={"snap_a": snap_a, "snap_b": snap_b},
+        )
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["diff", "snap_a", "snap_b", "--threshold", "0.03"])
+
+        assert result.exit_code == 2
+
+    def test_invalid_threshold_rejected(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap_a = _make_snapshot("snap_a")
+        snap_b = _make_snapshot("snap_b")
+        mgr = _make_mock_manager(
+            snapshots=[snap_a, snap_b],
+            snapshot_map={"snap_a": snap_a, "snap_b": snap_b},
+        )
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["diff", "snap_a", "snap_b", "--threshold", "1.5"])
+
+        assert result.exit_code == 1
+
+    def test_does_not_require_model_to_be_loaded(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap_a = _make_snapshot("snap_a", {"coding": 0.8})
+        snap_b = _make_snapshot("snap_b", {"coding": 0.79})
+        mgr = _make_mock_manager(
+            snapshots=[snap_a, snap_b],
+            snapshot_map={"snap_a": snap_a, "snap_b": snap_b},
+        )
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            with patch("pyrecall.model.Model") as mock_model_cls:
+                runner.invoke(app, ["diff", "snap_a", "snap_b"])
+
+        mock_model_cls.assert_not_called()
+
+
 # ── rollback ──────────────────────────────────────────────────────────────────
 
 

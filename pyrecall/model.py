@@ -417,6 +417,41 @@ class Model:
         report.print()
         return report
 
+    def diff(self, snap1: str, snap2: str) -> ForgettingReport:
+        """
+        Compare two saved snapshots without running new benchmarks.
+
+        Unlike :meth:`check`, ``diff`` does not benchmark the live model — it
+        loads both snapshots from disk and diffs the stored scores directly.
+        This is fast and works even if the model has been updated since the
+        snapshots were taken.
+
+        Args:
+            snap1: Name of the "before" snapshot.
+            snap2: Name of the "after" snapshot.
+
+        Returns:
+            A :class:`~pyrecall.detector.ForgettingReport` printed automatically.
+
+        Example::
+
+            report = model.diff("before_v1", "after_v2")
+            if not report.is_healthy:
+                model.rollback(to="before_v1")
+        """
+        try:
+            before = self.rollback_manager.load_snapshot(snap1)
+        except FileNotFoundError as exc:
+            raise PyrecallError(f"Snapshot '{snap1}' not found.") from exc
+        try:
+            after = self.rollback_manager.load_snapshot(snap2)
+        except FileNotFoundError as exc:
+            raise PyrecallError(f"Snapshot '{snap2}' not found.") from exc
+
+        report = self.detector.compare(before, after)
+        report.print()
+        return report
+
     def rollback(self, to: str) -> None:
         """
         Restore the model to the state captured in snapshot *to*.

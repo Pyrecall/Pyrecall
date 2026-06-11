@@ -541,6 +541,79 @@ def check(
 
 
 @app.command()
+def diff(
+    snap1: Annotated[str, typer.Argument(help="Name of the 'before' snapshot")],
+    snap2: Annotated[str, typer.Argument(help="Name of the 'after' snapshot")],
+    threshold: Annotated[
+        float | None,
+        typer.Option(
+            "--threshold",
+            help="Override the forgetting threshold (0–1). Defaults to the value set in pyrecall init.",
+        ),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Output results as JSON instead of a rich table.",
+        ),
+    ] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose", "-v", help="Show per-prompt score breakdown for each degraded skill."
+        ),
+    ] = False,
+) -> None:
+    """
+    Diff two saved snapshots without running new benchmarks.
+
+    Unlike 'check', this does not load the model or run any inference —
+    it compares the stored benchmark scores directly.  Fast enough to run
+    in any CI step.  Exits with code 2 when forgetting is detected.
+
+        pyrecall diff before_v1 after_v2
+        pyrecall diff before_v1 after_v2 --json | jq '.comparisons[].status'
+        pyrecall diff before_v1 after_v2 --verbose
+    """
+    config = _read_config()
+    mgr = _build_rollback_manager(config)
+
+    try:
+        snap_before = mgr.load_snapshot(snap1)
+    except FileNotFoundError:
+        console.print(f"[red]Error:[/red] Snapshot '{snap1}' not found.")
+        raise typer.Exit(1)
+    try:
+        snap_after = mgr.load_snapshot(snap2)
+    except FileNotFoundError:
+        console.print(f"[red]Error:[/red] Snapshot '{snap2}' not found.")
+        raise typer.Exit(1)
+
+    from pyrecall.detector import ForgettingDetector
+
+    effective_threshold = (
+        threshold if threshold is not None else config.get("forgetting_threshold", 0.10)
+    )
+    if not 0.0 < effective_threshold <= 1.0:
+        console.print(
+            f"[red]Error:[/red] threshold must be between 0 and 1, got {effective_threshold}."
+        )
+        raise typer.Exit(1)
+
+    detector = ForgettingDetector(threshold=effective_threshold)
+    report = detector.compare(snap_before, snap_after)
+
+    if json_output:
+        typer.echo(report.to_json())
+    else:
+        report.print(verbose=verbose)
+
+    if report.degraded_skills:
+        raise typer.Exit(2)
+
+
+@app.command()
 def rollback(
     snapshot_name: Annotated[str, typer.Argument(help="Snapshot to roll back to")],
 ) -> None:
