@@ -239,7 +239,10 @@ class Model:
         if tracker is not None:
             trackers = tracker if isinstance(tracker, list) else [tracker]
             for t in trackers:
-                t.log_snapshot(snap)
+                try:
+                    t.log_snapshot(snap)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Tracker %s failed to log snapshot: %s", type(t).__name__, exc)
 
         return snap
 

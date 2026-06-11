@@ -301,6 +301,7 @@ pip install pyrecall[wandb]
 from pyrecall import Model
 from pyrecall.trackers import WandbTracker
 
+model = Model("meta-llama/Llama-3.2-1B")
 tracker = WandbTracker(project="my-finetune")
 model.snapshot("before_v1", tracker=tracker)   # scores logged to W&B automatically
 ```
@@ -317,6 +318,7 @@ pip install pyrecall[mlflow]
 from pyrecall import Model
 from pyrecall.trackers import MLflowTracker
 
+model = Model("meta-llama/Llama-3.2-1B")
 tracker = MLflowTracker(experiment_name="my-finetune", tracking_uri="http://localhost:5000")
 model.snapshot("before_v1", tracker=tracker)
 ```

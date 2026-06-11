@@ -32,6 +32,7 @@ class WandbTracker:
         from pyrecall import Model
         from pyrecall.trackers import WandbTracker
 
+        model = Model("meta-llama/Llama-3.2-1B")
         tracker = WandbTracker(project="my-finetune")
         model.snapshot("before_v1", tracker=tracker)
     """
@@ -82,6 +83,7 @@ class MLflowTracker:
         from pyrecall import Model
         from pyrecall.trackers import MLflowTracker
 
+        model = Model("meta-llama/Llama-3.2-1B")
         tracker = MLflowTracker(experiment_name="my-finetune")
         model.snapshot("before_v1", tracker=tracker)
     """
