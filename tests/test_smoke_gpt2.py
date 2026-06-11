@@ -13,6 +13,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import torch
+
 import pytest
 
 pytestmark = pytest.mark.slow
@@ -137,3 +139,45 @@ def test_generate_returns_string(tmp_path: Path) -> None:
     response = model.generate("The capital of France is", max_new_tokens=10)
     assert isinstance(response, str)
     assert len(response) > 0
+
+
+def test_rollback_restores_adapter_weights(tmp_path: Path, training_jsonl: Path) -> None:
+    """
+    After rolling back to a pre-training snapshot, the model's LoRA weights must
+    match those saved in the snapshot adapter directory, not the post-training weights.
+    """
+    from pyrecall.model import Model
+
+    model = Model(
+        "gpt2",
+        lora_r=4,
+        lora_alpha=8,
+        batch_size=1,
+        max_length=64,
+        snapshot_dir=tmp_path / "snapshots",
+    )
+
+    # Snapshot before training and record a weight fingerprint
+    model.snapshot("pre")
+    pre_weight = next(p.clone().detach() for p in model.model.parameters() if p.requires_grad)
+
+    # Train so weights change
+    model.learn(str(training_jsonl), epochs=1)
+    post_weight = next(p.clone().detach() for p in model.model.parameters() if p.requires_grad)
+
+    # Weights must have changed after training
+    assert not torch.allclose(pre_weight, post_weight, atol=1e-6), (
+        "Weights didn't change after training — the smoke test is invalid"
+    )
+
+    # Rollback and verify weights match the pre-training state
+    model.rollback(to="pre")
+    rolled_back_weight = next(p.clone().detach() for p in model.model.parameters() if p.requires_grad)
+
+    assert torch.allclose(pre_weight.cpu(), rolled_back_weight.cpu(), atol=1e-5), (
+        "Rolled-back weights don't match the pre-training snapshot"
+    )
+
+    # Model must still generate text after rollback
+    response = model.generate("hello", max_new_tokens=5)
+    assert isinstance(response, str) and len(response) > 0

@@ -151,6 +151,10 @@ def init(
 ) -> None:
     """Initialise pyrecall in the current project directory."""
     errors: list[str] = []
+    if not model or " " in model or model.startswith("/"):
+        errors.append(
+            f"--model must be a HuggingFace model ID (e.g. 'meta-llama/Llama-3.2-1B'), got '{model}'"
+        )
     if strategy not in ("lora", "qlora"):
         errors.append(f"--strategy must be 'lora' or 'qlora', got '{strategy}'")
     if lora_r < 1:

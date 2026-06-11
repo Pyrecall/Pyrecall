@@ -206,14 +206,18 @@ pyrecall replay clear --yes   # skip the prompt
 | `--learning-rate` | from config | Override the learning rate set at `init` |
 | `--max-length` | from config | Override the tokenisation truncation length |
 | `--resume` | `false` | Resume from the latest checkpoint if a previous run was interrupted |
-| `--snapshot-after` | — | Take a named snapshot immediately after training completes |
+| `--snapshot-before` | — | Take a named snapshot immediately **before** training begins (sets it as the baseline) |
+| `--snapshot-after` | — | Take a named snapshot immediately **after** training completes (sets it as the new baseline) |
 
 ### A full training workflow
 
 ```bash
 pyrecall init --model meta-llama/Llama-3.2-1B
-pyrecall snapshot before_v1
-pyrecall learn customer_service.jsonl --epochs 3 --snapshot-after after_v1
+
+# One-shot: snapshot before, train, snapshot after, then check — all in one command
+pyrecall learn customer_service.jsonl --epochs 3 \
+    --snapshot-before before_v1 \
+    --snapshot-after after_v1
 pyrecall check --before before_v1 --after after_v1
 # exit code 0 → ship it   exit code 2 → pyrecall rollback before_v1
 ```
@@ -322,8 +326,7 @@ pytest
 
 Areas where contributions would be most valuable:
 
-- Additional benchmark categories (multilingual, advanced math, tool-use / function calling)
-- QLoRA support (`load_in_4bit` / `load_in_8bit` via `bitsandbytes`)
+- Additional benchmark categories (advanced math, tool-use / function calling)
 - Distributed training via `accelerate`
 - Web dashboard for visualizing snapshot history over time
 - Experiment tracker integrations (W&B, MLflow, Neptune)
