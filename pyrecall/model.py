@@ -83,6 +83,10 @@ class Model:
             model.rollback(to="before_v1")
     """
 
+    rollback_manager: RollbackManager
+    _baseline_file: Path
+    _baseline_snapshot_name: str | None
+
     def __init__(
         self,
         model_name: str,
@@ -137,7 +141,12 @@ class Model:
                 f"Unknown scoring_method '{scoring_method}'. "
                 "Use 'log_likelihood' (recommended) or 'cosine' (legacy)."
             )
-
+        self.rollback_manager = RollbackManager(model_name=model_name, base_dir=snapshot_dir)
+        self.base_dir = snapshot_dir or (Path.home() / ".pyrecall")
+        self._baseline_snapshot_name: str | None = None
+        self._baseline_file = self.rollback_manager.base_dir / ".current_baseline"
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+        # load persisted baseline if it exists
         self.model_name = model_name
         self.strategy = strategy
         self.device = device or self._best_device()
@@ -146,9 +155,6 @@ class Model:
         self.scoring_method = scoring_method
         self.max_length = max_length
         self._replay_mix_ratio = replay_mix_ratio
-
-        self._baseline_snapshot_name: str | None = None
-
         self.replay_buffer: ReplayBuffer | None = (
             ReplayBuffer(model_name=model_name, max_size=replay_buffer_size, base_dir=snapshot_dir)
             if replay_buffer_size > 0
@@ -203,8 +209,6 @@ class Model:
         if not bnb_config:
             self.model = self.model.to(self.device)
         self.model.eval()
-
-        self.rollback_manager = RollbackManager(model_name=model_name, base_dir=snapshot_dir)
         self.detector = ForgettingDetector(
             threshold=forgetting_threshold,
             category_thresholds=category_thresholds,
@@ -218,6 +222,9 @@ class Model:
             f"{n_trainable:,} / {n_total:,} parameters are trainable "
             f"({n_trainable / n_total:.2%}).[/success]"
         )
+
+        if self._baseline_file.exists():
+            self._baseline_snapshot_name = self._baseline_file.read_text().strip() or None
 
     # ── public API ─────────────────────────────────────────────────────────────
 
@@ -248,7 +255,7 @@ class Model:
         snap = SkillSnapshot(name=name, model_name=self.model_name, scores=scores)
         self.rollback_manager.save(snap, self.model)
 
-        self._baseline_snapshot_name = name
+        self._set_baseline(name)
 
         console.print(
             f"[success]✓ Snapshot '{name}' saved. "
@@ -520,32 +527,49 @@ class Model:
         """
         Restore the model to the state captured in snapshot *to*.
 
-        Reloads the base model from disk/cache and applies the saved LoRA
-        adapter weights from the snapshot. This replaces the current in-memory
-        model, so any training done after the snapshot is discarded.
-
-        Args:
-            to: The name of a snapshot created with :meth:`snapshot`.
+        This:
+        - reloads the base HF model
+        - attaches the correct LoRA adapter
+        - fully replaces the current model in memory
+        - resets evaluation mode
+        - updates baseline tracking safely
         """
+
         console.print(f"[info]Rolling back to snapshot '{to}'…[/info]")
 
+        # ── 1. Validate snapshot before touching the model ────────────────────────
         snap = self.rollback_manager.load_snapshot(to)
-
-        if snap.adapter_path is None or not snap.adapter_path.exists():
+        if snap.adapter_path is None:
+            raise PyrecallError(f"Snapshot '{to}' is missing adapter metadata.")
+        if not snap.adapter_path.exists():
             raise PyrecallError(
-                f"Snapshot '{to}' has no saved adapter weights at "
-                f"'{snap.adapter_path}'. "
-                "Only snapshots taken with model.snapshot() can be used for rollback."
+                f"Adapter weights not found for snapshot '{to}' at {snap.adapter_path}"
             )
 
-        dtype = torch.float16 if self.device != "cpu" else torch.float32
-        base = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=dtype)
-        self.model = PeftModel.from_pretrained(base, str(snap.adapter_path))
-        self.model = self.model.to(self.device)
-        self.model.eval()
+        # ── 2. Load new model (do this before deleting old one) ───────────────────
+        dtype = torch.float16 if self.device == "cuda" else torch.float32
+        base_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            torch_dtype=dtype,
+            device_map=None if self.device != "cuda" else "auto",
+        )
+        new_model = PeftModel.from_pretrained(
+            base_model, str(snap.adapter_path), is_trainable=False
+        )
+        if self.device not in ("cuda",):
+            new_model = new_model.to(self.device)
 
-        self._baseline_snapshot_name = to
-        console.print(f"[success]✓ Rolled back to '{to}'.[/success]")
+        # ── 3. Swap — only delete old model after new one is ready ────────────────
+        del self.model
+        self.model = new_model
+        self.model.eval()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        # ── 4. Persist baseline ───────────────────────────────────────────────────
+        self._set_baseline(to)
+
+        console.print(f"[success]✓ Rolled back to '{to}'[/success]")
 
     def generate(self, prompt: str, max_new_tokens: int = 200) -> str:
         """
@@ -668,6 +692,12 @@ class Model:
         uvicorn.run(app, host="0.0.0.0", port=port)
 
     # ── private helpers ────────────────────────────────────────────────────────
+    def _set_baseline(self, name: str) -> None:
+        self._baseline_snapshot_name = name
+        try:
+            self._baseline_file.write_text(name)
+        except Exception:
+            pass
 
     def _run_benchmarks(self) -> list[SkillScore]:
         """Run default + custom benchmarks and return SkillScore objects."""
