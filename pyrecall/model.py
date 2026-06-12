@@ -318,11 +318,13 @@ class Model:
         dataset = load_dataset(fmt, data_files=str(data_file), split="train")
 
         # Infer the text column.
-        if len(dataset) == 0:
-            raise PyrecallError(
-                f"Training data '{data_path}' is empty."
-            )
+        try:
+            is_empty = len(dataset) == 0
+        except (TypeError, AttributeError):
+            is_empty = False
 
+        if is_empty:
+            raise PyrecallError(f"Training data '{data_path}' is empty.")
         if "text" in dataset.column_names:
             text_col = "text"
         else:
