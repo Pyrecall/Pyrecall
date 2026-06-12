@@ -122,6 +122,26 @@ def _build_rollback_manager(config: dict):
     return RollbackManager(model_name=config["model_name"])
 
 
+def _parse_category_thresholds(raw: list[str]) -> dict[str, float]:
+    """Parse ['safety=0.03', 'coding=0.15'] into {'safety': 0.03, 'coding': 0.15}."""
+    result: dict[str, float] = {}
+    for item in raw:
+        if "=" not in item:
+            raise typer.BadParameter(
+                f"Expected 'category=value', got '{item}'",
+                param_hint="--category-threshold",
+            )
+        cat, _, val = item.partition("=")
+        try:
+            result[cat.strip()] = float(val.strip())
+        except ValueError:
+            raise typer.BadParameter(
+                f"Threshold value must be a number, got '{val}'",
+                param_hint="--category-threshold",
+            )
+    return result
+
+
 def _build_trackers(
     log_wandb: bool, log_mlflow: bool, log_neptune: bool = False, neptune_project: str | None = None
 ):
@@ -187,6 +207,13 @@ def init(
         float,
         typer.Option("--threshold", help="Score drop fraction that counts as forgetting (0–1)"),
     ] = 0.10,
+    category_threshold: Annotated[
+        list[str],
+        typer.Option(
+            "--category-threshold",
+            help="Per-category override in 'category=value' format, e.g. --category-threshold safety=0.03",
+        ),
+    ] = [],
     replay_buffer_size: Annotated[
         int,
         typer.Option(
@@ -221,6 +248,14 @@ def init(
         errors.append(f"--max-length must be >= 1, got {max_length}")
     if not 0.0 < threshold <= 1.0:
         errors.append(f"--threshold must be between 0 and 1, got {threshold}")
+    try:
+        parsed_category_thresholds = _parse_category_thresholds(category_threshold)
+    except typer.BadParameter as exc:
+        errors.append(str(exc))
+        parsed_category_thresholds = {}
+    for cat, val in parsed_category_thresholds.items():
+        if not 0.0 < val <= 1.0:
+            errors.append(f"--category-threshold {cat} must be between 0 and 1, got {val}")
     if replay_buffer_size < 0:
         errors.append(f"--replay-buffer-size must be >= 0, got {replay_buffer_size}")
     if not 0.0 <= replay_mix_ratio < 1.0:
@@ -247,6 +282,7 @@ def init(
         "batch_size": batch_size,
         "max_length": max_length,
         "forgetting_threshold": threshold,
+        "category_thresholds": parsed_category_thresholds,
         "replay_buffer_size": replay_buffer_size,
         "replay_mix_ratio": replay_mix_ratio,
         "created_at": datetime.now().isoformat(),
@@ -506,6 +542,13 @@ def check(
             help="Override the forgetting threshold (0–1). Defaults to the value set in pyrecall init.",
         ),
     ] = None,
+    category_threshold: Annotated[
+        list[str],
+        typer.Option(
+            "--category-threshold",
+            help="Per-category override in 'category=value' format, e.g. --category-threshold safety=0.03",
+        ),
+    ] = [],
     json_output: Annotated[
         bool,
         typer.Option(
@@ -575,7 +618,13 @@ def check(
             f"[red]Error:[/red] threshold must be between 0 and 1, got {effective_threshold}."
         )
         raise typer.Exit(1)
-    detector = ForgettingDetector(threshold=effective_threshold)
+    effective_cat_thresholds = {
+        **config.get("category_thresholds", {}),
+        **_parse_category_thresholds(category_threshold),
+    }
+    detector = ForgettingDetector(
+        threshold=effective_threshold, category_thresholds=effective_cat_thresholds
+    )
     report = detector.compare(snap_before, snap_after)
 
     if json_output:
@@ -598,6 +647,13 @@ def diff(
             help="Override the forgetting threshold (0–1). Defaults to the value set in pyrecall init.",
         ),
     ] = None,
+    category_threshold: Annotated[
+        list[str],
+        typer.Option(
+            "--category-threshold",
+            help="Per-category override in 'category=value' format, e.g. --category-threshold safety=0.03",
+        ),
+    ] = [],
     json_output: Annotated[
         bool,
         typer.Option(
@@ -648,7 +704,13 @@ def diff(
         )
         raise typer.Exit(1)
 
-    detector = ForgettingDetector(threshold=effective_threshold)
+    effective_cat_thresholds = {
+        **config.get("category_thresholds", {}),
+        **_parse_category_thresholds(category_threshold),
+    }
+    detector = ForgettingDetector(
+        threshold=effective_threshold, category_thresholds=effective_cat_thresholds
+    )
     report = detector.compare(snap_before, snap_after)
 
     if json_output:
