@@ -462,7 +462,14 @@ class Model:
                 "then call model.check() afterwards."
             )
 
-        before = self.rollback_manager.load_snapshot(self._baseline_snapshot_name)
+        try:
+            before = self.rollback_manager.load_snapshot(self._baseline_snapshot_name)
+        except FileNotFoundError as exc:
+            raise PyrecallError(
+                f"Baseline snapshot '{self._baseline_snapshot_name}' not found at "
+                f"'{self.rollback_manager.base_dir}'.\n"
+                f"Did you run model.snapshot('{self._baseline_snapshot_name}') before training?"
+            ) from exc
 
         console.print("[info]Running post-training benchmarks…[/info]")
         after_scores = self._run_benchmarks()

@@ -172,6 +172,24 @@ class TestModelCheck:
             with pytest.raises(PyrecallError, match="snapshot"):
                 m.check()
 
+    def test_check_raises_pyrecallerror_when_baseline_snapshot_deleted(self, patched_model) -> None:
+        """Stale baseline name (snapshot dir deleted) must raise PyrecallError, not FileNotFoundError."""
+        from pyrecall.model import PyrecallError
+
+        patched_model._baseline_snapshot_name = "ghost_snapshot"
+        with pytest.raises(PyrecallError, match="ghost_snapshot"):
+            patched_model.check()
+
+    def test_check_error_mentions_snapshot_name_and_action(self, patched_model) -> None:
+        from pyrecall.model import PyrecallError
+
+        patched_model._baseline_snapshot_name = "before_v1"
+        with pytest.raises(PyrecallError) as exc_info:
+            patched_model.check()
+        msg = str(exc_info.value)
+        assert "before_v1" in msg
+        assert "snapshot" in msg.lower()
+
     def test_check_returns_report(self, patched_model) -> None:
         from pyrecall.detector import ForgettingReport
 
