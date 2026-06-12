@@ -206,6 +206,17 @@ pyrecall replay status
 # Wipe the replay buffer (prompts for confirmation)
 pyrecall replay clear
 pyrecall replay clear --yes   # skip the prompt
+
+# Register a custom benchmark suite (JSONL with prompt + reference_answer)
+pyrecall benchmark add nautical.jsonl
+pyrecall benchmark add domain.jsonl --name my_domain
+
+# List all registered custom benchmark suites
+pyrecall benchmark list
+
+# Remove a custom benchmark suite
+pyrecall benchmark remove my_domain
+pyrecall benchmark remove my_domain --yes   # skip confirmation
 ```
 
 `pyrecall check` exits with **code 2** when forgetting is detected — drop it straight into your CI pipeline as a training gate.
@@ -378,6 +389,40 @@ Any causal LM on HuggingFace Hub. pyrecall auto-detects LoRA target modules for:
 - **Gemma** (1/2)
 - **Qwen** (1.5/2)
 - **Falcon**, **MPT**, **Bloom**, **GPT-2**, **GPT-Neo**, **GPT-J**, **OPT**
+
+---
+
+## Custom benchmarks
+
+The built-in 64 prompts cover broad skills. For domain-specific forgetting detection, register your own benchmark suites:
+
+```bash
+pip install pyrecall
+pyrecall benchmark add nautical.jsonl
+pyrecall benchmark add legal.jsonl --name legal_domain
+```
+
+Each file is JSONL with one benchmark per line. Required keys: `prompt` and `reference_answer`. Optional: `category` (defaults to the suite name).
+
+```jsonl
+{"prompt": "What does 'port' mean on a ship?", "reference_answer": "The left side when facing the bow.", "category": "nautical"}
+{"prompt": "What is a beam reach?", "reference_answer": "Sailing with the wind perpendicular to the boat.", "category": "nautical"}
+```
+
+Once registered, custom benchmarks run automatically alongside the built-ins every time you call `model.snapshot()` or `pyrecall snapshot`. Forgetting is detected the same way — cosine similarity of the response against the reference answer.
+
+```python
+from pyrecall import Model
+from pyrecall.benchmarks import CustomBenchmarkManager
+
+# Register a suite programmatically
+mgr = CustomBenchmarkManager()
+mgr.add("nautical.jsonl")
+
+# Now snapshot() includes your custom prompts automatically
+model = Model("meta-llama/Llama-3.2-1B")
+model.snapshot("before_v1")
+```
 
 ---
 

@@ -19,6 +19,7 @@ from transformers import (
     TrainingArguments,
 )
 
+from .benchmarks.custom import CustomBenchmarkManager
 from .benchmarks.default import DEFAULT_BENCHMARKS
 from .detector import ForgettingDetector, ForgettingReport
 from .replay import ReplayBuffer
@@ -189,6 +190,7 @@ class Model:
 
         self.rollback_manager = RollbackManager(model_name=model_name, base_dir=snapshot_dir)
         self.detector = ForgettingDetector(threshold=forgetting_threshold)
+        self.custom_benchmarks = CustomBenchmarkManager()
 
         n_trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         n_total = sum(p.numel() for p in self.model.parameters())
@@ -606,7 +608,8 @@ class Model:
     # ── private helpers ────────────────────────────────────────────────────────
 
     def _run_benchmarks(self) -> list[SkillScore]:
-        """Run all default benchmarks and return SkillScore objects."""
+        """Run default + custom benchmarks and return SkillScore objects."""
+        all_benchmarks = DEFAULT_BENCHMARKS + self.custom_benchmarks.load_all()
         scores: list[SkillScore] = []
 
         with Progress(
@@ -615,9 +618,9 @@ class Model:
             console=console,
             transient=True,
         ) as progress:
-            task = progress.add_task("Running benchmarks…", total=len(DEFAULT_BENCHMARKS))
+            task = progress.add_task("Running benchmarks…", total=len(all_benchmarks))
 
-            for bench in DEFAULT_BENCHMARKS:
+            for bench in all_benchmarks:
                 progress.update(
                     task,
                     description=(f"[{bench.category}] {bench.prompt[:55].rstrip()}…"),

@@ -61,6 +61,14 @@ live_app = typer.Typer(
 )
 app.add_typer(live_app, name="live")
 
+benchmark_app = typer.Typer(
+    name="benchmark",
+    help="Manage custom benchmark suites.",
+    add_completion=False,
+    rich_markup_mode="rich",
+)
+app.add_typer(benchmark_app, name="benchmark")
+
 
 @app.callback()
 def _main(
@@ -996,6 +1004,108 @@ def history(
     )
     if baseline:
         console.print(f"[dim]  ★ = current baseline ({baseline})[/dim]")
+
+
+# ── benchmark subcommands ──────────────────────────────────────────────────────
+
+
+@benchmark_app.command("add")
+def benchmark_add(
+    path: Annotated[str, typer.Argument(help="Path to a .jsonl benchmark file")],
+    name: Annotated[
+        str | None,
+        typer.Option("--name", "-n", help="Suite name (defaults to the filename stem)"),
+    ] = None,
+) -> None:
+    """
+    Register a custom benchmark suite.
+
+    The file must be JSONL with one benchmark per line.  Each line needs at
+    least a 'prompt' and a 'reference_answer' key.  An optional 'category'
+    key labels the skill; if omitted the suite name is used instead.
+
+        pyrecall benchmark add nautical.jsonl
+        pyrecall benchmark add domain.jsonl --name my_domain
+
+    Example line:
+
+        {"prompt": "What does port mean on a ship?", "reference_answer": "The left side when facing the bow.", "category": "nautical"}
+    """
+    from pyrecall.benchmarks.custom import CustomBenchmarkManager
+
+    mgr = CustomBenchmarkManager()
+    try:
+        registered = mgr.add(path, name=name)
+    except FileNotFoundError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(1)
+    except ValueError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(1)
+
+    entries = next(s["count"] for s in mgr.list() if s["name"] == registered)
+    console.print(
+        f"[green]✓[/green] Registered benchmark suite [bold]{registered}[/bold] "
+        f"({entries} prompt{'s' if entries != 1 else ''})."
+    )
+
+
+@benchmark_app.command("list")
+def benchmark_list() -> None:
+    """Show all registered custom benchmark suites."""
+    from pyrecall.benchmarks.custom import CustomBenchmarkManager
+
+    mgr = CustomBenchmarkManager()
+    suites = mgr.list()
+
+    if not suites:
+        console.print(
+            "[yellow]No custom benchmarks registered.[/yellow] "
+            "Run [bold]pyrecall benchmark add <file.jsonl>[/bold] to add one."
+        )
+        return
+
+    table = Table(title="Custom Benchmark Suites", show_lines=False)
+    table.add_column("Name", style="bold white")
+    table.add_column("Prompts", justify="right")
+    table.add_column("Path", style="dim")
+
+    for suite in suites:
+        table.add_row(suite["name"], str(suite["count"]), suite["path"])
+
+    console.print(table)
+    total = sum(s["count"] for s in suites)
+    console.print(
+        f"[dim]  {total} custom prompt{'s' if total != 1 else ''} across {len(suites)} suite{'s' if len(suites) != 1 else ''}.[/dim]"
+    )
+
+
+@benchmark_app.command("remove")
+def benchmark_remove(
+    name: Annotated[str, typer.Argument(help="Name of the suite to remove")],
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Skip confirmation prompt"),
+    ] = False,
+) -> None:
+    """Remove a registered custom benchmark suite."""
+    from pyrecall.benchmarks.custom import CustomBenchmarkManager
+
+    mgr = CustomBenchmarkManager()
+
+    if not yes:
+        confirmed = typer.confirm(f"Remove benchmark suite '{name}'?")
+        if not confirmed:
+            console.print("[dim]Aborted.[/dim]")
+            raise typer.Exit(0)
+
+    try:
+        mgr.remove(name)
+    except FileNotFoundError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(1)
+
+    console.print(f"[green]✓[/green] Removed benchmark suite [bold]{name}[/bold].")
 
 
 # ── replay subcommands ─────────────────────────────────────────────────────────

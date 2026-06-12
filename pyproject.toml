@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pyrecall"
-version = "0.7.0"
+version = "0.8.0"
 description = "Keep your models balanced. Continuous fine-tuning with automatic forgetting detection and skill rollback."
 readme = "README.md"
 license = { file = "LICENSE" }
