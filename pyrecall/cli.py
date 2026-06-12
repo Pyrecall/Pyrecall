@@ -114,7 +114,9 @@ def _build_rollback_manager(config: dict):
     return RollbackManager(model_name=config["model_name"])
 
 
-def _build_trackers(log_wandb: bool, log_mlflow: bool, log_neptune: bool = False, neptune_project: str | None = None):
+def _build_trackers(
+    log_wandb: bool, log_mlflow: bool, log_neptune: bool = False, neptune_project: str | None = None
+):
     trackers: list = []
     if log_wandb:
         from pyrecall.trackers import WandbTracker
