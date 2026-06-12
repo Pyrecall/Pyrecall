@@ -96,7 +96,7 @@ class TestCustomBenchmarkManagerAdd:
 class TestCustomBenchmarkManagerList:
     def test_list_empty_when_no_suites(self, tmp_path: Path) -> None:
         mgr = CustomBenchmarkManager(base_dir=tmp_path / "store")
-        assert mgr.list() == []
+        assert mgr.suites() == []
 
     def test_list_returns_registered_suites(self, tmp_path: Path) -> None:
         src = tmp_path / "suite.jsonl"
@@ -104,7 +104,7 @@ class TestCustomBenchmarkManagerList:
         mgr = CustomBenchmarkManager(base_dir=tmp_path / "store")
         mgr.add(src)
 
-        result = mgr.list()
+        result = mgr.suites()
 
         assert len(result) == 1
         assert result[0]["name"] == "suite"
@@ -116,7 +116,7 @@ class TestCustomBenchmarkManagerList:
         mgr = CustomBenchmarkManager(base_dir=tmp_path / "store")
         mgr.add(src)
 
-        assert "path" in mgr.list()[0]
+        assert "path" in mgr.suites()[0]
 
 
 class TestCustomBenchmarkManagerRemove:
@@ -288,7 +288,7 @@ class TestBenchmarkRemoveCli:
             result = runner.invoke(app, ["benchmark", "remove", "suite", "--yes"])
 
         assert result.exit_code == 0
-        assert mgr.list() == []
+        assert mgr.suites() == []
 
     def test_fails_when_suite_not_found(self, tmp_path: Path) -> None:
         store = tmp_path / "store"

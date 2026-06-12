@@ -1043,7 +1043,7 @@ def benchmark_add(
         console.print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(1)
 
-    entries = next(s["count"] for s in mgr.list() if s["name"] == registered)
+    entries = next(s["count"] for s in mgr.suites() if s["name"] == registered)
     console.print(
         f"[green]✓[/green] Registered benchmark suite [bold]{registered}[/bold] "
         f"({entries} prompt{'s' if entries != 1 else ''})."
@@ -1056,7 +1056,7 @@ def benchmark_list() -> None:
     from pyrecall.benchmarks.custom import CustomBenchmarkManager
 
     mgr = CustomBenchmarkManager()
-    suites = mgr.list()
+    suites = mgr.suites()
 
     if not suites:
         console.print(

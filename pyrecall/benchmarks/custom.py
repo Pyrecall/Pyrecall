@@ -59,7 +59,7 @@ class CustomBenchmarkManager:
         shutil.copy2(src, dest)
         return suite_name
 
-    def list(self) -> list[dict]:
+    def suites(self) -> list[dict]:
         """
         Return metadata for every registered suite.
 
@@ -102,7 +102,7 @@ class CustomBenchmarkManager:
 
     def count(self) -> int:
         """Total number of custom benchmark prompts across all suites."""
-        return sum(info["count"] for info in self.list())
+        return sum(info["count"] for info in self.suites())
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
