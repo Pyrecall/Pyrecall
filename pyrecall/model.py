@@ -86,6 +86,7 @@ class Model:
         device: str | None = None,
         snapshot_dir: Path | None = None,
         forgetting_threshold: float = 0.10,
+        category_thresholds: dict[str, float] | None = None,
         load_in_4bit: bool = False,
         load_in_8bit: bool = False,
         learning_rate: float = 2e-4,
@@ -189,7 +190,10 @@ class Model:
         self.model.eval()
 
         self.rollback_manager = RollbackManager(model_name=model_name, base_dir=snapshot_dir)
-        self.detector = ForgettingDetector(threshold=forgetting_threshold)
+        self.detector = ForgettingDetector(
+            threshold=forgetting_threshold,
+            category_thresholds=category_thresholds,
+        )
         self.custom_benchmarks = CustomBenchmarkManager()
 
         n_trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)

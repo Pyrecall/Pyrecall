@@ -426,6 +426,44 @@ model.snapshot("before_v1")
 
 ---
 
+## Per-category forgetting thresholds
+
+The default threshold (10%) applies uniformly to every skill category. When your use-case requires stricter oversight of specific capabilities — say, safety must never drop by more than 3% — you can set per-category overrides that layer on top of the global threshold.
+
+### Python API
+
+```python
+model = Model(
+    "meta-llama/Llama-3.2-1B",
+    forgetting_threshold=0.10,          # global default
+    category_thresholds={
+        "safety": 0.03,                 # safety flagged after a 3% drop
+        "coding": 0.15,                 # coding has more tolerance
+    },
+)
+```
+
+### Threshold CLI flags
+
+Pass `--category-threshold <category>=<value>` to `init`, `check`, or `diff`. The flag can be repeated:
+
+```bash
+# Set thresholds at project init (saved to .pyrecall.json)
+pyrecall init --model meta-llama/Llama-3.2-1B \
+    --category-threshold safety=0.03 \
+    --category-threshold coding=0.15
+
+# Override per-run without touching the config
+pyrecall check --category-threshold safety=0.03
+
+# Diff two snapshots with category-specific sensitivity
+pyrecall diff before_v1 after_v1 --category-threshold safety=0.03
+```
+
+CLI flags override config-file values for that run only. The `to_dict()` / `--json` output includes the effective threshold used per category so results are always reproducible.
+
+---
+
 ## Data format
 
 Three formats are supported — one row per training example, with a `"text"` column:

@@ -344,3 +344,65 @@ class TestPromptComparisons:
         report._render(Console(file=buf, highlight=False), verbose=False)
         output = buf.getvalue()
         assert "prompt_coding_0" not in output
+
+
+# ── per-category thresholds ───────────────────────────────────────────────────
+
+
+class TestPerCategoryThresholds:
+    def test_category_threshold_overrides_global(self) -> None:
+        detector = ForgettingDetector(threshold=0.10, category_thresholds={"safety": 0.03})
+        before = _make_snapshot("before", {"safety": 0.90, "coding": 0.80})
+        after = _make_snapshot("after", {"safety": 0.86, "coding": 0.79})
+        report = detector.compare(before, after)
+        # safety dropped 0.04 — over the 0.03 override but under the 0.10 global
+        assert "safety" in report.degraded_skills
+        assert "coding" not in report.degraded_skills
+
+    def test_global_threshold_used_when_no_override(self) -> None:
+        detector = ForgettingDetector(threshold=0.10, category_thresholds={"safety": 0.03})
+        before = _make_snapshot("before", {"coding": 0.80})
+        after = _make_snapshot("after", {"coding": 0.77})
+        report = detector.compare(before, after)
+        # coding dropped 0.03 — under the 0.10 global, no override for coding
+        assert "coding" not in report.degraded_skills
+
+    def test_threshold_for_returns_override(self) -> None:
+        detector = ForgettingDetector(threshold=0.10, category_thresholds={"safety": 0.03})
+        before = _make_snapshot("before", {"safety": 0.90})
+        after = _make_snapshot("after", {"safety": 0.90})
+        report = detector.compare(before, after)
+        assert report._threshold_for("safety") == pytest.approx(0.03)
+
+    def test_threshold_for_returns_global_for_unknown_category(self) -> None:
+        detector = ForgettingDetector(threshold=0.10, category_thresholds={"safety": 0.03})
+        before = _make_snapshot("before", {"coding": 0.80})
+        after = _make_snapshot("after", {"coding": 0.80})
+        report = detector.compare(before, after)
+        assert report._threshold_for("coding") == pytest.approx(0.10)
+
+    def test_to_dict_includes_per_category_threshold(self) -> None:
+        detector = ForgettingDetector(threshold=0.10, category_thresholds={"safety": 0.03})
+        before = _make_snapshot("before", {"safety": 0.90, "coding": 0.80})
+        after = _make_snapshot("after", {"safety": 0.90, "coding": 0.80})
+        report = detector.compare(before, after)
+        data = report.to_dict()
+        thresholds = {c["category"]: c["threshold"] for c in data["comparisons"]}
+        assert thresholds["safety"] == pytest.approx(0.03)
+        assert thresholds["coding"] == pytest.approx(0.10)
+
+    def test_no_category_thresholds_uses_global_for_all(self) -> None:
+        detector = ForgettingDetector(threshold=0.10)
+        before = _make_snapshot("before", {"coding": 0.80, "safety": 0.90})
+        after = _make_snapshot("after", {"coding": 0.80, "safety": 0.90})
+        report = detector.compare(before, after)
+        for comp in report.comparisons:
+            assert report._threshold_for(comp.category) == pytest.approx(0.10)
+
+    def test_category_thresholds_stored_on_report(self) -> None:
+        cat_thresh = {"safety": 0.03, "coding": 0.15}
+        detector = ForgettingDetector(threshold=0.10, category_thresholds=cat_thresh)
+        before = _make_snapshot("before", {"coding": 0.80})
+        after = _make_snapshot("after", {"coding": 0.80})
+        report = detector.compare(before, after)
+        assert report.category_thresholds == cat_thresh

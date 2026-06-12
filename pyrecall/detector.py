@@ -69,18 +69,23 @@ class ForgettingReport:
     snapshot_before: str
     snapshot_after: str
     threshold: float
+    category_thresholds: dict[str, float] = field(default_factory=dict)
     comparisons: list[CategoryComparison] = field(default_factory=list)
     prompt_comparisons: list[PromptComparison] = field(default_factory=list)
+
+    def _threshold_for(self, category: str) -> float:
+        """Return the effective threshold for *category*, falling back to the global default."""
+        return self.category_thresholds.get(category, self.threshold)
 
     # ── inspection ─────────────────────────────────────────────────────────────
 
     @property
     def degraded_skills(self) -> list[str]:
-        """Categories whose score dropped more than *threshold*."""
+        """Categories whose score dropped more than their effective threshold."""
         return [
             c.category
             for c in self.comparisons
-            if (c.score_before - c.score_after) > self.threshold
+            if (c.score_before - c.score_after) > self._threshold_for(c.category)
         ]
 
     @property
@@ -110,8 +115,9 @@ class ForgettingReport:
                     "score_after": round(c.score_after, 4),
                     "delta": round(c.delta, 4),
                     "pct_change": round(c.pct_change, 2),
+                    "threshold": self._threshold_for(c.category),
                     "status": "FORGOTTEN"
-                    if (c.score_before - c.score_after) > self.threshold
+                    if (c.score_before - c.score_after) > self._threshold_for(c.category)
                     else "OK",
                     "prompts": [p.to_dict() for p in self.prompts_for_category(c.category)],
                 }
@@ -149,13 +155,12 @@ class ForgettingReport:
         table.add_column("Status", justify="center")
 
         for comp in self.comparisons:
-            degraded = (comp.score_before - comp.score_after) > self.threshold
+            cat_threshold = self._threshold_for(comp.category)
+            degraded = (comp.score_before - comp.score_after) > cat_threshold
             sign = "+" if comp.delta >= 0 else ""
             delta_str = f"{sign}{comp.delta:.3f} ({sign}{comp.pct_change:.1f}%)"
             delta_style = (
-                "red"
-                if comp.delta < -self.threshold
-                else ("green" if comp.delta >= 0 else "yellow")
+                "red" if comp.delta < -cat_threshold else ("green" if comp.delta >= 0 else "yellow")
             )
             status_markup = "[red]FORGOTTEN[/red]" if degraded else "[green]  OK  [/green]"
 
@@ -178,9 +183,13 @@ class ForgettingReport:
                 "[dim]  Run model.rollback(to='<snapshot>') to restore these skills.[/dim]\n"
             )
         else:
+            threshold_note = (
+                f"(threshold: {self.threshold:.0%}"
+                + (", with per-category overrides" if self.category_thresholds else "")
+                + ")"
+            )
             console.print(
-                "\n[success]✓  No significant forgetting detected "
-                f"(threshold: {self.threshold:.0%}).[/success]\n"
+                f"\n[success]✓  No significant forgetting detected {threshold_note}.[/success]\n"
             )
 
         if verbose and self.prompt_comparisons:
@@ -220,11 +229,24 @@ class ForgettingDetector:
     Compare a before-snapshot and an after-snapshot to detect forgotten skills.
 
     A skill is considered *forgotten* when its average cosine-similarity score
-    drops by more than *threshold* (default 10 percentage points).
+    drops by more than its effective threshold.  The global *threshold* applies
+    to all categories unless overridden in *category_thresholds*.
+
+    Example::
+
+        detector = ForgettingDetector(
+            threshold=0.10,
+            category_thresholds={"safety": 0.03, "coding": 0.15},
+        )
     """
 
-    def __init__(self, threshold: float = 0.10) -> None:
+    def __init__(
+        self,
+        threshold: float = 0.10,
+        category_thresholds: dict[str, float] | None = None,
+    ) -> None:
         self.threshold = threshold
+        self.category_thresholds: dict[str, float] = category_thresholds or {}
 
     def compare(self, before: SkillSnapshot, after: SkillSnapshot) -> ForgettingReport:
         """
@@ -263,6 +285,7 @@ class ForgettingDetector:
             snapshot_before=before.name,
             snapshot_after=after.name,
             threshold=self.threshold,
+            category_thresholds=self.category_thresholds,
             comparisons=comparisons,
             prompt_comparisons=prompt_comparisons,
         )
