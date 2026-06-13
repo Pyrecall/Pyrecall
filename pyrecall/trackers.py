@@ -162,5 +162,10 @@ class NeptuneTracker:
             for cat, score in snapshot.category_scores().items():
                 run[f"pyrecall/{cat}"] = score
             run["pyrecall/overall"] = snapshot.overall_score()
+
+            # Log metadata
+            run["pyrecall/metadata/model_name"] = snapshot.model_name
+            run["pyrecall/metadata/snapshot_name"] = snapshot.name
+            run["pyrecall/metadata/timestamp"] = snapshot.created_at.isoformat()
         finally:
             run.stop()
