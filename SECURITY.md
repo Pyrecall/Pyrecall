@@ -9,9 +9,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in Pyrecall, please **do not** open a public GitHub issue.
-
-Instead, report it privately by emailing the maintainers at **awaneesh.ranjan@gmail.com** with:
+If you discover a security vulnerability in Pyrecall, please open a public GitHub issue.
 
 - A description of the vulnerability and its potential impact
 - Steps to reproduce or a proof-of-concept
