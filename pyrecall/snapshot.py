@@ -54,6 +54,7 @@ class SkillSnapshot:
     scores: list[SkillScore] = field(default_factory=list)
     adapter_path: Path | None = None
     encrypted: bool = False
+    adapter_compression: str = "none"
 
     # ── aggregation ────────────────────────────────────────────────────────────
     def category_scores(self) -> dict[str, float]:
@@ -81,6 +82,7 @@ class SkillSnapshot:
                 "created_at": self.created_at.isoformat(),
                 "scores": [s.to_dict() for s in self.scores],
                 "adapter_path": str(self.adapter_path) if self.adapter_path else None,
+                "adapter_compression": self.adapter_compression,
             }
         else:
             from .encrypt import Encryptor
@@ -136,4 +138,5 @@ class SkillSnapshot:
             created_at=datetime.fromisoformat(data["created_at"]),
             scores=[SkillScore.from_dict(s) for s in data["scores"]],
             adapter_path=Path(data["adapter_path"]) if data["adapter_path"] else None,
+            adapter_compression=data.get("adapter_compression", "none"),
         )

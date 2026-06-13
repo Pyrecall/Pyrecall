@@ -69,6 +69,11 @@ class LiveLearner:
         Triggers a training run if the untrained batch is full.
         """
         if len(response.strip()) < self.min_response_length:
+            logger.debug(
+                "record() skipped: response too short (%d chars < min %d)",
+                len(response.strip()),
+                self.min_response_length,
+            )
             return
 
         with self._connect() as conn:

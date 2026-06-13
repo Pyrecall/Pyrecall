@@ -639,3 +639,97 @@ class TestLoraTargets:
         mistral_targets = Model._lora_targets("mistralai/Mistral-7B-v0.1")
         mixtral_targets = Model._lora_targets("mistralai/Mixtral-8x7B-v0.1")
         assert set(mistral_targets) == set(mixtral_targets)
+
+
+class TestOnForgettingCallbacks:
+    def test_on_forgetting_called_when_forgetting_detected(self, patched_model) -> None:
+        from pyrecall.snapshot import SkillScore
+
+        called = []
+        patched_model._on_forgetting = [lambda r: called.append(r)]
+        patched_model._on_healthy = []
+        real_scores = patched_model._run_benchmarks()
+        patched_model.snapshot(name="pre_cb")
+        # Force score=0 for every item to guarantee forgetting is detected.
+        zero_scores = [
+            SkillScore(
+                category=s.category,
+                prompt=s.prompt,
+                response=s.response,
+                score=0.0,
+                scoring_method=s.scoring_method,
+            )
+            for s in real_scores
+        ]
+        with patch.object(patched_model, "_run_benchmarks", return_value=zero_scores):
+            report = patched_model.check()
+        assert not report.is_healthy
+        assert len(called) == 1
+        assert called[0] is report
+
+    def test_on_healthy_called_when_no_forgetting(self, patched_model) -> None:
+        healthy_called = []
+        forgetting_called = []
+        patched_model._on_healthy = [lambda r: healthy_called.append(r)]
+        patched_model._on_forgetting = [lambda r: forgetting_called.append(r)]
+        patched_model.snapshot(name="pre_healthy")
+        report = patched_model.check()
+        if report.is_healthy:
+            assert len(healthy_called) == 1
+            assert len(forgetting_called) == 0
+
+    def test_callback_exception_does_not_crash(self, patched_model) -> None:
+        def bad_cb(r):
+            raise RuntimeError("boom")
+
+        patched_model._on_forgetting = [bad_cb]
+        patched_model._on_healthy = [bad_cb]
+        patched_model.snapshot(name="pre_exc")
+        import warnings
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            patched_model.check()  # must not raise
+        assert any("boom" in str(w.message) for w in caught)
+
+    def test_multiple_callbacks_all_called(self, patched_model) -> None:
+        calls = []
+        patched_model._on_healthy = [lambda r: calls.append(1), lambda r: calls.append(2)]
+        patched_model._on_forgetting = []
+        patched_model.snapshot(name="pre_multi")
+        report = patched_model.check()
+        if report.is_healthy:
+            assert calls == [1, 2]
+
+    def test_on_forgetting_stored_as_list_from_single_callable(
+        self, tmp_snapshot_dir: Path
+    ) -> None:
+        mock_tok = _make_mock_tokenizer()
+        mock_base = _make_mock_base_model()
+        mock_peft = _make_mock_peft_model()
+        cb = lambda r: None  # noqa: E731
+        with (
+            patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
+            patch("pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
+            patch("pyrecall.model.get_peft_model", return_value=mock_peft),
+        ):
+            from pyrecall.model import Model
+
+            m = Model("test/model", snapshot_dir=tmp_snapshot_dir, on_forgetting=cb)
+        assert m._on_forgetting == [cb]
+
+    def test_on_forgetting_stored_as_list_from_list(self, tmp_snapshot_dir: Path) -> None:
+        mock_tok = _make_mock_tokenizer()
+        mock_base = _make_mock_base_model()
+        mock_peft = _make_mock_peft_model()
+        cb1 = lambda r: None  # noqa: E731
+        cb2 = lambda r: None  # noqa: E731
+        with (
+            patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
+            patch("pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
+            patch("pyrecall.model.get_peft_model", return_value=mock_peft),
+        ):
+            from pyrecall.model import Model
+
+            m = Model("test/model", snapshot_dir=tmp_snapshot_dir, on_forgetting=[cb1, cb2])
+        assert m._on_forgetting == [cb1, cb2]

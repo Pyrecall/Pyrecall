@@ -311,3 +311,117 @@ class TestBenchmarkRemoveCli:
             result = runner.invoke(app, ["benchmark", "remove", "suite", "--yes"])
 
         assert "suite" in result.output
+
+
+# ── benchmark validate ─────────────────────────────────────────────────────────
+
+_LONG_PROMPT = "What does the word port mean when used on a sailing vessel at sea?"
+_LONG_REF = "The left side of a ship when facing forward."
+
+
+def _make_store(tmp_path: Path, name: str, entries: list[dict]) -> CustomBenchmarkManager:
+    store = tmp_path / "store"
+    mgr = CustomBenchmarkManager(base_dir=store)
+    (store / f"{name}.jsonl").write_text("\n".join(json.dumps(e) for e in entries))
+    return mgr
+
+
+class TestBenchmarkValidateCli:
+    def test_clean_suite_exits_zero(self, tmp_path: Path) -> None:
+        entries = [
+            {"prompt": _LONG_PROMPT + f" {i}", "reference_answer": _LONG_REF, "category": "nav"}
+            for i in range(3)
+        ]
+        mgr = _make_store(tmp_path, "nav", entries)
+        with patch("pyrecall.benchmarks.custom.CustomBenchmarkManager", return_value=mgr):
+            result = runner.invoke(app, ["benchmark", "validate", "nav"])
+        assert result.exit_code == 0
+
+    def test_suite_not_found_exits_one(self, tmp_path: Path) -> None:
+        store = tmp_path / "store"
+        mgr = CustomBenchmarkManager(base_dir=store)
+        with patch("pyrecall.benchmarks.custom.CustomBenchmarkManager", return_value=mgr):
+            result = runner.invoke(app, ["benchmark", "validate", "missing"])
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
+
+    def test_builtin_category_skips_gracefully(self, tmp_path: Path) -> None:
+        store = tmp_path / "store"
+        mgr = CustomBenchmarkManager(base_dir=store)
+        with patch("pyrecall.benchmarks.custom.CustomBenchmarkManager", return_value=mgr):
+            result = runner.invoke(app, ["benchmark", "validate", "reasoning"])
+        assert result.exit_code == 0
+        assert "built-in" in result.output.lower()
+
+    def test_short_prompt_is_error(self, tmp_path: Path) -> None:
+        entries = [{"prompt": "Too short", "reference_answer": _LONG_REF, "category": "x"}]
+        mgr = _make_store(tmp_path, "bad", entries)
+        with patch("pyrecall.benchmarks.custom.CustomBenchmarkManager", return_value=mgr):
+            result = runner.invoke(app, ["benchmark", "validate", "bad"])
+        assert result.exit_code == 1
+        assert "short" in result.output.lower() or "error" in result.output.lower()
+
+    def test_short_reference_answer_is_error(self, tmp_path: Path) -> None:
+        entries = [{"prompt": _LONG_PROMPT, "reference_answer": "Yes.", "category": "x"}]
+        mgr = _make_store(tmp_path, "bad", entries)
+        with patch("pyrecall.benchmarks.custom.CustomBenchmarkManager", return_value=mgr):
+            result = runner.invoke(app, ["benchmark", "validate", "bad"])
+        assert result.exit_code == 1
+
+    def test_duplicate_prompts_is_error(self, tmp_path: Path) -> None:
+        entries = [
+            {"prompt": _LONG_PROMPT, "reference_answer": _LONG_REF, "category": "x"},
+            {"prompt": _LONG_PROMPT, "reference_answer": "Different answer here.", "category": "x"},
+        ]
+        mgr = _make_store(tmp_path, "dup", entries)
+        with patch("pyrecall.benchmarks.custom.CustomBenchmarkManager", return_value=mgr):
+            result = runner.invoke(app, ["benchmark", "validate", "dup"])
+        assert result.exit_code == 1
+        assert "duplicate" in result.output.lower()
+
+    def test_single_item_category_is_warning_not_error(self, tmp_path: Path) -> None:
+        entries = [
+            {"prompt": _LONG_PROMPT + " 1", "reference_answer": _LONG_REF, "category": "a"},
+            {"prompt": _LONG_PROMPT + " 2", "reference_answer": _LONG_REF, "category": "b"},
+        ]
+        mgr = _make_store(tmp_path, "mixed", entries)
+        with patch("pyrecall.benchmarks.custom.CustomBenchmarkManager", return_value=mgr):
+            result = runner.invoke(app, ["benchmark", "validate", "mixed"])
+        assert result.exit_code == 0
+        assert "1 prompt" in result.output
+
+    def test_identical_refs_is_warning_not_error(self, tmp_path: Path) -> None:
+        entries = [
+            {"prompt": _LONG_PROMPT + f" {i}", "reference_answer": _LONG_REF, "category": "x"}
+            for i in range(3)
+        ]
+        mgr = _make_store(tmp_path, "idrefs", entries)
+        with patch("pyrecall.benchmarks.custom.CustomBenchmarkManager", return_value=mgr):
+            result = runner.invoke(app, ["benchmark", "validate", "idrefs"])
+        assert result.exit_code == 0
+        assert "identical" in result.output.lower()
+
+    def test_json_output_valid_json(self, tmp_path: Path) -> None:
+        entries = [
+            {"prompt": _LONG_PROMPT + f" {i}", "reference_answer": _LONG_REF, "category": "x"}
+            for i in range(2)
+        ]
+        mgr = _make_store(tmp_path, "suite", entries)
+        with patch("pyrecall.benchmarks.custom.CustomBenchmarkManager", return_value=mgr):
+            result = runner.invoke(app, ["benchmark", "validate", "suite", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["suite"] == "suite"
+        assert data["valid"] is True
+        assert "errors" in data
+        assert "warnings" in data
+
+    def test_json_output_marks_invalid_on_errors(self, tmp_path: Path) -> None:
+        entries = [{"prompt": "Too short", "reference_answer": _LONG_REF, "category": "x"}]
+        mgr = _make_store(tmp_path, "bad", entries)
+        with patch("pyrecall.benchmarks.custom.CustomBenchmarkManager", return_value=mgr):
+            result = runner.invoke(app, ["benchmark", "validate", "bad", "--json"])
+        assert result.exit_code == 1
+        data = json.loads(result.output)
+        assert data["valid"] is False
+        assert len(data["errors"]) > 0

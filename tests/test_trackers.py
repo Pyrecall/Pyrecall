@@ -187,6 +187,7 @@ class TestModelSnapshotTrackerIntegration:
         m.model = MagicMock()
         m.rollback_manager = MagicMock()
         m._baseline_snapshot_name = None
+        m._snapshot_compression = "none"
         return m
 
     def test_tracker_log_snapshot_called_after_save(self) -> None:
