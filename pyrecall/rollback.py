@@ -55,6 +55,11 @@ class RollbackManager:
         Sets ``snapshot.adapter_path`` before writing so the JSON includes the
         adapter location. Returns the snapshot directory path.
 
+        The adapter is written to a staging directory first. If compression is
+        requested, it is applied there before an atomic rename to the final
+        ``adapter/`` path, so a crash mid-compression never leaves the snapshot
+        in an unloadable half-compressed state.
+
         Args:
             compression: ``"none"`` (default), ``"gzip"``, ``"zstd"``, or ``"lz4"``.
                          ``"zstd"`` requires ``pip install zstandard``.
@@ -66,12 +71,22 @@ class RollbackManager:
         snap_dir.mkdir(parents=True, exist_ok=True)
 
         adapter_dir = snap_dir / "adapter"
-        peft_model.save_pretrained(str(adapter_dir))
-        logger.debug("Adapter saved to %s", adapter_dir)
+        adapter_staging = snap_dir / "adapter.staging"
+
+        if adapter_staging.exists():
+            shutil.rmtree(adapter_staging)
+
+        peft_model.save_pretrained(str(adapter_staging))
+        logger.debug("Adapter staged to %s", adapter_staging)
 
         if compression != "none":
-            compress_adapter_dir(adapter_dir, compression)
-            logger.debug("Adapter compressed with %s", compression)
+            compress_adapter_dir(adapter_staging, compression)
+            logger.debug("Adapter compressed with %s in staging", compression)
+
+        if adapter_dir.exists():
+            shutil.rmtree(adapter_dir)
+        adapter_staging.rename(adapter_dir)
+        logger.debug("Adapter promoted to %s", adapter_dir)
 
         snapshot.adapter_path = adapter_dir
         snapshot.adapter_compression = compression
@@ -96,7 +111,11 @@ class RollbackManager:
         return SkillSnapshot.load(snap_dir)
 
     def list_snapshots(self) -> list[SkillSnapshot]:
-        """Return all saved snapshots sorted by creation time (oldest first)."""
+        """Return all saved snapshots sorted by creation time (oldest first).
+
+        Each element is a :class:`~pyrecall.snapshot.SkillSnapshot` object.
+        To get just the names use :meth:`list_snapshot_names`.
+        """
         if not self.base_dir.exists():
             return []
         snapshots: list[SkillSnapshot] = []
@@ -107,6 +126,10 @@ class RollbackManager:
                 except Exception as exc:
                     logger.warning("Could not load snapshot at %s: %s", snap_dir, exc)
         return sorted(snapshots, key=lambda s: s.created_at)
+
+    def list_snapshot_names(self) -> list[str]:
+        """Return the names of all saved snapshots sorted by creation time (oldest first)."""
+        return [s.name for s in self.list_snapshots()]
 
     def delete_snapshot(self, name: str) -> None:
         """Permanently delete a snapshot and its adapter weights."""
