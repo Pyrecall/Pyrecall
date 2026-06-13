@@ -43,13 +43,25 @@ class RollbackManager:
 
     # ── saving ─────────────────────────────────────────────────────────────────
 
-    def save(self, snapshot: SkillSnapshot, peft_model: PeftModel) -> Path:
+    def save(
+        self,
+        snapshot: SkillSnapshot,
+        peft_model: PeftModel,
+        compression: str = "none",
+    ) -> Path:
         """
         Persist *snapshot* scores and the *peft_model* adapter weights to disk.
 
         Sets ``snapshot.adapter_path`` before writing so the JSON includes the
         adapter location. Returns the snapshot directory path.
+
+        Args:
+            compression: ``"none"`` (default), ``"gzip"``, ``"zstd"``, or ``"lz4"``.
+                         ``"zstd"`` requires ``pip install zstandard``.
+                         ``"lz4"`` requires ``pip install lz4``.
         """
+        from .compress import compress_adapter_dir
+
         snap_dir = self.base_dir / snapshot.name
         snap_dir.mkdir(parents=True, exist_ok=True)
 
@@ -57,7 +69,12 @@ class RollbackManager:
         peft_model.save_pretrained(str(adapter_dir))
         logger.debug("Adapter saved to %s", adapter_dir)
 
+        if compression != "none":
+            compress_adapter_dir(adapter_dir, compression)
+            logger.debug("Adapter compressed with %s", compression)
+
         snapshot.adapter_path = adapter_dir
+        snapshot.adapter_compression = compression
         snapshot.save(snap_dir)
         logger.debug("Snapshot metadata saved to %s", snap_dir)
 

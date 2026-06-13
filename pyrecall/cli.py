@@ -499,17 +499,36 @@ def snapshot(
             help="Neptune project in 'workspace/project' format (required with --log-neptune)",
         ),
     ] = None,
+    compression: Annotated[
+        str,
+        typer.Option(
+            "--compression",
+            help="Compress adapter weights: 'none' (default), 'gzip', 'zstd', or 'lz4'.",
+        ),
+    ] = "none",
 ) -> None:
     """
     Load the model, run all benchmarks, and save a named capability snapshot.
 
-    This is a slow operation — it runs 64 benchmark prompts through the model
+    This is a slow operation — it runs benchmark prompts through the model
     and saves the LoRA adapter weights to disk.  Plan for several minutes on CPU.
 
     Pass --no-update-baseline to take the snapshot without overwriting the
     current baseline in .pyrecall.json.  Useful when you want to capture a
     point-in-time reading without disturbing your stable reference point.
+
+    Use --compression gzip to reduce adapter storage by 40-60% (no extra deps).
+    Use --compression zstd for faster compression with similar ratios (pip install zstandard).
     """
+    from pyrecall.compress import SUPPORTED_CODECS
+
+    if compression not in SUPPORTED_CODECS:
+        console.print(
+            f"[red]Error:[/red] Unknown compression '{compression}'. "
+            f"Choose from: {sorted(SUPPORTED_CODECS)}"
+        )
+        raise typer.Exit(1)
+
     config = _read_config()
 
     from pyrecall.model import Model
@@ -527,6 +546,7 @@ def snapshot(
         replay_buffer_size=config.get("replay_buffer_size", 500),
         replay_mix_ratio=config.get("replay_mix_ratio", 0.3),
         scoring_method=config.get("scoring_method", "log_likelihood"),
+        snapshot_compression=compression,
     )
     tracker = _build_trackers(log_wandb, log_mlflow, log_neptune, neptune_project)
     model_obj.snapshot(name=name, tracker=tracker)
