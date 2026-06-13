@@ -13,13 +13,21 @@ import torch
 from datasets import Dataset as _HFDataset
 from datasets import concatenate_datasets, load_dataset
 from peft import LoraConfig, PeftModel, TaskType, get_peft_model, prepare_model_for_kbit_training
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeRemainingColumn,
+)
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     BitsAndBytesConfig,
     DataCollatorForLanguageModeling,
     Trainer,
+    TrainerCallback,
     TrainingArguments,
 )
 
@@ -89,6 +97,45 @@ def _fire_callbacks(
                 f"pyrecall: callback {cb!r} raised {type(exc).__name__}: {exc}",
                 stacklevel=2,
             )
+
+
+class _StreamingCallback(TrainerCallback):
+    """Rich progress bar that surfaces per-step loss during model.learn(stream=True)."""
+
+    def __init__(self, total_steps: int) -> None:
+        self._total = total_steps
+        self._progress = Progress(
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            MofNCompleteColumn(),
+            TextColumn("loss: {task.fields[loss]}"),
+            TimeRemainingColumn(),
+        )
+        self._task_id = self._progress.add_task("Training", total=total_steps, loss="—")
+        self.last_loss: float | None = None
+
+    def on_train_begin(self, args, state, control, **kwargs) -> None:  # type: ignore[override]
+        self._progress.start()
+
+    def on_log(self, args, state, control, logs=None, **kwargs) -> None:  # type: ignore[override]
+        if not logs:
+            return
+        loss = logs.get("loss")
+        if loss is not None:
+            self.last_loss = float(loss)
+            self._progress.update(
+                self._task_id,
+                completed=state.global_step,
+                loss=f"{loss:.4f}",
+            )
+
+    def on_train_end(self, args, state, control, **kwargs) -> None:  # type: ignore[override]
+        self._progress.update(
+            self._task_id,
+            completed=self._total,
+            loss=f"{self.last_loss:.4f}" if self.last_loss is not None else "—",
+        )
+        self._progress.stop()
 
 
 class Model:
@@ -328,6 +375,7 @@ class Model:
         resume: bool = False,
         gradient_checkpointing: bool | None = None,
         replay_weights: dict[str, float] | ForgettingReport | None = None,
+        stream: bool = False,
     ) -> None:
         """
         Fine-tune the model on *data_path* using LoRA.
@@ -356,6 +404,8 @@ class Model:
                 from per-category severity (``CRITICAL`` → 4×, ``SEVERE`` → 3×,
                 ``MODERATE`` → 2×, ``MINOR`` → 1×).  Falls back to uniform sampling
                 when ``None`` or when buffer entries have no category metadata.
+            stream: If True, display a live Rich progress bar with per-step loss
+                during training.  Default False keeps the current silent behaviour.
         """
         batch_size = batch_size if batch_size is not None else self.batch_size
         learning_rate = learning_rate if learning_rate is not None else self.learning_rate
@@ -486,12 +536,15 @@ class Model:
         if use_gc:
             self.model.gradient_checkpointing_enable()
 
+        total_steps = max(1, len(tokenized) // batch_size) * epochs
+        logging_steps = 1 if stream else save_steps
+
         args = TrainingArguments(
             output_dir=str(run_dir),
             num_train_epochs=epochs,
             per_device_train_batch_size=batch_size,
             learning_rate=learning_rate,
-            logging_steps=save_steps,
+            logging_steps=logging_steps,
             save_strategy="steps",
             save_steps=save_steps,
             save_total_limit=2,
@@ -503,11 +556,13 @@ class Model:
 
         collator = DataCollatorForLanguageModeling(tokenizer=self.tokenizer, mlm=False)
 
+        callbacks = [_StreamingCallback(total_steps=total_steps)] if stream else []
         trainer = Trainer(
             model=self.model,
             args=args,
             train_dataset=tokenized,
             data_collator=collator,
+            callbacks=callbacks,
         )
 
         # Find latest checkpoint when resuming

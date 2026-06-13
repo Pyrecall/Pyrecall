@@ -733,3 +733,77 @@ class TestOnForgettingCallbacks:
 
             m = Model("test/model", snapshot_dir=tmp_snapshot_dir, on_forgetting=[cb1, cb2])
         assert m._on_forgetting == [cb1, cb2]
+
+
+# ── Streaming learn tests ─────────────────────────────────────────────────────
+
+
+class TestStreamingLearn:
+    def _run_learn_stream(self, patched_model, data_file, stream: bool):
+        mock_trainer = MagicMock()
+        trainer_cls = MagicMock(return_value=mock_trainer)
+        with (
+            patch("pyrecall.model.load_dataset") as mock_ds,
+            patch("pyrecall.model.Trainer", trainer_cls),
+            patch("pyrecall.model.TrainingArguments"),
+            patch("pyrecall.model.DataCollatorForLanguageModeling"),
+        ):
+            mock_dataset = MagicMock()
+            mock_dataset.column_names = ["text"]
+            mock_dataset.__len__.return_value = 4
+            mock_dataset.num_rows = 4
+            mock_dataset.map.return_value = mock_dataset
+            mock_ds.return_value = mock_dataset
+
+            patched_model.learn(str(data_file), epochs=1, stream=stream)
+        return trainer_cls
+
+    def test_stream_false_no_callbacks(self, patched_model, tmp_path: Path) -> None:
+        from pyrecall.model import _StreamingCallback
+
+        data_file = tmp_path / "train.jsonl"
+        data_file.write_text(json.dumps({"text": "hi"}) + "\n")
+        trainer_cls = self._run_learn_stream(patched_model, data_file, stream=False)
+
+        _, kwargs = trainer_cls.call_args
+        callbacks = kwargs.get("callbacks", [])
+        assert not any(isinstance(cb, _StreamingCallback) for cb in callbacks)
+
+    def test_stream_true_installs_callback(self, patched_model, tmp_path: Path) -> None:
+        from pyrecall.model import _StreamingCallback
+
+        data_file = tmp_path / "train.jsonl"
+        data_file.write_text(json.dumps({"text": "hi"}) + "\n")
+        trainer_cls = self._run_learn_stream(patched_model, data_file, stream=True)
+
+        _, kwargs = trainer_cls.call_args
+        callbacks = kwargs.get("callbacks", [])
+        assert any(isinstance(cb, _StreamingCallback) for cb in callbacks)
+
+    def test_streaming_callback_on_log_updates_loss(self) -> None:
+        from pyrecall.model import _StreamingCallback
+        from unittest.mock import patch as _patch
+
+        cb = _StreamingCallback(total_steps=10)
+        with _patch.object(cb._progress, "update") as mock_update, \
+             _patch.object(cb._progress, "start"):
+            state = MagicMock()
+            state.global_step = 3
+            cb.on_train_begin(None, state, None)
+            cb.on_log(None, state, None, logs={"loss": 0.4567})
+            mock_update.assert_called()
+            assert cb.last_loss == pytest.approx(0.4567)
+
+    def test_streaming_callback_ignores_missing_loss(self) -> None:
+        from pyrecall.model import _StreamingCallback
+        from unittest.mock import patch as _patch
+
+        cb = _StreamingCallback(total_steps=5)
+        with _patch.object(cb._progress, "update") as mock_update, \
+             _patch.object(cb._progress, "start"):
+            state = MagicMock()
+            state.global_step = 1
+            cb.on_train_begin(None, state, None)
+            cb.on_log(None, state, None, logs={"learning_rate": 2e-4})
+            mock_update.assert_not_called()
+            assert cb.last_loss is None
