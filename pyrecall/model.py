@@ -106,6 +106,7 @@ class Model:
         replay_buffer_size: int = 500,
         replay_mix_ratio: float = 0.3,
         scoring_method: str = "log_likelihood",
+        gradient_checkpointing: bool = False,
     ) -> None:
         """
         Load *model_name* from HuggingFace Hub (or local cache) and wrap it with LoRA.
@@ -155,6 +156,7 @@ class Model:
         self.scoring_method = scoring_method
         self.max_length = max_length
         self._replay_mix_ratio = replay_mix_ratio
+        self._gradient_checkpointing = gradient_checkpointing
         self.replay_buffer: ReplayBuffer | None = (
             ReplayBuffer(model_name=model_name, max_size=replay_buffer_size, base_dir=snapshot_dir)
             if replay_buffer_size > 0
@@ -280,6 +282,7 @@ class Model:
         learning_rate: float | None = None,
         max_length: int | None = None,
         resume: bool = False,
+        gradient_checkpointing: bool | None = None,
     ) -> None:
         """
         Fine-tune the model on *data_path* using LoRA.
@@ -403,6 +406,14 @@ class Model:
         # can be resumed without restarting from scratch.
         save_steps = max(1, len(tokenized) // (batch_size * 5))
 
+        use_gc = (
+            gradient_checkpointing
+            if gradient_checkpointing is not None
+            else self._gradient_checkpointing
+        )
+        if use_gc:
+            self.model.gradient_checkpointing_enable()
+
         args = TrainingArguments(
             output_dir=str(run_dir),
             num_train_epochs=epochs,
@@ -415,6 +426,7 @@ class Model:
             report_to="none",
             fp16=(self.device == "cuda"),
             dataloader_drop_last=False,
+            gradient_checkpointing=use_gc,
         )
 
         collator = DataCollatorForLanguageModeling(tokenizer=self.tokenizer, mlm=False)

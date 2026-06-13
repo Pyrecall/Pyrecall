@@ -389,6 +389,13 @@ def learn(
             help="Neptune project in 'workspace/project' format (required with --log-neptune)",
         ),
     ] = None,
+    gradient_checkpointing: Annotated[
+        bool,
+        typer.Option(
+            "--gradient-checkpointing",
+            help="Enable gradient checkpointing to cut GPU memory ~40% at the cost of ~20% slower training.",
+        ),
+    ] = False,
 ) -> None:
     """
     Fine-tune the model on a local dataset.
@@ -448,6 +455,7 @@ def learn(
             learning_rate=learning_rate,
             max_length=max_length,
             resume=resume,
+            gradient_checkpointing=gradient_checkpointing or None,
         )
     except PyrecallError as exc:
         console.print(f"[red]Error:[/red] {exc}")
