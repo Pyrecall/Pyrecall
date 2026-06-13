@@ -260,6 +260,26 @@ class TestNeptuneTracker:
         assert "pyrecall/coding" in assigned_keys
         assert "pyrecall/reasoning" in assigned_keys
 
+    def test_logs_metadata(self) -> None:
+        snap = _make_snapshot("test_snap")
+        mock_neptune = MagicMock()
+        mock_run = MagicMock()
+        mock_neptune.init_run.return_value = mock_run
+
+        with patch.dict("sys.modules", {"neptune": mock_neptune}):
+            NeptuneTracker(project="ws/proj").log_snapshot(snap)
+
+        assigned_keys = [call[0][0] for call in mock_run.__setitem__.call_args_list]
+        assert "pyrecall/metadata/model_name" in assigned_keys
+        assert "pyrecall/metadata/snapshot_name" in assigned_keys
+        assert "pyrecall/metadata/timestamp" in assigned_keys
+
+        # Verify the actual values
+        setitem_dict = {call[0][0]: call[0][1] for call in mock_run.__setitem__.call_args_list}
+        assert setitem_dict["pyrecall/metadata/model_name"] == "test/model"
+        assert setitem_dict["pyrecall/metadata/snapshot_name"] == "test_snap"
+        assert setitem_dict["pyrecall/metadata/timestamp"] == "2024-01-01T00:00:00"
+
     def test_includes_pyrecall_tag(self) -> None:
         snap = _make_snapshot()
         mock_neptune = MagicMock()
