@@ -1,0 +1,40 @@
+# Example: detect catastrophic forgetting in your CI pipeline.
+#
+# Drop this file into .github/workflows/ in your own repository.
+#
+# Prerequisites
+# ─────────────
+# 1. Take a baseline snapshot before fine-tuning and commit it:
+#
+#      python - <<'EOF'
+#      from pathlib import Path
+#      from pyrecall.snapshot import SkillSnapshot
+#      snap = SkillSnapshot.from_model("your/model-id")
+#      snap.save(Path("snapshots/baseline"))
+#      EOF
+#      git add snapshots/baseline && git commit -m "chore: baseline snapshot"
+#
+# 2. After each fine-tuning run, save a new snapshot:
+#
+#      snap = SkillSnapshot.from_model("your/model-id")   # load your fine-tuned model
+#      snap.save(Path("snapshots/latest"))
+#      git add snapshots/latest && git commit -m "chore: update snapshot after fine-tune"
+#
+# 3. Open a PR — this workflow runs automatically and posts a results table.
+
+name: Forgetting check
+
+on:
+  pull_request:
+    paths:
+      - "snapshots/**"   # run only when snapshot files change
+
+jobs:
+  forgetting-check:
+    name: Check for catastrophic forgetting
+    uses: Pyrecall/Pyrecall/.github/workflows/pyrecall-check.yml@main
+    with:
+      before_path: snapshots/baseline   # committed snapshot before fine-tuning
+      after_path: snapshots/latest      # committed snapshot after fine-tuning
+      threshold: "0.10"                 # flag categories that drop > 10 %
+      post_comment: true                # post a markdown table on the PR

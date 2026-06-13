@@ -1,0 +1,171 @@
+# Reusable workflow: run pyrecall forgetting detection against committed snapshots.
+#
+# Usage in your workflow:
+#
+#   jobs:
+#     forgetting-check:
+#       uses: Pyrecall/Pyrecall/.github/workflows/pyrecall-check.yml@main
+#       with:
+#         before_path: snapshots/baseline
+#         after_path:  snapshots/latest
+#
+# Snapshot directories must contain snapshot.json produced by
+# model.snapshot() or `pyrecall snapshot`. Commit them to your repository.
+
+name: pyrecall — forgetting check
+
+on:
+  workflow_call:
+    inputs:
+      before_path:
+        description: >
+          Relative path to the "before" snapshot directory in this repo
+          (e.g. snapshots/baseline). Must contain snapshot.json.
+        required: true
+        type: string
+      after_path:
+        description: >
+          Relative path to the "after" snapshot directory in this repo
+          (e.g. snapshots/latest). Must contain snapshot.json.
+        required: true
+        type: string
+      threshold:
+        description: "Score drop fraction that counts as forgetting (0–1, default: 0.10)"
+        required: false
+        type: string
+        default: "0.10"
+      pyrecall_version:
+        description: "pyrecall version to install (default: latest stable)"
+        required: false
+        type: string
+        default: ""
+      post_comment:
+        description: "Post a markdown summary as a PR comment"
+        required: false
+        type: boolean
+        default: true
+
+    outputs:
+      healthy:
+        description: "'true' if no forgetting detected, 'false' otherwise"
+        value: ${{ jobs.check.outputs.healthy }}
+
+jobs:
+  check:
+    name: Forgetting check
+    runs-on: ubuntu-latest
+
+    outputs:
+      healthy: ${{ steps.outputs.outputs.healthy }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pyrecall-${{ inputs.pyrecall_version || 'latest' }}-${{ runner.os }}
+
+      - name: Install pyrecall
+        run: |
+          pip install --upgrade pip
+          if [ -n "${{ inputs.pyrecall_version }}" ]; then
+            pip install "pyrecall==${{ inputs.pyrecall_version }}"
+          else
+            pip install pyrecall
+          fi
+
+      - name: Run forgetting check
+        id: run_check
+        run: |
+          python - \
+            "${{ inputs.before_path }}" \
+            "${{ inputs.after_path }}" \
+            "${{ inputs.threshold }}" \
+            <<'PYEOF'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          from pyrecall.detector import ForgettingDetector
+          from pyrecall.snapshot import SkillSnapshot
+
+          before_path = Path(sys.argv[1])
+          after_path = Path(sys.argv[2])
+          threshold = float(sys.argv[3])
+
+          if not before_path.exists():
+              print(f"::error::before_path '{before_path}' not found in workspace.")
+              sys.exit(1)
+          if not after_path.exists():
+              print(f"::error::after_path '{after_path}' not found in workspace.")
+              sys.exit(1)
+
+          before = SkillSnapshot.load(before_path)
+          after = SkillSnapshot.load(after_path)
+
+          detector = ForgettingDetector(threshold=threshold)
+          report = detector.compare(before, after)
+
+          Path("pyrecall_report.json").write_text(report.to_json())
+          Path("pyrecall_healthy.txt").write_text("true" if report.is_healthy else "false")
+
+          sys.exit(0 if report.is_healthy else 2)
+          PYEOF
+        continue-on-error: true
+
+      - name: Set step outputs
+        id: outputs
+        run: |
+          HEALTHY=$(cat pyrecall_healthy.txt 2>/dev/null || echo "false")
+          echo "healthy=$HEALTHY" >> "$GITHUB_OUTPUT"
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyrecall-report
+          path: pyrecall_report.json
+
+      - name: Post PR comment
+        if: ${{ inputs.post_comment && github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = JSON.parse(fs.readFileSync('pyrecall_report.json', 'utf8'));
+            const icon = report.healthy ? '✅' : '❌';
+            const title = report.healthy ? 'No forgetting detected' : 'Forgetting detected';
+
+            let body = `## ${icon} pyrecall — ${title}\n\n`;
+            body += `**Before:** \`${{ inputs.before_path }}\` → **After:** \`${{ inputs.after_path }}\`  `;
+            body += `| **Threshold:** ${(report.threshold * 100).toFixed(0)}%\n\n`;
+            body += `| Category | Before | After | Δ | Cohen's d | Status |\n`;
+            body += `|---|---|---|---|---|---|\n`;
+            for (const c of report.comparisons) {
+              const delta = (c.delta >= 0 ? '+' : '') + c.delta.toFixed(3);
+              const status = c.status === 'OK' ? '✅ OK' : '❌ FORGOTTEN';
+              body += `| ${c.category} | ${c.score_before.toFixed(3)} | ${c.score_after.toFixed(3)} | ${delta} | ${c.cohen_d.toFixed(3)} | ${status} |\n`;
+            }
+            if (report.degraded_skills.length > 0) {
+              body += `\n> **Degraded skills:** ${report.degraded_skills.join(', ')}`;
+            }
+            body += `\n\n<sub>Generated by [pyrecall](https://github.com/Pyrecall/Pyrecall)</sub>`;
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
+      - name: Fail if forgetting detected
+        if: steps.outputs.outputs.healthy == 'false'
+        run: |
+          echo "::error::Forgetting detected. Download the pyrecall-report artifact for details."
+          exit 1

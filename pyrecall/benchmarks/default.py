@@ -1,4 +1,4 @@
-"""One hundred sixty benchmark prompts across eight skill categories (20 per category)."""
+"""One hundred eighty benchmark prompts across nine skill categories (20 per category)."""
 
 from dataclasses import dataclass
 
@@ -11,6 +11,7 @@ CATEGORIES: list[str] = [
     "multilingual",
     "tool_use",
     "advanced_math",
+    "long_context",
 ]
 
 
@@ -1778,5 +1779,444 @@ DEFAULT_BENCHMARKS: list[Benchmark] = [
             "On [0,1], y = x is above y = x². "
             "Area = ∫₀¹ (x − x²) dx = [x²/2 − x³/3]₀¹ = 1/2 − 1/3 = 1/6."
         ),
+    ),
+    # ── LONG CONTEXT (20) ─────────────────────────────────────────────────────
+    # Sub-type 1: Document QA — answer a factual question from an embedded passage.
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "Read the following passage, then answer the question using only information from the passage.\n\n"
+            "PASSAGE:\n"
+            "The Giant Panda (Ailuropoda melanoleuca) is native to the mountain ranges of central China. "
+            "Despite belonging to the order Carnivora, pandas have evolved a diet that is almost entirely "
+            "bamboo — they consume between 12 and 38 kilograms per day. Their digestive system retains "
+            "carnivore characteristics, meaning they extract very little nutrition from bamboo, which is "
+            "why they must eat almost continuously. Pandas have a special wrist bone that functions like "
+            "a thumb, allowing them to grip bamboo stalks. The species is classified as Vulnerable by the "
+            "IUCN as of 2016, improving from Endangered. Estimates put wild population at around 1,864.\n\n"
+            "QUESTION:\n"
+            "According to the passage, why must giant pandas eat almost continuously?"
+        ),
+        reference_answer=(
+            "Pandas must eat almost continuously because their digestive system retains carnivore "
+            "characteristics and extracts very little nutrition from bamboo, so they need to consume "
+            "large quantities to meet their energy needs."
+        ),
+    ),
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "Read the following passage, then answer only from what it states.\n\n"
+            "PASSAGE:\n"
+            "The Apollo 11 mission launched on July 16, 1969, and landed on the Moon on July 20, 1969. "
+            "Neil Armstrong became the first human to walk on the lunar surface, followed by Buzz Aldrin. "
+            "Michael Collins remained in lunar orbit aboard the Command Module Columbia. The astronauts "
+            "collected 21.5 kilograms of lunar material and planted an American flag. The mission "
+            "duration was 8 days, 3 hours, 18 minutes, and 35 seconds. Armstrong's words upon stepping "
+            "onto the surface were: 'That's one small step for [a] man, one giant leap for mankind.' "
+            "The crew splashed down in the Pacific Ocean on July 24, 1969.\n\n"
+            "QUESTION:\n"
+            "Which crew member did not walk on the lunar surface, and what was his role?"
+        ),
+        reference_answer=(
+            "Michael Collins did not walk on the lunar surface. He remained in lunar orbit aboard "
+            "the Command Module Columbia."
+        ),
+    ),
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "Read the passage and answer the question based solely on its content.\n\n"
+            "PASSAGE:\n"
+            "Photosynthesis occurs in two main stages. The light-dependent reactions take place in the "
+            "thylakoid membranes and require direct sunlight. During this stage, water molecules are "
+            "split, releasing oxygen as a by-product, and energy is captured to produce ATP and NADPH. "
+            "The light-independent reactions — also called the Calvin cycle — occur in the stroma of "
+            "the chloroplast. They use the ATP and NADPH from the first stage to convert carbon dioxide "
+            "into glucose. The enzyme RuBisCO catalyses the first major step of carbon fixation in "
+            "the Calvin cycle. Importantly, the Calvin cycle does not directly require light.\n\n"
+            "QUESTION:\n"
+            "What molecules are produced during the light-dependent reactions, and where are they used?"
+        ),
+        reference_answer=(
+            "The light-dependent reactions produce ATP and NADPH. These molecules are then used in "
+            "the Calvin cycle (light-independent reactions) to convert carbon dioxide into glucose."
+        ),
+    ),
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "Read the following excerpt and answer the question using only the provided text.\n\n"
+            "PASSAGE:\n"
+            "The Great Barrier Reef extends over 2,300 kilometres along the northeastern coast of "
+            "Australia and is the world's largest coral reef system, comprising over 2,900 individual "
+            "reefs and 900 islands. It supports an extraordinary diversity of life, including 1,500 "
+            "species of fish, 4,000 types of mollusc, and six of the world's seven species of marine "
+            "turtle. Coral bleaching, caused by elevated sea temperatures associated with climate "
+            "change, has severely impacted the reef: mass bleaching events occurred in 1998, 2002, "
+            "2016, 2017, 2020, and 2022. The reef was inscribed on the World Heritage List in 1981.\n\n"
+            "QUESTION:\n"
+            "In what year was the Great Barrier Reef added to the World Heritage List?"
+        ),
+        reference_answer=(
+            "The Great Barrier Reef was inscribed on the World Heritage List in 1981."
+        ),
+    ),
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "Using only the text below, answer the question that follows.\n\n"
+            "PASSAGE:\n"
+            "Black holes are regions of spacetime where gravity is so strong that nothing, not even "
+            "light, can escape once it crosses the event horizon. They form when massive stars collapse "
+            "at the end of their lives in supernova explosions. The boundary of a black hole is called "
+            "the event horizon; its radius is known as the Schwarzschild radius. At the center lies a "
+            "gravitational singularity — a point of infinite density. Stephen Hawking proposed that "
+            "black holes emit thermal radiation, now called Hawking radiation, due to quantum effects "
+            "near the event horizon. This radiation causes black holes to slowly evaporate over "
+            "astronomical timescales.\n\n"
+            "QUESTION:\n"
+            "What is the Schwarzschild radius, and who proposed that black holes emit thermal radiation?"
+        ),
+        reference_answer=(
+            "The Schwarzschild radius is the radius of the event horizon — the boundary of a black hole. "
+            "Stephen Hawking proposed that black holes emit thermal radiation, called Hawking radiation."
+        ),
+    ),
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "Read the passage carefully and answer the question based only on what it says.\n\n"
+            "PASSAGE:\n"
+            "The French Revolution began in 1789 with the convening of the Estates-General and the "
+            "storming of the Bastille on 14 July. The Revolution abolished the absolute monarchy and "
+            "the feudal system, proclaiming the Declaration of the Rights of Man and of the Citizen. "
+            "The subsequent Reign of Terror (1793–1794), led by Maximilien Robespierre and the "
+            "Committee of Public Safety, resulted in the execution of thousands, including King Louis "
+            "XVI in January 1793. The Revolution ended with Napoleon Bonaparte seizing power in the "
+            "coup of 18 Brumaire in November 1799.\n\n"
+            "QUESTION:\n"
+            "When was Louis XVI executed, and who led the Reign of Terror?"
+        ),
+        reference_answer=(
+            "Louis XVI was executed in January 1793. The Reign of Terror was led by Maximilien "
+            "Robespierre and the Committee of Public Safety."
+        ),
+    ),
+    # Sub-type 2: Code comprehension — identify a bug or explain behaviour in a code snippet.
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "Read the following Python function carefully, then identify the bug.\n\n"
+            "```python\n"
+            "def find_max(numbers):\n"
+            "    max_val = 0\n"
+            "    for n in numbers:\n"
+            "        if n > max_val:\n"
+            "            max_val = n\n"
+            "    return max_val\n"
+            "```\n\n"
+            "QUESTION:\n"
+            "What is the bug in this function, and how would you fix it?"
+        ),
+        reference_answer=(
+            "The bug is that max_val is initialized to 0, so the function returns 0 for any list "
+            "of all-negative numbers (e.g., find_max([-5, -2, -8]) returns 0 instead of -2). "
+            "Fix: initialize max_val = numbers[0] (or use float('-inf')), and add a check for empty input."
+        ),
+    ),
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "Study the code below and answer the question that follows.\n\n"
+            "```python\n"
+            "def count_words(text):\n"
+            "    words = text.split(' ')\n"
+            "    counts = {}\n"
+            "    for word in words:\n"
+            "        word = word.lower()\n"
+            "        if word in counts:\n"
+            "            counts[word] += 1\n"
+            "        else:\n"
+            "            counts[word] = 1\n"
+            "    return counts\n"
+            "\n"
+            "result = count_words('Hello world hello')\n"
+            "print(result)\n"
+            "```\n\n"
+            "QUESTION:\n"
+            "What does this code print, and what limitation does splitting on a single space ' ' have?"
+        ),
+        reference_answer=(
+            "The code prints {'hello': 2, 'world': 1}. "
+            "Splitting on a single space ' ' fails to handle multiple consecutive spaces or other "
+            "whitespace characters (tabs, newlines) — those produce empty strings '' as tokens. "
+            "Using text.split() without arguments handles all whitespace correctly."
+        ),
+    ),
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "Read the following JavaScript function and answer the question.\n\n"
+            "```javascript\n"
+            "async function fetchUser(id) {\n"
+            "  const response = await fetch(`/api/users/${id}`);\n"
+            "  const data = response.json();\n"
+            "  return data.name;\n"
+            "}\n"
+            "```\n\n"
+            "QUESTION:\n"
+            "What is the bug in this function?"
+        ),
+        reference_answer=(
+            "The bug is that response.json() is not awaited. response.json() returns a Promise, "
+            "so data is a Promise object, not the parsed JSON. Accessing data.name returns undefined. "
+            "Fix: const data = await response.json();"
+        ),
+    ),
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "Examine the following Python class and answer the question.\n\n"
+            "```python\n"
+            "class Stack:\n"
+            "    def __init__(self):\n"
+            "        self.items = []\n"
+            "\n"
+            "    def push(self, item):\n"
+            "        self.items.append(item)\n"
+            "\n"
+            "    def pop(self):\n"
+            "        return self.items.pop(0)\n"
+            "\n"
+            "    def peek(self):\n"
+            "        return self.items[0]\n"
+            "\n"
+            "    def is_empty(self):\n"
+            "        return len(self.items) == 0\n"
+            "```\n\n"
+            "QUESTION:\n"
+            "This class is supposed to implement a stack (LIFO). What is wrong with pop() and peek()?"
+        ),
+        reference_answer=(
+            "A stack is Last-In-First-Out (LIFO), so pop() and peek() should operate on the last "
+            "element. pop(0) removes the first element (FIFO behaviour, like a queue), and self.items[0] "
+            "peeks at the first element. Fix: pop() should return self.items.pop() and peek() should "
+            "return self.items[-1]."
+        ),
+    ),
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "Read the SQL query below and explain what it returns.\n\n"
+            "```sql\n"
+            "SELECT department, AVG(salary) AS avg_salary\n"
+            "FROM employees\n"
+            "WHERE hire_date > '2020-01-01'\n"
+            "GROUP BY department\n"
+            "HAVING AVG(salary) > 70000\n"
+            "ORDER BY avg_salary DESC;\n"
+            "```\n\n"
+            "QUESTION:\n"
+            "What does this query return, and what is the difference between WHERE and HAVING here?"
+        ),
+        reference_answer=(
+            "The query returns departments where the average salary of employees hired after 2020-01-01 "
+            "exceeds 70,000, sorted from highest to lowest average salary. "
+            "WHERE filters individual rows before grouping (only employees hired after 2020-01-01 are "
+            "included). HAVING filters groups after aggregation (only departments whose avg salary "
+            "exceeds 70,000 are returned)."
+        ),
+    ),
+    # Sub-type 3: Multi-hop retrieval — combine info from two distinct parts of the text.
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "Read the entire passage before answering — the answer requires combining information "
+            "from multiple parts of the text.\n\n"
+            "PASSAGE:\n"
+            "Marie Curie was born in Warsaw, Poland, in 1867. She moved to Paris in 1891 to study "
+            "physics and mathematics. In 1898, working alongside her husband Pierre Curie, she "
+            "discovered two new elements: polonium, named after her home country, and radium. "
+            "In 1903, Marie and Pierre Curie shared the Nobel Prize in Physics with Henri Becquerel "
+            "for their research on radiation. Pierre died in 1906 in a road accident. In 1911, "
+            "Marie Curie received a second Nobel Prize — this time in Chemistry — for her isolation "
+            "of pure radium. She remains the only person to have won Nobel Prizes in two different "
+            "scientific disciplines.\n\n"
+            "QUESTION:\n"
+            "What element did Marie Curie name after her home country, and what was that country?"
+        ),
+        reference_answer=(
+            "Marie Curie named the element polonium after her home country, Poland. "
+            "She was born in Warsaw, Poland."
+        ),
+    ),
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "The answer to the question below requires combining two separate facts from the passage.\n\n"
+            "PASSAGE:\n"
+            "The Amazon River is the largest river in the world by discharge volume, carrying more "
+            "water than the next seven largest rivers combined. It originates in the Andes mountains "
+            "of Peru and flows approximately 6,400 kilometres eastward before emptying into the "
+            "Atlantic Ocean near the city of Marajó Island delta in Brazil. The Amazon basin covers "
+            "roughly 7 million square kilometres and contains the Amazon rainforest — the world's "
+            "largest tropical rainforest. The rainforest is home to an estimated 10% of all species "
+            "on Earth. Brazil holds approximately 60% of the Amazon rainforest within its borders, "
+            "with the remainder spread across eight other South American countries.\n\n"
+            "QUESTION:\n"
+            "In what mountain range does the Amazon River originate, and into which ocean does it "
+            "ultimately empty?"
+        ),
+        reference_answer=(
+            "The Amazon River originates in the Andes mountains of Peru. It empties into the "
+            "Atlantic Ocean."
+        ),
+    ),
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "Read the entire passage. The question requires connecting two facts stated in "
+            "different sentences.\n\n"
+            "PASSAGE:\n"
+            "The Eiffel Tower was designed by Gustave Eiffel and built between 1887 and 1889 as "
+            "the entrance arch for the 1889 World's Fair, which celebrated the centennial of the "
+            "French Revolution. At the time of its completion it was the tallest man-made structure "
+            "in the world, standing 300 metres tall (later extended to 330 metres with a broadcast "
+            "antenna). The tower was originally intended to be dismantled after 20 years but was "
+            "kept because of its value as a radio transmission tower. It receives approximately "
+            "7 million visitors per year, making it the most-visited paid monument in the world.\n\n"
+            "QUESTION:\n"
+            "What event prompted the construction of the Eiffel Tower, and what year's anniversary "
+            "was that event celebrating?"
+        ),
+        reference_answer=(
+            "The Eiffel Tower was built as the entrance arch for the 1889 World's Fair. "
+            "That fair celebrated the centennial (100th anniversary) of the French Revolution, "
+            "which began in 1789."
+        ),
+    ),
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "Answer the question by combining information from different parts of the passage.\n\n"
+            "PASSAGE:\n"
+            "Insulin is a hormone produced by the beta cells of the pancreas. Its primary role is "
+            "to regulate blood glucose levels by facilitating the uptake of glucose into cells, "
+            "particularly muscle and fat cells. When blood glucose rises after a meal, the pancreas "
+            "releases insulin. In people with Type 1 diabetes, the immune system destroys the "
+            "beta cells, so no insulin is produced. In Type 2 diabetes, cells become resistant to "
+            "insulin's effects, and the pancreas gradually loses the ability to compensate. "
+            "Frederick Banting and Charles Best first isolated insulin in 1921 at the University "
+            "of Toronto. Banting received the Nobel Prize in Physiology or Medicine in 1923.\n\n"
+            "QUESTION:\n"
+            "Which cells produce insulin, and what happens to those cells in Type 1 diabetes?"
+        ),
+        reference_answer=(
+            "Insulin is produced by the beta cells of the pancreas. In Type 1 diabetes, the "
+            "immune system destroys the beta cells, so no insulin is produced."
+        ),
+    ),
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "The question requires you to connect two pieces of information from the text below.\n\n"
+            "PASSAGE:\n"
+            "TCP/IP (Transmission Control Protocol/Internet Protocol) is the foundational "
+            "communication protocol suite of the Internet. TCP operates at the transport layer "
+            "and ensures reliable, ordered delivery of data by breaking messages into packets, "
+            "numbering them, and reassembling them at the destination. If a packet is lost, TCP "
+            "requests retransmission. IP operates at the network layer and handles addressing and "
+            "routing — each device on the Internet has a unique IP address that identifies its "
+            "location. IPv4 addresses are 32-bit numbers (e.g., 192.168.1.1), supporting around "
+            "4.3 billion unique addresses. IPv6 was introduced to address exhaustion, using 128-bit "
+            "addresses and supporting approximately 3.4 × 10³⁸ addresses.\n\n"
+            "QUESTION:\n"
+            "At which network layer does TCP operate, and what specific problem does TCP solve that "
+            "IP does not handle?"
+        ),
+        reference_answer=(
+            "TCP operates at the transport layer. TCP ensures reliable, ordered delivery by "
+            "detecting lost packets and requesting retransmission — IP handles addressing and routing "
+            "but does not guarantee packet delivery or ordering."
+        ),
+    ),
+    # Sub-type 4: Instruction following — follow a constraint stated early in the context.
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "IMPORTANT CONSTRAINT (read before answering): Your response must not mention the "
+            "word 'Paris' or 'French'. Use synonyms or descriptions instead.\n\n"
+            "CONTEXT:\n"
+            "The Eiffel Tower is one of the most recognizable structures in the world. It was built "
+            "in the capital of France for the 1889 World's Fair. The tower stands on the Champ de "
+            "Mars beside the Seine River. It attracts millions of tourists annually.\n\n"
+            "TASK:\n"
+            "In two sentences, describe where the Eiffel Tower is located without using the "
+            "forbidden words."
+        ),
+        reference_answer=(
+            "The Eiffel Tower stands in the capital city of France, on the Champ de Mars next to "
+            "the Seine River. It was built for the 1889 World's Fair and is one of the world's "
+            "most recognisable landmarks. (Must not contain 'Paris' or 'French'.)"
+        ),
+    ),
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "READ FIRST — FORMAT RULE: Your answer must be a numbered list with exactly three items. "
+            "Each item must begin with a verb in the imperative form. Do not write any introductory "
+            "sentence before the list.\n\n"
+            "CONTEXT:\n"
+            "To reset your password on this platform: navigate to the login page, click 'Forgot "
+            "password', enter your registered email address, check your inbox for the reset link, "
+            "click the link within 15 minutes, and create a new password that is at least 12 "
+            "characters and contains a number and a special character.\n\n"
+            "TASK:\n"
+            "Summarise the three most important steps in the password reset process."
+        ),
+        reference_answer=(
+            "1. Click 'Forgot password' on the login page and enter your registered email address.\n"
+            "2. Check your inbox and click the reset link within 15 minutes.\n"
+            "3. Create a new password that is at least 12 characters and includes a number and "
+            "a special character."
+        ),
+    ),
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "CONSTRAINT stated at the top of this prompt: respond only in bullet points; "
+            "do not write any complete sentences.\n\n"
+            "BACKGROUND:\n"
+            "Machine learning models learn by adjusting weights based on a loss function. "
+            "Gradient descent is the optimisation algorithm used to minimise the loss. "
+            "The learning rate controls how large each weight update is — too high causes "
+            "divergence, too low causes slow convergence. Batch size determines how many "
+            "training examples are used per gradient update. Epochs refer to the number of "
+            "complete passes through the training dataset.\n\n"
+            "TASK:\n"
+            "List the key hyperparameters mentioned in the background and their roles."
+        ),
+        reference_answer=(
+            "• Learning rate — controls the size of each weight update; too high causes divergence, "
+            "too low causes slow convergence.\n"
+            "• Batch size — number of training examples used per gradient update.\n"
+            "• Epochs — number of complete passes through the training dataset."
+        ),
+    ),
+    Benchmark(
+        category="long_context",
+        prompt=(
+            "NOTE AT THE START: The answer must be exactly one sentence and must include a number.\n\n"
+            "PASSAGE:\n"
+            "The human body contains approximately 206 bones in adulthood, down from around 270 to "
+            "300 at birth as many bones fuse during development. The skeleton serves several "
+            "functions: structural support, protection of vital organs (the ribcage protects the "
+            "heart and lungs; the skull protects the brain), production of red and white blood "
+            "cells in the bone marrow, and mineral storage — particularly calcium and phosphorus.\n\n"
+            "QUESTION:\n"
+            "How many bones does an adult human body have?"
+        ),
+        reference_answer=("An adult human body contains approximately 206 bones."),
     ),
 ]

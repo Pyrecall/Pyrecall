@@ -80,7 +80,7 @@ That's it. The model is back to where it was before the dog forgot how to sit.
 
 When you call `model.snapshot("name")`, pyrecall:
 
-1. Runs **160 benchmark prompts** across eight skill categories (20 per category)
+1. Runs **180 benchmark prompts** across nine skill categories (20 per category)
 2. Scores each category by computing the model's **log-likelihood** of the reference answer — the same metric used by EleutherAI lm-evaluation-harness
 3. Saves scores + LoRA adapter weights to `~/.pyrecall/snapshots/`
 4. Optionally encrypts snapshot metadata when `privacy=True` (requires `pip install pyrecall[privacy]`).
@@ -99,10 +99,11 @@ All local. No API calls. Works offline.
 | `multilingual` | Translation, cross-lingual comprehension, language identification |
 | `tool_use` | Function calls, structured JSON output, tool selection |
 | `advanced_math` | Algebra, calculus, combinatorics, proof by induction |
+| `long_context` | Document QA, code comprehension, multi-hop retrieval, instruction following over long inputs |
 
 ### 2. Forgetting detection
 
-`model.check()` re-runs the same 160 benchmarks on the current model and diffs the scores:
+`model.check()` re-runs the same 180 benchmarks on the current model and diffs the scores:
 
 ```text
 ┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┓
