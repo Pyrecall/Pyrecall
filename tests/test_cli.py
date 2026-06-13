@@ -1518,6 +1518,190 @@ class TestReplayClear:
         assert result.exit_code == 0
 
 
+# ── prune ─────────────────────────────────────────────────────────────────────
+
+
+class TestPrune:
+    def test_no_config_exits_one(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.chdir(tmp_path)
+        result = runner.invoke(app, ["prune", "--keep-last", "1"])
+        assert result.exit_code == 1
+
+    def test_no_snapshots_prints_message(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        mgr = _make_mock_manager(snapshots=[])
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["prune", "--keep-last", "1"])
+        assert result.exit_code == 0
+        assert "nothing" in result.output.lower() or "no snapshots" in result.output.lower()
+
+    def test_no_flags_exits_one(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snaps = [_make_snapshot("a"), _make_snapshot("b")]
+        mgr = _make_mock_manager(snapshots=snaps)
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["prune"])
+        assert result.exit_code == 1
+        assert "help" in result.output.lower() or "provide" in result.output.lower()
+
+    def test_keep_last_deletes_old_snapshots(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snaps = [
+            _make_snapshot("v1", created_at=datetime(2024, 1, 1)),
+            _make_snapshot("v2", created_at=datetime(2024, 2, 1)),
+            _make_snapshot("v3", created_at=datetime(2024, 3, 1)),
+        ]
+        mgr = _make_mock_manager(snapshots=snaps)
+        mgr.base_dir = tmp_path  # avoid real dir_size calls
+        with (
+            patch("pyrecall.rollback.RollbackManager", return_value=mgr),
+            patch("pyrecall.cli._dir_size", return_value=0),
+        ):
+            result = runner.invoke(app, ["prune", "--keep-last", "1", "--yes"])
+        assert result.exit_code == 0
+        # v1 and v2 should be deleted; v3 kept
+        deleted_names = [c.args[0] for c in mgr.delete_snapshot.call_args_list]
+        assert "v1" in deleted_names
+        assert "v2" in deleted_names
+        assert "v3" not in deleted_names
+
+    def test_keep_last_zero_deletes_all_non_baseline(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path, baseline="v1")
+        snaps = [_make_snapshot("v1"), _make_snapshot("v2")]
+        mgr = _make_mock_manager(snapshots=snaps)
+        with (
+            patch("pyrecall.rollback.RollbackManager", return_value=mgr),
+            patch("pyrecall.cli._dir_size", return_value=0),
+        ):
+            result = runner.invoke(app, ["prune", "--keep-last", "0", "--yes"])
+        assert result.exit_code == 0
+        deleted_names = [c.args[0] for c in mgr.delete_snapshot.call_args_list]
+        assert "v1" not in deleted_names  # baseline protected
+        assert "v2" in deleted_names
+
+    def test_baseline_protected_without_force(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path, baseline="v1")
+        snaps = [_make_snapshot("v1"), _make_snapshot("v2")]
+        mgr = _make_mock_manager(snapshots=snaps)
+        with (
+            patch("pyrecall.rollback.RollbackManager", return_value=mgr),
+            patch("pyrecall.cli._dir_size", return_value=0),
+        ):
+            result = runner.invoke(app, ["prune", "--keep-last", "0", "--yes"])
+        assert result.exit_code == 0
+        deleted_names = [c.args[0] for c in mgr.delete_snapshot.call_args_list]
+        assert "v1" not in deleted_names
+
+    def test_force_allows_baseline_deletion(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path, baseline="v1")
+        snaps = [_make_snapshot("v1")]
+        mgr = _make_mock_manager(snapshots=snaps)
+        with (
+            patch("pyrecall.rollback.RollbackManager", return_value=mgr),
+            patch("pyrecall.cli._dir_size", return_value=0),
+        ):
+            result = runner.invoke(app, ["prune", "--keep-last", "0", "--force", "--yes"])
+        assert result.exit_code == 0
+        deleted_names = [c.args[0] for c in mgr.delete_snapshot.call_args_list]
+        assert "v1" in deleted_names
+
+    def test_dry_run_does_not_delete(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snaps = [_make_snapshot("v1"), _make_snapshot("v2")]
+        mgr = _make_mock_manager(snapshots=snaps)
+        with (
+            patch("pyrecall.rollback.RollbackManager", return_value=mgr),
+            patch("pyrecall.cli._dir_size", return_value=1024 * 1024),
+        ):
+            result = runner.invoke(app, ["prune", "--keep-last", "0", "--dry-run"])
+        assert result.exit_code == 0
+        mgr.delete_snapshot.assert_not_called()
+        assert "dry run" in result.output.lower()
+
+    def test_dry_run_shows_sizes(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snaps = [_make_snapshot("v1"), _make_snapshot("v2")]
+        mgr = _make_mock_manager(snapshots=snaps)
+        with (
+            patch("pyrecall.rollback.RollbackManager", return_value=mgr),
+            patch("pyrecall.cli._dir_size", return_value=50 * 1024 * 1024),
+        ):
+            result = runner.invoke(app, ["prune", "--keep-last", "0", "--dry-run"])
+        assert "MB" in result.output
+
+    def test_named_snapshot_deletion(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snaps = [_make_snapshot("v1"), _make_snapshot("v2")]
+        mgr = _make_mock_manager(snapshots=snaps)
+        with (
+            patch("pyrecall.rollback.RollbackManager", return_value=mgr),
+            patch("pyrecall.cli._dir_size", return_value=0),
+        ):
+            result = runner.invoke(app, ["prune", "v1", "--yes"])
+        assert result.exit_code == 0
+        mgr.delete_snapshot.assert_called_once_with("v1")
+
+    def test_named_snapshot_not_found(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        mgr = _make_mock_manager(snapshots=[_make_snapshot("v1")])
+        mgr.has_snapshot.side_effect = lambda name: name == "v1"
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["prune", "missing"])
+        assert result.exit_code == 1
+
+    def test_older_than_filters_by_date(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        old = _make_snapshot("old", created_at=datetime(2020, 1, 1))
+        new = _make_snapshot("new", created_at=datetime(2099, 1, 1))
+        mgr = _make_mock_manager(snapshots=[old, new])
+        with (
+            patch("pyrecall.rollback.RollbackManager", return_value=mgr),
+            patch("pyrecall.cli._dir_size", return_value=0),
+        ):
+            result = runner.invoke(app, ["prune", "--older-than", "30", "--yes"])
+        assert result.exit_code == 0
+        deleted_names = [c.args[0] for c in mgr.delete_snapshot.call_args_list]
+        assert "old" in deleted_names
+        assert "new" not in deleted_names
+
+    def test_nothing_to_prune_message(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        recent = _make_snapshot("recent", created_at=datetime(2099, 1, 1))
+        mgr = _make_mock_manager(snapshots=[recent])
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["prune", "--older-than", "1"])
+        assert result.exit_code == 0
+        assert "nothing" in result.output.lower()
+
+
 # ── status ────────────────────────────────────────────────────────────────────
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
@@ -965,6 +965,180 @@ def delete(
         )
     else:
         console.print(f"[green]✓ Deleted snapshot '{snapshot_name}'.[/green]")
+
+
+def _dir_size(path: Path) -> int:
+    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+
+
+def _human_size(n: int) -> str:
+    if n >= 1024**3:
+        return f"{n / 1024**3:.1f} GB"
+    if n >= 1024**2:
+        return f"{n / 1024**2:.1f} MB"
+    if n >= 1024:
+        return f"{n / 1024:.1f} KB"
+    return f"{n} B"
+
+
+@app.command()
+def prune(
+    snapshot_name: Annotated[
+        str | None,
+        typer.Argument(
+            help="Name of a single snapshot to delete. Omit to use --keep-last or --older-than."
+        ),
+    ] = None,
+    keep_last: Annotated[
+        int | None,
+        typer.Option(
+            "--keep-last",
+            help="Keep the N most recent snapshots; delete the rest.",
+        ),
+    ] = None,
+    older_than: Annotated[
+        int | None,
+        typer.Option(
+            "--older-than",
+            help="Delete snapshots older than N days.",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Show what would be deleted without actually deleting anything.",
+        ),
+    ] = False,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            help="Allow deleting the snapshot currently set as the baseline.",
+        ),
+    ] = False,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Skip confirmation prompt."),
+    ] = False,
+) -> None:
+    """
+    Delete old snapshots and free disk space.
+
+    Three modes (pick one or combine --keep-last and --older-than):
+
+        pyrecall prune before_v1              # delete one named snapshot
+        pyrecall prune --keep-last 3          # keep 3 most recent, delete the rest
+        pyrecall prune --older-than 30        # delete snapshots older than 30 days
+        pyrecall prune --keep-last 5 --dry-run  # preview without deleting
+
+    The current baseline is protected — pass --force to override.
+    """
+    config = _read_config()
+    mgr = _build_rollback_manager(config)
+    all_snaps = mgr.list_snapshots()
+    baseline = config.get("baseline_snapshot")
+
+    if not all_snaps:
+        console.print("[yellow]No snapshots to prune.[/yellow]")
+        return
+
+    # ── resolve candidates ─────────────────────────────────────────────────────
+    if snapshot_name is not None:
+        # Single-name mode.
+        if not mgr.has_snapshot(snapshot_name):
+            console.print(
+                f"[red]Error:[/red] Snapshot '{snapshot_name}' not found.\n"
+                f"Available: {[s.name for s in all_snaps]}"
+            )
+            raise typer.Exit(1)
+        candidates = [s for s in all_snaps if s.name == snapshot_name]
+    else:
+        candidates = list(all_snaps)
+
+        if keep_last is not None:
+            if keep_last < 0:
+                console.print("[red]Error:[/red] --keep-last must be >= 0.")
+                raise typer.Exit(1)
+            # all_snaps is sorted oldest-first; keep the tail.
+            keep_names = {s.name for s in all_snaps[-keep_last:]} if keep_last > 0 else set()
+            candidates = [s for s in candidates if s.name not in keep_names]
+
+        if older_than is not None:
+            if older_than < 0:
+                console.print("[red]Error:[/red] --older-than must be >= 0.")
+                raise typer.Exit(1)
+            cutoff = datetime.now() - timedelta(days=older_than)
+            candidates = [s for s in candidates if s.created_at < cutoff]
+
+        if keep_last is None and older_than is None:
+            console.print(
+                "[red]Error:[/red] Provide a snapshot name, --keep-last, or --older-than.\n"
+                "Run [bold]pyrecall prune --help[/bold] for usage."
+            )
+            raise typer.Exit(1)
+
+    if not candidates:
+        console.print("[green]Nothing to prune.[/green]")
+        return
+
+    # ── baseline protection ────────────────────────────────────────────────────
+    baseline_candidates = [s for s in candidates if s.name == baseline]
+    if baseline_candidates and not force:
+        console.print(
+            f"[yellow]⚠  Snapshot '{baseline}' is the current baseline and is protected.[/yellow]\n"
+            "Pass [bold]--force[/bold] to include it in the prune."
+        )
+        candidates = [s for s in candidates if s.name != baseline]
+        if not candidates:
+            console.print("[green]Nothing left to prune after baseline exclusion.[/green]")
+            return
+
+    # ── compute sizes ──────────────────────────────────────────────────────────
+    snap_dirs = [mgr.base_dir / s.name for s in candidates]
+    sizes = [_dir_size(d) if d.exists() else 0 for d in snap_dirs]
+    total = sum(sizes)
+
+    # ── preview ────────────────────────────────────────────────────────────────
+    console.print()
+    label = "[dim](dry run)[/dim] " if dry_run else ""
+    console.print(f"{label}Snapshots to delete:\n")
+    for snap, size in zip(candidates, sizes):
+        baseline_note = " [dim](baseline)[/dim]" if snap.name == baseline else ""
+        console.print(
+            f"  [bold]{snap.name}[/bold]{baseline_note}  "
+            f"[dim]{snap.created_at.strftime('%Y-%m-%d')}[/dim]  "
+            f"{_human_size(size)}"
+        )
+    console.print(f"\n  Space to reclaim: [bold]{_human_size(total)}[/bold]")
+
+    if dry_run:
+        console.print("\n[dim]  Dry run — nothing deleted.[/dim]")
+        return
+
+    # ── confirm ────────────────────────────────────────────────────────────────
+    if not yes:
+        confirmed = typer.confirm("\nProceed?", default=False)
+        if not confirmed:
+            console.print("[dim]Aborted.[/dim]")
+            raise typer.Exit(0)
+
+    # ── delete ─────────────────────────────────────────────────────────────────
+    deleted = 0
+    for snap in candidates:
+        try:
+            mgr.delete_snapshot(snap.name)
+            deleted += 1
+            if snap.name == baseline:
+                config["baseline_snapshot"] = None
+                _write_config(config)
+        except FileNotFoundError:
+            console.print(f"[yellow]⚠  '{snap.name}' already gone — skipping.[/yellow]")
+
+    console.print(
+        f"\n[green]✓ Pruned {deleted} snapshot{'s' if deleted != 1 else ''}.[/green] "
+        f"Freed ~{_human_size(total)}."
+    )
 
 
 @app.command()
