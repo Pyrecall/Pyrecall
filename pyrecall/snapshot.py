@@ -55,6 +55,14 @@ class SkillSnapshot:
     adapter_path: Path | None = None
     encrypted: bool = False
     adapter_compression: str = "none"
+    def __post_init__(self) -> None:
+        if not isinstance(self.created_at, datetime):
+            raise TypeError(
+                f"created_at must be a datetime, got {type(self.created_at).__name__}. "
+                "Use keyword arguments: SkillSnapshot(name=..., model_name=..., scores=...)"
+            )
+
+
 
     # ── aggregation ────────────────────────────────────────────────────────────
     def category_scores(self) -> dict[str, float]:

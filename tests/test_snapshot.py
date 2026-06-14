@@ -55,6 +55,19 @@ class TestSkillScore:
 # ── SkillSnapshot aggregation ──────────────────────────────────────────────────
 
 
+class TestSkillSnapshotConstruction:
+    def test_positional_scores_arg_raises_type_error(self) -> None:
+        score = SkillScore(category="safety", prompt="p", response="c", score=0.5)
+        with pytest.raises(TypeError, match="created_at must be a datetime"):
+            SkillSnapshot("v1", "llama", [score])
+
+    def test_keyword_args_construct_correctly(self) -> None:
+        score = SkillScore(category="safety", prompt="p", response="c", score=0.5)
+        snap = SkillSnapshot(name="v1", model_name="llama", scores=[score])
+        assert snap.scores == [score]
+        assert isinstance(snap.created_at, datetime)
+
+
 class TestSkillSnapshotAggregation:
     def test_overall_score_is_mean(self) -> None:
         snap = _make_snapshot()
