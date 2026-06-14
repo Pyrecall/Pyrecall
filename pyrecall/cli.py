@@ -742,7 +742,10 @@ def check(
                     (p.stat().st_mtime for p in mgr.base_dir.rglob("snapshot.json")),
                     default=0.0,
                 )
-            except Exception:
+            except OSError as exc:
+                console.print(
+                    f"[dim][yellow]watch: could not stat snapshot directory: {exc}[/yellow][/dim]"
+                )
                 current_mtime = 0.0
 
             if current_mtime != last_mtime:
@@ -787,7 +790,7 @@ def check(
                     report = detector.compare(snap_b, snap_a)
                     if report.degraded_skills:
                         cats = ", ".join(
-                            f"{c} ({next(x.severity for x in report.comparisons if x.category == c)})"
+                            f"{c} ({next((x.severity for x in report.comparisons if x.category == c), 'UNKNOWN')})"
                             for c in report.degraded_skills
                         )
                         console.print(
@@ -1393,9 +1396,11 @@ def history(
                 )
             else:
                 report = detector.compare(snaps[i - 1], snap)
+                _comp_map = {x.category: x for x in report.comparisons}
                 dropped_notes = [
-                    f"{c} {report.comparisons[[x.category for x in report.comparisons].index(c)].delta:+.3f}"
+                    f"{c} {_comp_map[c].delta:+.3f}"
                     for c in report.degraded_skills
+                    if c in _comp_map
                 ]
                 health_rows.append(
                     {
@@ -1581,7 +1586,7 @@ def benchmark_add(
         console.print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(1)
 
-    entries = next(s["count"] for s in mgr.suites() if s["name"] == registered)
+    entries = next((s["count"] for s in mgr.suites() if s["name"] == registered), 0)
     console.print(
         f"[green]✓[/green] Registered benchmark suite [bold]{registered}[/bold] "
         f"({entries} prompt{'s' if entries != 1 else ''})."
