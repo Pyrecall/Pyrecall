@@ -433,6 +433,10 @@ from pyrecall.benchmarks import CustomBenchmarkManager
 mgr = CustomBenchmarkManager()
 mgr.add("nautical.jsonl")
 
+# Inspect registered suites — suites() and count() are methods, not properties
+print(mgr.suites())   # [{"name": "nautical", "count": 2, ...}]
+print(mgr.count())    # total number of registered custom benchmarks
+
 # Now snapshot() includes your custom prompts automatically
 model = Model("meta-llama/Llama-3.2-1B")
 model.snapshot("before_v1")
@@ -531,6 +535,49 @@ Model(
 └── replay/<model-name>/
     └── buffer.jsonl          ← reservoir-sampled past training examples
 ```
+
+---
+
+## Low-level Python API
+
+Most users interact with pyrecall through the `Model` class. For advanced use cases — custom pipelines, CI systems that manage snapshots independently — the lower-level classes are also public.
+
+### RollbackManager
+
+Saves and loads LoRA adapter checkpoints keyed by snapshot name.
+
+```python
+from pyrecall import RollbackManager
+from pyrecall.snapshot import SkillSnapshot
+
+mgr = RollbackManager("meta-llama/Llama-3.2-1B")
+
+# Save a snapshot + adapter
+# Signature: save(snapshot, peft_model, compression="none") -> Path
+snap_dir = mgr.save(snapshot, peft_model)                    # no compression
+snap_dir = mgr.save(snapshot, peft_model, compression="gzip")  # compressed adapter
+
+# List snapshots — returns SkillSnapshot objects, not strings
+snapshots = mgr.list_snapshots()       # list[SkillSnapshot], sorted by creation time
+names = mgr.list_snapshot_names()     # list[str] — names only
+
+# Check membership using names, not objects
+if "before_v1" in mgr.list_snapshot_names():
+    mgr.load_snapshot("before_v1")
+
+# Other operations
+mgr.has_snapshot("before_v1")         # bool
+mgr.delete_snapshot("before_v1")      # removes files permanently
+```
+
+**Compression options for `save()`:**
+
+| Value | Requirement |
+|---|---|
+| `"none"` | Default — no compression |
+| `"gzip"` | Built-in — no extra packages needed |
+| `"zstd"` | `pip install zstandard` |
+| `"lz4"` | `pip install lz4` |
 
 ---
 
