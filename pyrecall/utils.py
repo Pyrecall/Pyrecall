@@ -39,6 +39,9 @@ def get_logger(name: str) -> logging.Logger:
     return logger
 
 
+logger = get_logger(__name__)
+
+
 def compute_embeddings(
     model: PreTrainedModel,
     tokenizer: PreTrainedTokenizerBase,
@@ -99,28 +102,63 @@ def compute_log_likelihood(
     Uses a single causal-LM forward pass with the prompt tokens masked out of the
     loss so only the completion tokens contribute to the NLL.
     """
-    prompt_enc = tokenizer(
-        prompt,
-        return_tensors="pt",
-        truncation=True,
-        max_length=max_length,
-        add_special_tokens=True,
-    )
-    full_enc = tokenizer(
-        prompt + completion,
-        return_tensors="pt",
-        truncation=True,
-        max_length=max_length,
-        add_special_tokens=True,
-    )
+    prompt_char_len = len(prompt)
 
-    prompt_len = prompt_enc["input_ids"].shape[1]
+    # Fast tokenizers expose character-level offsets, which let us find the exact
+    # prompt/completion boundary in the *combined* encoding and avoid BPE
+    # re-segmentation errors (closes #99).
+    if getattr(tokenizer, "is_fast", False) is True:
+        full_enc = tokenizer(
+            prompt + completion,
+            return_tensors="pt",
+            truncation=True,
+            max_length=max_length,
+            add_special_tokens=True,
+            return_offsets_mapping=True,
+        )
+        offsets = full_enc.pop("offset_mapping")[0].tolist()
+        # First token that extends *beyond* the prompt boundary (its end > prompt length).
+        # Tokens ending exactly at prompt_char_len are still prompt tokens; tokens
+        # straddling the boundary are treated as completion tokens (scored, not masked).
+        prompt_len = next(
+            (i for i, (_, end) in enumerate(offsets) if end > prompt_char_len),
+            len(offsets),
+        )
+    else:
+        # Slow tokenizer or mock: fall back to separate tokenisation. BPE boundary
+        # mismatch is possible but unavoidable without offset support.
+        prompt_enc = tokenizer(
+            prompt,
+            return_tensors="pt",
+            truncation=True,
+            max_length=max_length,
+            add_special_tokens=True,
+        )
+        full_enc = tokenizer(
+            prompt + completion,
+            return_tensors="pt",
+            truncation=True,
+            max_length=max_length,
+            add_special_tokens=True,
+        )
+        prompt_len = prompt_enc["input_ids"].shape[1]
+
     input_ids = full_enc["input_ids"].to(device)
     attention_mask = full_enc["attention_mask"].to(device)
 
     # Labels: -100 masks prompt tokens so they don't contribute to loss.
     labels = input_ids.clone()
     labels[0, :prompt_len] = -100
+
+    n_scored = int((labels[0] != -100).sum().item())
+    if n_scored == 0:
+        # All tokens masked — prompt is at or beyond max_length, no completion to score.
+        logger.warning(
+            "compute_log_likelihood: no completion tokens remain after masking "
+            "(prompt may exceed max_length=%d). Returning NaN.",
+            max_length,
+        )
+        return float("nan")
 
     with torch.no_grad():
         outputs = model(
@@ -130,7 +168,6 @@ def compute_log_likelihood(
         )
 
     mean_nll: float = outputs.loss.item()
-    # Guard against degenerate NLL (e.g. all tokens masked → loss = 0)
     if mean_nll <= 0.0:
         return 1.0
     return math.exp(-mean_nll)
