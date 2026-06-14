@@ -435,6 +435,7 @@ def learn(
         replay_buffer_size=config.get("replay_buffer_size", 500),
         replay_mix_ratio=config.get("replay_mix_ratio", 0.3),
         scoring_method=config.get("scoring_method", "log_likelihood"),
+        category_thresholds=config.get("category_thresholds", {}),
     )
 
     tracker = _build_trackers(log_wandb, log_mlflow, log_neptune, neptune_project)
@@ -556,6 +557,7 @@ def snapshot(
         replay_mix_ratio=config.get("replay_mix_ratio", 0.3),
         scoring_method=config.get("scoring_method", "log_likelihood"),
         snapshot_compression=compression,
+        category_thresholds=config.get("category_thresholds", {}),
     )
     tracker = _build_trackers(log_wandb, log_mlflow, log_neptune, neptune_project)
     model_obj.snapshot(name=name, tracker=tracker)
