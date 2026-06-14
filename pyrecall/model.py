@@ -556,7 +556,9 @@ class Model:
 
         collator = DataCollatorForLanguageModeling(tokenizer=self.tokenizer, mlm=False)
 
-        callbacks: list[TrainerCallback] = [_StreamingCallback(total_steps=total_steps)] if stream else []
+        callbacks: list[TrainerCallback] = (
+            [_StreamingCallback(total_steps=total_steps)] if stream else []
+        )
         trainer = Trainer(
             model=self.model,
             args=args,

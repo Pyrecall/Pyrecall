@@ -786,8 +786,10 @@ class TestStreamingLearn:
         from pyrecall.model import _StreamingCallback
 
         cb = _StreamingCallback(total_steps=10)
-        with _patch.object(cb._progress, "update") as mock_update, \
-             _patch.object(cb._progress, "start"):
+        with (
+            _patch.object(cb._progress, "update") as mock_update,
+            _patch.object(cb._progress, "start"),
+        ):
             state = MagicMock()
             state.global_step = 3
             cb.on_train_begin(None, state, None)
@@ -801,8 +803,10 @@ class TestStreamingLearn:
         from pyrecall.model import _StreamingCallback
 
         cb = _StreamingCallback(total_steps=5)
-        with _patch.object(cb._progress, "update") as mock_update, \
-             _patch.object(cb._progress, "start"):
+        with (
+            _patch.object(cb._progress, "update") as mock_update,
+            _patch.object(cb._progress, "start"),
+        ):
             state = MagicMock()
             state.global_step = 1
             cb.on_train_begin(None, state, None)
