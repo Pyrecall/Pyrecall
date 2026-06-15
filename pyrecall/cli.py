@@ -1302,7 +1302,9 @@ def status() -> None:
             snap.created_at.strftime("%Y-%m-%d %H:%M"),
             f"{snap.overall_score():.3f}",
         ]
-        row += [f"{cat_scores.get(cat, 0.0):.3f}" for cat in all_categories]
+        row += [
+            f"{cat_scores[cat]:.3f}" if cat in cat_scores else "-" for cat in all_categories
+        ]
         row.append(adapter_ok)
         table.add_row(*row)
 
@@ -1521,10 +1523,13 @@ def history(
             overall_str,
         ]
         for cat in display_categories:
-            score = cat_scores.get(cat, 0.0)
+            if cat not in cat_scores:
+                row.append("-")
+                continue
+            score = cat_scores[cat]
             cell = f"{score:.3f}"
-            if prev is not None:
-                cell += f" {_trend(prev.get(cat, score), score)}"
+            if prev is not None and cat in prev:
+                cell += f" {_trend(prev[cat], score)}"
             row.append(cell)
 
         table.add_row(*row)
