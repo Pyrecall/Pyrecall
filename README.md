@@ -75,6 +75,49 @@ That's it. The model is back to where it was before the dog forgot how to sit.
 
 ---
 
+## What it looks like
+
+**`pyrecall status`** — all snapshots at a glance, per-category scores, adapter on disk:
+
+```text
+ Snapshot          Created              Overall   reasoning  coding   safety   Adapter
+ ──────────────────────────────────────────────────────────────────────────────────────
+ before_v1         2024-11-01 09:12     0.847     0.831      0.834    0.901      ✓
+ after_cs_v1       2024-11-02 14:38     0.782     0.828      0.641    0.898      ✓
+ after_cs_v2 ★     2024-11-05 10:04     0.801     0.830      0.710    0.900      ✓
+
+  ★ = current baseline (after_cs_v2)
+```
+
+**`pyrecall history`** — score trends across snapshots with coloured arrows:
+
+```text
+ Snapshot         Created              Overall          reasoning        coding           safety
+ ──────────────────────────────────────────────────────────────────────────────────────────────
+ before_v1        2024-11-01 09:12     0.847            0.831            0.834            0.901
+ after_cs_v1      2024-11-02 14:38     0.782 ↓          0.828 →          0.641 ↓          0.898 →
+ after_cs_v2      2024-11-05 10:04     0.801 ↑          0.830 →          0.710 ↑          0.900 →
+
+ Overall drift (before_v1 → after_cs_v2): -0.046
+```
+
+**`pyrecall check`** — forgetting report after a training run:
+
+```text
+┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┓
+┃ Skill                ┃ Before  ┃  After  ┃ Δ Score               ┃ Cohen's d ┃ Severity  ┃
+┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━┩
+│ reasoning            │  0.831  │  0.828  │ -0.003 (-0.4%)        │    -0.05  │    OK     │
+│ coding               │  0.834  │  0.641  │ -0.193 (-23.1%)       │    -1.24  │ CRITICAL  │
+│ safety               │  0.901  │  0.898  │ -0.002 (-0.2%)        │    -0.03  │    OK     │
+└──────────────────────┴─────────┴─────────┴───────────────────────┴───────────┴───────────┘
+
+⚠  Forgetting detected in: coding
+   Run model.rollback() to restore lost skills.
+```
+
+---
+
 ## How it works
 
 ### 1. Snapshots
