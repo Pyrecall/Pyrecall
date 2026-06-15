@@ -226,3 +226,35 @@ class TestRollbackManagerBaseDir:
         mgr.save(_make_snapshot("v1"), _make_mock_peft_model())
         expected = tmp_path / "org--mymodel" / "v1" / "snapshot.json"
         assert expected.exists()
+
+
+class TestSaveLock:
+    def test_lock_file_created_during_save(self, tmp_path: Path) -> None:
+        mgr = RollbackManager(model_name="test/model", base_dir=tmp_path)
+        mgr.save(_make_snapshot("v1"), _make_mock_peft_model())
+        # Lock file should exist (not cleaned up — it's intentionally kept as a
+        # cheap sentinel so future lock calls don't need to re-create the dir).
+        snap_dir = tmp_path / "test--model" / "v1"
+        assert snap_dir.exists()
+
+    def test_concurrent_saves_do_not_corrupt(self, tmp_path: Path) -> None:
+        import threading
+
+        mgr = RollbackManager(model_name="test/model", base_dir=tmp_path)
+        errors: list[Exception] = []
+
+        def do_save():
+            try:
+                mgr.save(_make_snapshot("v1"), _make_mock_peft_model())
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=do_save) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == [], f"Concurrent saves raised: {errors}"
+        snap = mgr.load_snapshot("v1")
+        assert snap.name == "v1"

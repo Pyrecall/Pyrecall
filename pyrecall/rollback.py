@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import fcntl
 import shutil
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -13,6 +15,19 @@ if TYPE_CHECKING:
     from peft import PeftModel
 
 logger = get_logger(__name__)
+
+
+@contextmanager
+def _snap_lock(snap_dir: Path):
+    """Acquire an exclusive filesystem lock for the duration of a snapshot save."""
+    lock_file = snap_dir / ".save.lock"
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
+    with lock_file.open("w") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
 
 
 class RollbackManager:
@@ -67,29 +82,30 @@ class RollbackManager:
         snap_dir = self.base_dir / snapshot.name
         snap_dir.mkdir(parents=True, exist_ok=True)
 
-        adapter_dir = snap_dir / "adapter"
-        adapter_staging = snap_dir / "adapter.staging"
+        with _snap_lock(snap_dir):
+            adapter_dir = snap_dir / "adapter"
+            adapter_staging = snap_dir / "adapter.staging"
 
-        if adapter_staging.exists():
-            shutil.rmtree(adapter_staging)
-        adapter_staging.mkdir(parents=True, exist_ok=True)
+            if adapter_staging.exists():
+                shutil.rmtree(adapter_staging)
+            adapter_staging.mkdir(parents=True, exist_ok=True)
 
-        peft_model.save_pretrained(str(adapter_staging))
-        logger.debug("Adapter staged to %s", adapter_staging)
+            peft_model.save_pretrained(str(adapter_staging))
+            logger.debug("Adapter staged to %s", adapter_staging)
 
-        if compression != "none":
-            compress_adapter_dir(adapter_staging, compression)
-            logger.debug("Adapter compressed with %s in staging", compression)
+            if compression != "none":
+                compress_adapter_dir(adapter_staging, compression)
+                logger.debug("Adapter compressed with %s in staging", compression)
 
-        if adapter_dir.exists():
-            shutil.rmtree(adapter_dir)
-        adapter_staging.rename(adapter_dir)
-        logger.debug("Adapter promoted to %s", adapter_dir)
+            if adapter_dir.exists():
+                shutil.rmtree(adapter_dir)
+            adapter_staging.rename(adapter_dir)
+            logger.debug("Adapter promoted to %s", adapter_dir)
 
-        snapshot.adapter_path = adapter_dir
-        snapshot.adapter_compression = compression
-        snapshot.save(snap_dir)
-        logger.debug("Snapshot metadata saved to %s", snap_dir)
+            snapshot.adapter_path = adapter_dir
+            snapshot.adapter_compression = compression
+            snapshot.save(snap_dir)
+            logger.debug("Snapshot metadata saved to %s", snap_dir)
 
         return snap_dir
 
