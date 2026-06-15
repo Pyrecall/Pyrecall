@@ -612,3 +612,27 @@ class TestCorruptBufferLoad:
 
         result = _weighted_sample_without_replacement([], [], k=3)
         assert result == []
+
+
+class TestSeenHashesPersisted:
+    def test_evicted_entry_not_readded_after_restart(self, tmp_path: Path) -> None:
+        from pyrecall.replay import ReplayBuffer
+
+        buf = ReplayBuffer("m", max_size=2, base_dir=tmp_path)
+        buf.add(["a", "b", "c"])  # c evicts one; total_seen=3, buffer has 2
+        total_before = buf.total_seen
+
+        buf2 = ReplayBuffer("m", max_size=2, base_dir=tmp_path)
+        buf2.add(["a", "b", "c"])  # all three should be seen as duplicates
+        assert buf2.total_seen == total_before  # no inflation
+
+    def test_seen_hashes_survive_restart(self, tmp_path: Path) -> None:
+        from pyrecall.replay import ReplayBuffer
+
+        buf = ReplayBuffer("m", max_size=10, base_dir=tmp_path)
+        buf.add(["hello", "world"])
+
+        buf2 = ReplayBuffer("m", max_size=10, base_dir=tmp_path)
+        duplicates_before = buf2.total_seen
+        buf2.add(["hello", "world"])
+        assert buf2.total_seen == duplicates_before  # no re-count

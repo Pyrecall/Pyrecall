@@ -72,10 +72,11 @@ class SkillSnapshot:
         return {cat: sum(vals) / len(vals) for cat, vals in buckets.items()}
 
     def overall_score(self) -> float:
-        """Return the mean score across all benchmarks."""
-        if not self.scores:
+        """Return the mean of per-category averages, so every skill is weighted equally."""
+        cat_scores = self.category_scores()
+        if not cat_scores:
             return 0.0
-        return sum(s.score for s in self.scores) / len(self.scores)
+        return sum(cat_scores.values()) / len(cat_scores)
 
     # ── persistence ────────────────────────────────────────────────────────────
     def save(self, directory: Path, privacy: bool = False) -> None:
