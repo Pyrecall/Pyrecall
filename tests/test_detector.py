@@ -790,9 +790,9 @@ class TestMarkdownAndHTMLEscaping:
             comparisons=[CategoryComparison(category="foo|bar", score_before=0.8, score_after=0.7)],
         )
         md = report.to_markdown()
-        table_lines = [l for l in md.splitlines() if l.startswith("|") and "foo" in l]
+        table_lines = [ln for ln in md.splitlines() if ln.startswith("|") and "foo" in ln]
         assert len(table_lines) == 1
-        assert r"foo\|bar" in table_lines[0]
+        assert r"foo\|bar" in table_lines[0]  # noqa: RUF001
 
     def test_html_tag_in_category_name_escaped_in_html(self) -> None:
         report = ForgettingReport(
