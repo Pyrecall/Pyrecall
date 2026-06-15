@@ -753,3 +753,58 @@ class TestBenchmarkCount:
         counts = Counter(b.category for b in DEFAULT_BENCHMARKS)
         for cat in CATEGORIES:
             assert counts[cat] == 20, f"{cat} has {counts[cat]} items, expected 20"
+
+
+class TestNaNPctChangeAndSeverityMethod:
+    def test_pct_change_nan_when_score_before_nan(self) -> None:
+        import math
+
+        c = CategoryComparison(category="safety", score_before=float("nan"), score_after=0.7)
+        assert math.isnan(c.pct_change)
+
+    def test_pct_change_nan_when_score_after_nan(self) -> None:
+        import math
+
+        c = CategoryComparison(category="safety", score_before=0.8, score_after=float("nan"))
+        assert math.isnan(c.pct_change)
+
+    def test_severity_method_unknown_when_score_before_nan(self) -> None:
+        c = CategoryComparison(
+            category="safety", score_before=float("nan"), score_after=0.7, n_items=5
+        )
+        assert c.severity_method == "unknown"
+
+    def test_severity_method_unknown_when_score_after_nan(self) -> None:
+        c = CategoryComparison(
+            category="safety", score_before=0.8, score_after=float("nan"), n_items=5
+        )
+        assert c.severity_method == "unknown"
+
+
+class TestMarkdownAndHTMLEscaping:
+    def test_pipe_in_category_name_escaped_in_markdown(self) -> None:
+        report = ForgettingReport(
+            snapshot_before="b",
+            snapshot_after="a",
+            threshold=0.1,
+            comparisons=[CategoryComparison(category="foo|bar", score_before=0.8, score_after=0.7)],
+        )
+        md = report.to_markdown()
+        table_lines = [l for l in md.splitlines() if l.startswith("|") and "foo" in l]
+        assert len(table_lines) == 1
+        assert r"foo\|bar" in table_lines[0]
+
+    def test_html_tag_in_category_name_escaped_in_html(self) -> None:
+        report = ForgettingReport(
+            snapshot_before="b",
+            snapshot_after="a",
+            threshold=0.1,
+            comparisons=[
+                CategoryComparison(
+                    category="<script>alert(1)</script>", score_before=0.8, score_after=0.7
+                )
+            ],
+        )
+        html = report.to_html()
+        assert "<script>" not in html
+        assert "&lt;script&gt;" in html

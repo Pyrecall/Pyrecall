@@ -24,7 +24,9 @@ def _weighted_sample_without_replacement(
     for _ in range(k):
         total = sum(weights)
         if total <= 0:
-            result.extend(e["text"] for e in random.sample(pool, k - len(result)))
+            remaining = k - len(result)
+            if pool:
+                result.extend(e["text"] for e in random.sample(pool, min(remaining, len(pool))))
             break
         r = random.uniform(0, total)
         cumulative = 0.0
@@ -185,14 +187,28 @@ class ReplayBuffer:
             meta = json.loads(lines[0])
             self._total_seen = meta.get("total_seen", 0)
             self._buffer = []
+            skipped = 0
             for line in lines[1:]:
                 if not line.strip():
                     continue
-                entry = json.loads(line)
-                # backward compat: old format only had "text", no "category"
-                if "category" not in entry:
-                    entry["category"] = None
-                self._buffer.append(entry)
+                try:
+                    entry = json.loads(line)
+                    if "text" not in entry:
+                        raise KeyError("text")
+                    # backward compat: old format only had "text", no "category"
+                    if "category" not in entry:
+                        entry["category"] = None
+                    self._buffer.append(entry)
+                except Exception as exc:
+                    skipped += 1
+                    logger.warning("Skipping corrupt replay buffer entry: %s", exc)
+            if skipped:
+                logger.warning(
+                    "Skipped %d corrupt entr%s while loading %s.",
+                    skipped,
+                    "y" if skipped == 1 else "ies",
+                    self._path,
+                )
             # Trim to current max_size in case the config changed.
             if len(self._buffer) > self._max_size:
                 self._buffer = self._buffer[: self._max_size]

@@ -580,3 +580,35 @@ class TestWeightedSampleEdgeCases:
         buf.add(texts, categories=["coding"] * 5)
         result = buf.sample(5, weights={"coding": 0.0})
         assert len(result) == 5
+
+
+class TestCorruptBufferLoad:
+    def test_corrupt_entry_is_skipped_not_fatal(self, tmp_path: Path) -> None:
+        from pyrecall.replay import ReplayBuffer
+
+        buf = ReplayBuffer("m", max_size=10, base_dir=tmp_path)
+        buf.add(["good entry"])
+        # Inject a corrupt line directly into the file
+        buf._path.write_text(buf._path.read_text().rstrip("\n") + "\nnot json at all\n")
+        buf2 = ReplayBuffer("m", max_size=10, base_dir=tmp_path)
+        assert len(buf2) == 1
+        assert buf2.sample(1) == ["good entry"]
+
+    def test_entry_missing_text_key_is_skipped(self, tmp_path: Path) -> None:
+        import json
+
+        from pyrecall.replay import ReplayBuffer
+
+        buf = ReplayBuffer("m", max_size=10, base_dir=tmp_path)
+        buf.add(["good"])
+        buf._path.write_text(
+            buf._path.read_text().rstrip("\n") + "\n" + json.dumps({"category": "coding"}) + "\n"
+        )
+        buf2 = ReplayBuffer("m", max_size=10, base_dir=tmp_path)
+        assert len(buf2) == 1
+
+    def test_all_zero_weights_empty_pool_does_not_crash(self, tmp_path: Path) -> None:
+        from pyrecall.replay import _weighted_sample_without_replacement
+
+        result = _weighted_sample_without_replacement([], [], k=3)
+        assert result == []
