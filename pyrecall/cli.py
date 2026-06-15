@@ -1302,9 +1302,7 @@ def status() -> None:
             snap.created_at.strftime("%Y-%m-%d %H:%M"),
             f"{snap.overall_score():.3f}",
         ]
-        row += [
-            f"{cat_scores[cat]:.3f}" if cat in cat_scores else "-" for cat in all_categories
-        ]
+        row += [f"{cat_scores[cat]:.3f}" if cat in cat_scores else "-" for cat in all_categories]
         row.append(adapter_ok)
         table.add_row(*row)
 
