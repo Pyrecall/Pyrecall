@@ -633,9 +633,11 @@ class Model:
 
         console.print("[info]Running post-training benchmarks…[/info]")
         after_scores = self._run_benchmarks()
-        after_name = f"{self._baseline_snapshot_name}__after"
-        after = SkillSnapshot(name=after_name, model_name=self.model_name, scores=after_scores)
-        after.save(self.rollback_manager.base_dir / after_name)
+        after = SkillSnapshot(
+            name=f"{self._baseline_snapshot_name}__after",
+            model_name=self.model_name,
+            scores=after_scores,
+        )
 
         report = self.detector.compare(before, after)
         report.print()

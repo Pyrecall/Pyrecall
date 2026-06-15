@@ -309,3 +309,34 @@ class TestEncryptor:
             importlib.reload(enc_mod)
             with pytest.raises(ImportError, match="privacy"):
                 enc_mod.Encryptor()
+
+
+class TestOverallScoreCategoryBalanced:
+    def test_overall_score_is_category_balanced(self) -> None:
+        scores = [
+            SkillScore(category="math", prompt=f"p{i}", response="r", score=0.9) for i in range(10)
+        ] + [
+            SkillScore(category="coding", prompt=f"q{i}", response="r", score=0.1) for i in range(2)
+        ]
+        snap = SkillSnapshot(name="s", model_name="m", scores=scores)
+        # category-balanced: (0.9 + 0.1) / 2 = 0.5, not prompt-weighted ~0.85
+        assert abs(snap.overall_score() - 0.5) < 1e-9
+
+    def test_overall_score_equal_categories_unchanged(self) -> None:
+        scores = [
+            SkillScore(category="a", prompt="p1", response="r", score=0.8),
+            SkillScore(category="b", prompt="p2", response="r", score=0.6),
+        ]
+        snap = SkillSnapshot(name="s", model_name="m", scores=scores)
+        assert abs(snap.overall_score() - 0.7) < 1e-9
+
+    def test_overall_score_empty_returns_zero(self) -> None:
+        snap = SkillSnapshot(name="s", model_name="m")
+        assert snap.overall_score() == 0.0
+
+    def test_overall_score_single_category(self) -> None:
+        scores = [
+            SkillScore(category="coding", prompt=f"p{i}", response="r", score=0.8) for i in range(5)
+        ]
+        snap = SkillSnapshot(name="s", model_name="m", scores=scores)
+        assert abs(snap.overall_score() - 0.8) < 1e-9

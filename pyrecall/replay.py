@@ -170,7 +170,11 @@ class ReplayBuffer:
     # ── persistence ────────────────────────────────────────────────────────────
 
     def _save(self) -> None:
-        meta = {"total_seen": self._total_seen, "max_size": self._max_size}
+        meta = {
+            "total_seen": self._total_seen,
+            "max_size": self._max_size,
+            "seen_hashes": list(self._seen_hashes),
+        }
         lines = [json.dumps(meta)]
         lines += [
             json.dumps({"text": e["text"], "category": e.get("category")}) for e in self._buffer
@@ -186,6 +190,7 @@ class ReplayBuffer:
                 return
             meta = json.loads(lines[0])
             self._total_seen = meta.get("total_seen", 0)
+            self._seen_hashes = set(meta.get("seen_hashes", []))
             self._buffer = []
             skipped = 0
             for line in lines[1:]:
@@ -212,9 +217,12 @@ class ReplayBuffer:
             # Trim to current max_size in case the config changed.
             if len(self._buffer) > self._max_size:
                 self._buffer = self._buffer[: self._max_size]
-            self._seen_hashes = {
-                hashlib.sha256(e["text"].encode()).hexdigest() for e in self._buffer
-            }
+            # Backward compat: old files without seen_hashes in meta fall back to
+            # rebuilding from the buffer (misses evicted entries, but better than nothing).
+            if "seen_hashes" not in meta:
+                self._seen_hashes = {
+                    hashlib.sha256(e["text"].encode()).hexdigest() for e in self._buffer
+                }
         except Exception as exc:
             logger.warning("Could not load replay buffer from %s: %s", self._path, exc)
             self._buffer = []
