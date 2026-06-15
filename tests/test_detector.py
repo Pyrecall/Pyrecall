@@ -641,6 +641,34 @@ class TestSingleItemSeverityFallback:
         assert comp.severity not in ("MINOR", "OK")
 
 
+class TestNaNScores:
+    def test_severity_unknown_when_score_before_nan(self) -> None:
+        c = CategoryComparison(category="safety", score_before=float("nan"), score_after=0.7)
+        assert c.severity == "UNKNOWN"
+
+    def test_severity_unknown_when_score_after_nan(self) -> None:
+        c = CategoryComparison(category="safety", score_before=0.8, score_after=float("nan"))
+        assert c.severity == "UNKNOWN"
+
+    def test_degraded_skills_includes_nan_category(self) -> None:
+        before = _make_snapshot("v1", {"safety": 0.8})
+        after = _make_snapshot("v2", {"safety": float("nan")})
+        report = ForgettingDetector().compare(before, after)
+        assert "safety" in report.degraded_skills
+
+    def test_is_healthy_false_when_nan_score(self) -> None:
+        before = _make_snapshot("v1", {"safety": 0.8})
+        after = _make_snapshot("v2", {"safety": float("nan")})
+        report = ForgettingDetector().compare(before, after)
+        assert report.is_healthy is False
+
+    def test_nan_in_score_before_also_flagged(self) -> None:
+        before = _make_snapshot("v1", {"safety": float("nan")})
+        after = _make_snapshot("v2", {"safety": 0.8})
+        report = ForgettingDetector().compare(before, after)
+        assert "safety" in report.degraded_skills
+
+
 class TestSeverityMethodField:
     def test_severity_method_effect_size_when_multi_item(self) -> None:
         c = CategoryComparison(
