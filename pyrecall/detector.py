@@ -66,7 +66,10 @@ class CategoryComparison:
 
         ``"effect_size"`` — standardized effect size of per-item deltas (n_items ≥ 2 with variance).
         ``"delta"``       — absolute score-drop buckets (n_items < 2, or zero-variance fallback).
+        ``"unknown"``     — one or both scores are NaN.
         """
+        if math.isnan(self.score_before) or math.isnan(self.score_after):
+            return "unknown"
         if self.n_items < 2:
             return "delta"
         if self.cohen_d == 0.0 and self.delta < 0:
@@ -81,6 +84,8 @@ class CategoryComparison:
     @property
     def pct_change(self) -> float:
         """Percentage change relative to the before score."""
+        if math.isnan(self.score_before) or math.isnan(self.score_after):
+            return float("nan")
         if self.score_before == 0.0:
             return 0.0
         return (self.score_after - self.score_before) / self.score_before * 100.0
@@ -238,8 +243,9 @@ class ForgettingReport:
             delta_str = f"{'+' if c.delta >= 0 else ''}{c.delta:.3f}"
             forgotten = (c.score_before - c.score_after) > self._threshold_for(c.category)
             status = "❌ FORGOTTEN" if forgotten else "✅ OK"
+            safe_cat = c.category.replace("|", "\\|")
             lines.append(
-                f"| {c.category} "
+                f"| {safe_cat} "
                 f"| {c.score_before:.3f} "
                 f"| {c.score_after:.3f} "
                 f"| {delta_str} "
@@ -276,13 +282,15 @@ class ForgettingReport:
         max_score = 1.0
         bar_area_w = chart_w - label_w - 10
 
+        import html as _html
+
         svg_rows: list[str] = []
         for i, c in enumerate(self.comparisons):
             y = i * (bar_h * 2 + bar_gap)
             before_w = int(c.score_before / max_score * bar_area_w)
             after_w = int(c.score_after / max_score * bar_area_w)
             color = severity_colours.get(c.severity, "#0969da")
-            label = c.category.replace("_", " ")
+            label = _html.escape(c.category.replace("_", " "))
             svg_rows.append(
                 f'<text x="{label_w - 6}" y="{y + bar_h - 4}" '
                 f'text-anchor="end" font-size="11" fill="#57606a">{label}</text>'
@@ -323,7 +331,7 @@ class ForgettingReport:
             )
             table_rows.append(
                 f"<tr>"
-                f"<td>{c.category}</td>"
+                f"<td>{_html.escape(c.category)}</td>"
                 f"<td>{c.score_before:.3f}</td>"
                 f"<td>{c.score_after:.3f}</td>"
                 f'<td style="color:{sev_col}">{delta_str}</td>'
@@ -337,7 +345,9 @@ class ForgettingReport:
         if self.degraded_skills:
             degraded_html = (
                 f'<p style="margin-top:12px;color:#cf222e">'
-                f"⚠ Degraded skills: <strong>{', '.join(self.degraded_skills)}</strong></p>"
+                f"⚠ Degraded skills: <strong>"
+                f"{', '.join(_html.escape(s) for s in self.degraded_skills)}"
+                f"</strong></p>"
             )
 
         ts = datetime.now().strftime("%Y-%m-%d %H:%M")
