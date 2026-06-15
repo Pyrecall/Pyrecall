@@ -1936,6 +1936,22 @@ class TestStatus:
 
         mgr.list_snapshots.assert_called_once()
 
+    def test_missing_category_shows_dash_not_zero(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap_old = _make_snapshot("v1", scores_by_category={"reasoning": 0.8})
+        snap_new = _make_snapshot("v2", scores_by_category={"reasoning": 0.9, "coding": 0.7})
+        mgr = _make_mock_manager(snapshots=[snap_old, snap_new])
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["status"])
+
+        assert result.exit_code == 0
+        assert "0.000" not in result.output
+        assert "-" in result.output
+
 
 # ── history ───────────────────────────────────────────────────────────────────
 

@@ -127,7 +127,10 @@ class CategoryComparison:
         MODERATE — small-medium effect (0.2 ≤ |d| < 0.5)
         SEVERE   — medium-large effect (0.5 ≤ |d| < 0.8)
         CRITICAL — large effect (|d| ≥ 0.8)
+        UNKNOWN  — one or both scores are NaN (prompt exceeded max_length)
         """
+        if math.isnan(self.score_before) or math.isnan(self.score_after):
+            return "UNKNOWN"
         if self.n_items < 2:
             return self.threshold_based_severity
         if self.delta >= 0:
@@ -170,11 +173,13 @@ class ForgettingReport:
 
     @property
     def degraded_skills(self) -> list[str]:
-        """Categories whose score dropped more than their effective threshold."""
+        """Categories whose score dropped more than their effective threshold, or contain NaN scores."""
         return [
             c.category
             for c in self.comparisons
-            if (c.score_before - c.score_after) > self._threshold_for(c.category)
+            if math.isnan(c.score_before)
+            or math.isnan(c.score_after)
+            or (c.score_before - c.score_after) > self._threshold_for(c.category)
         ]
 
     @property
@@ -619,6 +624,21 @@ class ForgettingDetector:
                     cohen_d=cohen_d,
                     n_items=n,
                 )
+            )
+
+        # Warn when NaN scores are present (prompt exceeded max_length).
+        nan_cats = [
+            c.category
+            for c in comparisons
+            if math.isnan(c.score_before) or math.isnan(c.score_after)
+        ]
+        if nan_cats:
+            from .utils import console as _c
+
+            _c.print(
+                f"[warning]⚠  NaN scores detected in categories: {', '.join(sorted(set(nan_cats)))}. "
+                "Prompts may have exceeded max_length. "
+                "These categories are flagged as degraded.[/warning]"
             )
 
         # Warn when snapshots used different scoring methods.
