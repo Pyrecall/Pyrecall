@@ -255,7 +255,7 @@ def init(
     if max_length < 1:
         errors.append(f"--max-length must be >= 1, got {max_length}")
     if not 0.0 < threshold <= 1.0:
-        errors.append(f"--threshold must be between 0 and 1, got {threshold}")
+        errors.append(f"--threshold must be > 0 and <= 1, got {threshold}")
     try:
         parsed_category_thresholds = _parse_category_thresholds(category_threshold)
     except typer.BadParameter as exc:

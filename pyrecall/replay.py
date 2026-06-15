@@ -215,8 +215,9 @@ class ReplayBuffer:
                     self._path,
                 )
             # Trim to current max_size in case the config changed.
+            # Use random.sample to preserve reservoir-sampling distribution.
             if len(self._buffer) > self._max_size:
-                self._buffer = self._buffer[: self._max_size]
+                self._buffer = random.sample(self._buffer, self._max_size)
             # Backward compat: old files without seen_hashes in meta fall back to
             # rebuilding from the buffer (misses evicted entries, but better than nothing).
             if "seen_hashes" not in meta:

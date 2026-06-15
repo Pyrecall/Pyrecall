@@ -636,3 +636,22 @@ class TestSeenHashesPersisted:
         duplicates_before = buf2.total_seen
         buf2.add(["hello", "world"])
         assert buf2.total_seen == duplicates_before  # no re-count
+
+
+class TestReplayBufferTrimOnLoad:
+    """#132: trimming on load must use random.sample, not tail-slice."""
+
+    def test_trim_preserves_random_distribution(self, tmp_path: Path) -> None:
+        from pyrecall.replay import ReplayBuffer
+
+        buf = ReplayBuffer("m", max_size=100, base_dir=tmp_path)
+        buf.add([f"example {i}" for i in range(100)])
+
+        # Reload with smaller max_size.
+        buf2 = ReplayBuffer("m", max_size=10, base_dir=tmp_path)
+        assert len(buf2) == 10
+        texts = {e["text"] for e in buf2._buffer}
+        # Entries should not all be from the first 10 (which would happen with slice).
+        # With 100 items trimmed to 10, chance all 10 are the first 10 is astronomically small.
+        first_ten = {f"example {i}" for i in range(10)}
+        assert texts != first_ten

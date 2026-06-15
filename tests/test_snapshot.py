@@ -340,3 +340,41 @@ class TestOverallScoreCategoryBalanced:
         ]
         snap = SkillSnapshot(name="s", model_name="m", scores=scores)
         assert abs(snap.overall_score() - 0.8) < 1e-9
+
+
+class TestEncryptedSnapshotAdapterCompression:
+    """#128: privacy=True must persist adapter_compression."""
+
+    def test_save_and_load_preserves_adapter_compression(self, tmp_path: Path) -> None:
+        pytest.importorskip("cryptography")
+        snap = _make_snapshot()
+        snap.adapter_compression = "zstd"
+        snap.save(tmp_path, privacy=True)
+        loaded = SkillSnapshot.load(tmp_path, privacy=True)
+        assert loaded.adapter_compression == "zstd"
+
+    def test_save_and_load_none_compression_still_works(self, tmp_path: Path) -> None:
+        pytest.importorskip("cryptography")
+        snap = _make_snapshot()
+        snap.save(tmp_path, privacy=True)
+        loaded = SkillSnapshot.load(tmp_path, privacy=True)
+        assert loaded.adapter_compression == "none"
+
+
+class TestLoadEncryptedWithoutPrivacyFlag:
+    """#129: load() must raise when file is encrypted but privacy=False."""
+
+    def test_raises_valueerror_on_encrypted_file_loaded_without_privacy(
+        self, tmp_path: Path
+    ) -> None:
+        pytest.importorskip("cryptography")
+        snap = _make_snapshot()
+        snap.save(tmp_path, privacy=True)
+        with pytest.raises(ValueError, match="encrypted"):
+            SkillSnapshot.load(tmp_path, privacy=False)
+
+    def test_non_encrypted_file_loads_without_privacy(self, tmp_path: Path) -> None:
+        snap = _make_snapshot()
+        snap.save(tmp_path, privacy=False)
+        loaded = SkillSnapshot.load(tmp_path, privacy=False)
+        assert loaded.name == snap.name

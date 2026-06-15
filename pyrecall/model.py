@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import math
 import warnings
 from collections.abc import Callable
 from pathlib import Path
@@ -542,7 +543,7 @@ class Model:
         if use_gc:
             self.model.gradient_checkpointing_enable()
 
-        total_steps = max(1, len(tokenized) // batch_size) * epochs
+        total_steps = max(1, math.ceil(len(tokenized) / batch_size)) * epochs
         logging_steps = 1 if stream else save_steps
 
         args = TrainingArguments(

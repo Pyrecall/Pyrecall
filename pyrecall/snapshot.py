@@ -112,6 +112,7 @@ class SkillSnapshot:
                 "adapter_path": (
                     encryptor.encrypt(str(self.adapter_path)) if self.adapter_path else None
                 ),
+                "adapter_compression": self.adapter_compression,
             }
         (directory / "snapshot.json").write_text(json.dumps(data, indent=2))
 
@@ -130,6 +131,11 @@ class SkillSnapshot:
             raise ValueError(
                 f"Snapshot file '{snapshot_file}' is corrupted (invalid JSON): {exc}"
             ) from exc
+        if data.get("encrypted", False) and not privacy:
+            raise ValueError(
+                f"Snapshot '{snapshot_file}' is encrypted but privacy=False was passed. "
+                "Load it with privacy=True and supply the key."
+            )
         if privacy:
             from .encrypt import Encryptor
 
@@ -144,6 +150,7 @@ class SkillSnapshot:
                 adapter_path=(
                     Path(encryptor.decrypt(data["adapter_path"])) if data["adapter_path"] else None
                 ),
+                adapter_compression=data.get("adapter_compression", "none"),
                 encrypted=True,
             )
         return cls(
