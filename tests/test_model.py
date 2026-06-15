@@ -129,7 +129,7 @@ class TestModelGenerate:
 class TestModelSnapshot:
     def test_snapshot_saves_json(self, patched_model, tmp_snapshot_dir: Path) -> None:
         patched_model.snapshot(name="test_snap")
-        snap_file = tmp_snapshot_dir / "test_snap" / "snapshot.json"
+        snap_file = tmp_snapshot_dir / "test--model" / "test_snap" / "snapshot.json"
         assert snap_file.exists(), "snapshot.json must be written to disk"
 
     def test_snapshot_sets_baseline(self, patched_model) -> None:
