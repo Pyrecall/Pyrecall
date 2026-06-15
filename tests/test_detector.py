@@ -699,6 +699,46 @@ class TestDeltaThresholdConstants:
         assert _DELTA_MINOR < _DELTA_MODERATE < _DELTA_SEVERE
 
 
+class TestNaNToDict:
+    def test_prompt_comparison_to_dict_nan_score_before_is_none(self) -> None:
+        import json
+
+        pc = PromptComparison(
+            category="safety", prompt="p", score_before=float("nan"), score_after=0.7
+        )
+        d = pc.to_dict()
+        assert d["score_before"] is None
+        json.dumps(d)  # must not raise
+
+    def test_prompt_comparison_to_dict_nan_score_after_is_none(self) -> None:
+        import json
+
+        pc = PromptComparison(
+            category="safety", prompt="p", score_before=0.8, score_after=float("nan")
+        )
+        d = pc.to_dict()
+        assert d["score_after"] is None
+        json.dumps(d)  # must not raise
+
+    def test_forgetting_report_to_json_with_nan_is_valid(self) -> None:
+        import json
+
+        before = _make_snapshot("v1", {"safety": 0.8})
+        after = _make_snapshot("v2", {"safety": float("nan")})
+        report = ForgettingDetector().compare(before, after)
+        parsed = json.loads(report.to_json())
+        comp = next(c for c in parsed["comparisons"] if c["category"] == "safety")
+        assert comp["score_after"] is None
+
+    def test_forgetting_report_to_dict_nan_delta_is_none(self) -> None:
+        before = _make_snapshot("v1", {"safety": float("nan")})
+        after = _make_snapshot("v2", {"safety": 0.7})
+        report = ForgettingDetector().compare(before, after)
+        comp = next(c for c in report.to_dict()["comparisons"] if c["category"] == "safety")
+        assert comp["score_before"] is None
+        assert comp["delta"] is None
+
+
 class TestBenchmarkCount:
     def test_default_benchmarks_total_180(self) -> None:
         from pyrecall.benchmarks.default import DEFAULT_BENCHMARKS

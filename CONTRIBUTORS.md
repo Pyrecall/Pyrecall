@@ -7,6 +7,17 @@ Thank you to everyone who has contributed to Pyrecall.
 - **Atharv Ranjan** ([@Arths17](https://github.com/Arths17))
 - **Siddharth Lakshminarayanan** ([@Sid294](https://github.com/Sid294))
 
+## Community
+
+We're actively looking for contributors of all kinds — not just code:
+
+- **Testers** — run pyrecall on your own fine-tuning workflows and report bugs or rough edges
+- **Docs writers** — improve examples, fix typos, add tutorials
+- **Benchmarks** — contribute domain-specific benchmark suites (safety, coding, reasoning, etc.)
+- **Spread the word** — star the repo, share it, write about it
+
+Open an issue, start a [Discussion](https://github.com/Pyrecall/Pyrecall/discussions), or reach out directly — all contributions count.
+
 ## How to Contribute
 
 Contributions are welcome. Here is how to get started:

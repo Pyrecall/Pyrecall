@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from io import StringIO
 
@@ -11,6 +12,12 @@ from rich.table import Table
 
 from .snapshot import SkillSnapshot
 from .utils import console as _shared_console
+
+
+def _safe_round(value: float, ndigits: int) -> float | None:
+    """Round *value* to *ndigits* decimal places, returning None for NaN."""
+    return None if math.isnan(value) else round(value, ndigits)
+
 
 # Delta-bucket thresholds used when n_items < 2 and effect size is unavailable.
 _DELTA_MINOR: float = 0.05
@@ -35,9 +42,9 @@ class PromptComparison:
         return {
             "category": self.category,
             "prompt": self.prompt,
-            "score_before": round(self.score_before, 4),
-            "score_after": round(self.score_after, 4),
-            "delta": round(self.delta, 4),
+            "score_before": _safe_round(self.score_before, 4),
+            "score_after": _safe_round(self.score_after, 4),
+            "delta": _safe_round(self.delta, 4),
         }
 
 
@@ -193,10 +200,10 @@ class ForgettingReport:
             "comparisons": [
                 {
                     "category": c.category,
-                    "score_before": round(c.score_before, 4),
-                    "score_after": round(c.score_after, 4),
-                    "delta": round(c.delta, 4),
-                    "pct_change": round(c.pct_change, 2),
+                    "score_before": _safe_round(c.score_before, 4),
+                    "score_after": _safe_round(c.score_after, 4),
+                    "delta": _safe_round(c.delta, 4),
+                    "pct_change": _safe_round(c.pct_change, 2),
                     "threshold": self._threshold_for(c.category),
                     "cohen_d": round(c.cohen_d, 4),
                     "n_items": c.n_items,
