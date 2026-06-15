@@ -1,0 +1,26 @@
+name: Discord Release Notification
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Discord notification
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          TAG: ${{ github.event.release.tag_name }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+        run: |
+          curl -s -X POST "$DISCORD_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"content\": null,
+              \"embeds\": [{
+                \"title\": \"🚀 Pyrecall ${TAG} Released!\",
+                \"description\": \"**Pyrecall ${TAG}** is now available! Check out the release notes for details on what's new, bug fixes, and more.\n\n**Install / Upgrade**\n\`\`\`\npip install --upgrade pyrecall==${TAG#v}\n\`\`\`\n**Links**\n[Release Notes](${RELEASE_URL}) | [PyPI](https://pypi.org/project/pyrecall/${TAG#v}/)\",
+                \"color\": 5763719
+              }]
+            }"
