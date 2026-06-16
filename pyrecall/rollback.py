@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import fcntl
+from filelock import FileLock
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
@@ -20,14 +20,13 @@ logger = get_logger(__name__)
 @contextmanager
 def _snap_lock(snap_dir: Path):
     """Acquire an exclusive filesystem lock for the duration of a snapshot save."""
-    lock_file = snap_dir / ".save.lock"
+    lock_file = snap_dir / ".save_lock"
     lock_file.parent.mkdir(parents=True, exist_ok=True)
-    with lock_file.open("w") as fh:
-        fcntl.flock(fh, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(fh, fcntl.LOCK_UN)
+
+    lock = FileLock(str(lock_file))
+
+    with lock:
+        yield
 
 
 class RollbackManager:
