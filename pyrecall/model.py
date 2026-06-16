@@ -282,7 +282,7 @@ class Model:
         dtype = torch.float16 if self.device != "cpu" else torch.float32
         base = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=dtype,
+            dtype=dtype,
             quantization_config=bnb_config,
             device_map="auto" if bnb_config else None,
         )
@@ -712,7 +712,7 @@ class Model:
         dtype = torch.float16 if self.device == "cuda" else torch.float32
         base_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
-            torch_dtype=dtype,
+            dtype=dtype,
             device_map=None if self.device != "cuda" else "auto",
         )
         with decompressed_adapter(snap.adapter_path, snap.adapter_compression) as adapter_dir:

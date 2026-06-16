@@ -1259,17 +1259,46 @@ def prune(
 
 
 @app.command()
-def status() -> None:
+def status(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Output results as JSON instead of a rich table."),
+    ] = False,
+) -> None:
     """Show all saved snapshots and their per-category skill scores."""
     config = _read_config()
     mgr = _build_rollback_manager(config)
     all_snaps = mgr.list_snapshots()
 
     if not all_snaps:
-        console.print(
-            "[yellow]No snapshots found.[/yellow] "
-            "Run [bold]pyrecall snapshot <name>[/bold] to create one."
-        )
+        if json_output:
+            typer.echo(json.dumps({"model_name": config.get("model_name"), "snapshots": []}))
+        else:
+            console.print(
+                "[yellow]No snapshots found.[/yellow] "
+                "Run [bold]pyrecall snapshot <name>[/bold] to create one."
+            )
+        return
+
+    baseline = config.get("baseline_snapshot")
+
+    if json_output:
+        out = {
+            "model_name": config.get("model_name"),
+            "baseline_snapshot": baseline,
+            "snapshots": [
+                {
+                    "name": snap.name,
+                    "created_at": snap.created_at.isoformat(),
+                    "overall": snap.overall_score(),
+                    "scores": snap.category_scores(),
+                    "adapter_ok": bool(snap.adapter_path and snap.adapter_path.exists()),
+                    "is_baseline": snap.name == baseline,
+                }
+                for snap in all_snaps
+            ],
+        }
+        typer.echo(json.dumps(out, indent=2))
         return
 
     # Collect all category names from any snapshot for column headers.
@@ -1279,7 +1308,6 @@ def status() -> None:
             if cat not in all_categories:
                 all_categories.append(cat)
 
-    baseline = config.get("baseline_snapshot")
     table = Table(
         title=f"Snapshots — {config['model_name']}",
         show_lines=False,
