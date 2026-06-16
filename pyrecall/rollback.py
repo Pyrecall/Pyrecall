@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import fcntl
 import shutil
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -14,6 +14,11 @@ from .utils import get_logger, safe_model_name
 if TYPE_CHECKING:
     from peft import PeftModel
 
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import fcntl
+
 logger = get_logger(__name__)
 
 
@@ -22,12 +27,28 @@ def _snap_lock(snap_dir: Path):
     """Acquire an exclusive filesystem lock for the duration of a snapshot save."""
     lock_file = snap_dir / ".save.lock"
     lock_file.parent.mkdir(parents=True, exist_ok=True)
-    with lock_file.open("w") as fh:
-        fcntl.flock(fh, fcntl.LOCK_EX)
+    with lock_file.open("a+b") as fh:
+        if sys.platform == "win32":
+            if not fh.tell():
+                fh.write(b"\0")
+                fh.flush()
+            fh.seek(0)
+            while True:
+                try:
+                    msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
+                    break
+                except OSError:
+                    continue
+        else:
+            fcntl.flock(fh, fcntl.LOCK_EX)
         try:
             yield
         finally:
-            fcntl.flock(fh, fcntl.LOCK_UN)
+            if sys.platform == "win32":
+                fh.seek(0)
+                msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(fh, fcntl.LOCK_UN)
 
 
 class RollbackManager:
