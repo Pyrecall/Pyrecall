@@ -389,7 +389,9 @@ class TestPrimaryScoringMethod:
 
     def test_returns_method_when_all_scores_agree(self) -> None:
         scores = [
-            SkillScore(category="c", prompt="p", response="r", score=0.5, scoring_method="log_likelihood")
+            SkillScore(
+                category="c", prompt="p", response="r", score=0.5, scoring_method="log_likelihood"
+            )
             for _ in range(5)
         ]
         snap = SkillSnapshot(name="s", model_name="m", scores=scores)
@@ -397,7 +399,9 @@ class TestPrimaryScoringMethod:
 
     def test_returns_majority_method_when_mixed(self) -> None:
         scores = [
-            SkillScore(category="c", prompt="p", response="r", score=0.5, scoring_method="log_likelihood")
+            SkillScore(
+                category="c", prompt="p", response="r", score=0.5, scoring_method="log_likelihood"
+            )
             for _ in range(9)
         ] + [SkillScore(category="c", prompt="p", response="r", score=0.5, scoring_method="cosine")]
         snap = SkillSnapshot(name="s", model_name="m", scores=scores)

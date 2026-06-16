@@ -841,14 +841,30 @@ class TestMarkdownAndHTMLEscaping:
 class TestScoringMethodMismatchWarning:
     """#133: warning should use the dominant scoring method, not raw per-score sets."""
 
-    def test_no_warning_when_minority_legacy_scores_present(self, capsys: pytest.CaptureFixture) -> None:
+    def test_no_warning_when_minority_legacy_scores_present(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
         before_scores = [
-            SkillScore(category="c", prompt=f"p{i}", response="r", score=0.8, scoring_method="log_likelihood")
+            SkillScore(
+                category="c",
+                prompt=f"p{i}",
+                response="r",
+                score=0.8,
+                scoring_method="log_likelihood",
+            )
             for i in range(9)
-        ] + [SkillScore(category="c", prompt="p9", response="r", score=0.8, scoring_method="cosine")]
+        ] + [
+            SkillScore(category="c", prompt="p9", response="r", score=0.8, scoring_method="cosine")
+        ]
         before = SkillSnapshot(name="b", model_name="m", scores=before_scores)
         after_scores = [
-            SkillScore(category="c", prompt=f"p{i}", response="r", score=0.8, scoring_method="log_likelihood")
+            SkillScore(
+                category="c",
+                prompt=f"p{i}",
+                response="r",
+                score=0.8,
+                scoring_method="log_likelihood",
+            )
             for i in range(10)
         ]
         after = SkillSnapshot(name="a", model_name="m", scores=after_scores)
@@ -862,7 +878,9 @@ class TestScoringMethodMismatchWarning:
             name="b",
             model_name="m",
             scores=[
-                SkillScore(category="c", prompt="p", response="r", score=0.8, scoring_method="cosine")
+                SkillScore(
+                    category="c", prompt="p", response="r", score=0.8, scoring_method="cosine"
+                )
             ],
         )
         after = SkillSnapshot(
@@ -870,7 +888,11 @@ class TestScoringMethodMismatchWarning:
             model_name="m",
             scores=[
                 SkillScore(
-                    category="c", prompt="p", response="r", score=0.8, scoring_method="log_likelihood"
+                    category="c",
+                    prompt="p",
+                    response="r",
+                    score=0.8,
+                    scoring_method="log_likelihood",
                 )
             ],
         )
