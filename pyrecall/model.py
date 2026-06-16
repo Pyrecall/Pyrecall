@@ -450,9 +450,45 @@ class Model:
 
         dataset = load_dataset(fmt, data_files=str(data_file), split="train")
 
-        # Infer the text column — fall back to the first column if "text" is absent.
-        text_col = "text" if "text" in dataset.column_names else dataset.column_names[0]
+        # Infer the text column.
+        try:
+            is_empty = len(dataset) == 0
+        except (TypeError, AttributeError):
+            is_empty = False
 
+        if is_empty:
+            raise PyrecallError(f"Training data '{data_path}' is empty.")
+        if "text" in dataset.column_names:
+            text_col = "text"
+        else:
+            text_col = None
+
+            # Find the first column containing non-empty text data.
+            for col in dataset.column_names:
+                try:
+                    value = dataset[col][0]
+                except (IndexError, KeyError):
+                    continue
+
+                if isinstance(value, str) and value.strip():
+                    text_col = col
+                    break
+
+            if text_col is None:
+                raise PyrecallError(
+                    f"Could not find a usable text column in '{data_path}'.\n"
+                    f"Columns found: {dataset.column_names}.\n"
+                    "Rename your training text column to 'text', "
+                    "or ensure at least one column contains text."
+                )
+        # Make sure dataset actually has usable rows
+        try:
+            row_count = dataset.num_rows
+        except AttributeError:
+            row_count = len(dataset)
+
+        if row_count == 0:
+            raise PyrecallError(f"Training data '{data_path}' is empty.")
         # Collect the raw new texts (and categories if present) before mixing,
         # so we only add truly new examples to the replay buffer after training.
         new_texts: list[str] = dataset[text_col] if self.replay_buffer is not None else []
