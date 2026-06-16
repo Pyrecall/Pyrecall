@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from filelock import FileLock
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from filelock import FileLock
 
 from .snapshot import SkillSnapshot
 from .utils import get_logger, safe_model_name
