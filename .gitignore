@@ -78,3 +78,6 @@ dmypy.json
 # Model checkpoints and snapshots (these live in ~/.keel/ by default)
 # Uncomment if you want to track snapshots in the repo:
 # !snapshots/
+
+
+.pyrecall.json
