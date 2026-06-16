@@ -32,7 +32,16 @@ def _make_snapshot(
         )
         for i in range(n_scores)
     ]
-    return SkillSnapshot(name=name, model_name=model_name, created_at=_DT, scores=scores)
+    
+    return SkillSnapshot(
+        name=name,
+        model_name="test-model",
+        created_at=datetime.now(),
+        scores=[
+            SkillScore(category="math", prompt="dummy prompt", response="dummy response", score=0.9),
+            SkillScore(category="code", prompt="dummy prompt", response="dummy response", score=0.8),
+        ]
+    )
 
 
 # ── SkillScore ─────────────────────────────────────────────────────────────────
@@ -61,7 +70,7 @@ class TestSkillSnapshotConstruction:
     def test_positional_scores_arg_raises_type_error(self) -> None:
         score = SkillScore(category="safety", prompt="p", response="c", score=0.5)
         with pytest.raises(TypeError, match="created_at must be a datetime"):
-            SkillSnapshot("v1", "llama", [score])
+            SkillSnapshot(name="v1", model_name="llama", created_at=[score])  # type: ignore[arg-type]
 
     def test_keyword_args_construct_correctly(self) -> None:
         score = SkillScore(category="safety", prompt="p", response="c", score=0.5)
