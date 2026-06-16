@@ -32,15 +32,12 @@ def _make_snapshot(
         )
         for i in range(n_scores)
     ]
-    
+
     return SkillSnapshot(
         name=name,
-        model_name="test-model",
-        created_at=datetime.now(),
-        scores=[
-            SkillScore(category="math", prompt="dummy prompt", response="dummy response", score=0.9),
-            SkillScore(category="code", prompt="dummy prompt", response="dummy response", score=0.8),
-        ]
+        model_name=model_name,
+        created_at=_DT,
+        scores=scores,
     )
 
 
