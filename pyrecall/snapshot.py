@@ -78,6 +78,21 @@ class SkillSnapshot:
             return 0.0
         return sum(cat_scores.values()) / len(cat_scores)
 
+    def primary_scoring_method(self) -> str | None:
+        """Return the most common ``scoring_method`` across all scores.
+
+        Used (instead of comparing the full set of per-score methods) so a
+        snapshot loaded with a handful of legacy scores defaulting to
+        ``"cosine"`` (see :meth:`SkillScore.from_dict`) isn't flagged as
+        mismatched against a snapshot that is overwhelmingly one method.
+        """
+        if not self.scores:
+            return None
+        counts: dict[str, int] = {}
+        for s in self.scores:
+            counts[s.scoring_method] = counts.get(s.scoring_method, 0) + 1
+        return max(counts, key=lambda k: counts[k])
+
     # ── persistence ────────────────────────────────────────────────────────────
     def save(self, directory: Path, privacy: bool = False) -> None:
         """Write snapshot metadata to ``directory/snapshot.json``.

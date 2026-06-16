@@ -641,15 +641,15 @@ class ForgettingDetector:
                 "These categories are flagged as degraded.[/warning]"
             )
 
-        # Warn when snapshots used different scoring methods.
-        before_methods = {s.scoring_method for s in before.scores}
-        after_methods = {s.scoring_method for s in after.scores}
-        if before_methods != after_methods:
+        # Warn when snapshots used different (primary) scoring methods.
+        before_method = before.primary_scoring_method()
+        after_method = after.primary_scoring_method()
+        if before_method is not None and after_method is not None and before_method != after_method:
             from .utils import console as _c
 
             _c.print(
                 "[warning]⚠  Snapshots used different scoring methods "
-                f"({before_methods} vs {after_methods}). "
+                f"({before_method} vs {after_method}). "
                 "Scores are not directly comparable — retake one snapshot.[/warning]"
             )
 

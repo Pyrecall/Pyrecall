@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 from typing import TYPE_CHECKING
@@ -174,5 +175,14 @@ def compute_log_likelihood(
 
 
 def safe_model_name(model_name: str) -> str:
-    """Convert a HuggingFace model name to a filesystem-safe string."""
-    return model_name.replace("/", "--").replace("\\", "--").replace(":", "-")
+    """Convert a HuggingFace model name to a filesystem-safe string.
+
+    Long names are truncated and suffixed with a hash of the full original
+    name so directory components stay well under the 255-byte filesystem
+    limit even after parent path segments are added.
+    """
+    safe = model_name.replace("/", "--").replace("\\", "--").replace(":", "-")
+    if len(safe) > 200:
+        digest = hashlib.sha1(model_name.encode()).hexdigest()[:8]
+        safe = f"{safe[:180]}--{digest}"
+    return safe

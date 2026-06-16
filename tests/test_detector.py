@@ -836,3 +836,45 @@ class TestMarkdownAndHTMLEscaping:
         html = report.to_html()
         assert "<script>" not in html
         assert "&lt;script&gt;" in html
+
+
+class TestScoringMethodMismatchWarning:
+    """#133: warning should use the dominant scoring method, not raw per-score sets."""
+
+    def test_no_warning_when_minority_legacy_scores_present(self, capsys: pytest.CaptureFixture) -> None:
+        before_scores = [
+            SkillScore(category="c", prompt=f"p{i}", response="r", score=0.8, scoring_method="log_likelihood")
+            for i in range(9)
+        ] + [SkillScore(category="c", prompt="p9", response="r", score=0.8, scoring_method="cosine")]
+        before = SkillSnapshot(name="b", model_name="m", scores=before_scores)
+        after_scores = [
+            SkillScore(category="c", prompt=f"p{i}", response="r", score=0.8, scoring_method="log_likelihood")
+            for i in range(10)
+        ]
+        after = SkillSnapshot(name="a", model_name="m", scores=after_scores)
+
+        ForgettingDetector().compare(before, after)
+        captured = capsys.readouterr()
+        assert "different scoring methods" not in captured.out
+
+    def test_warning_when_dominant_methods_differ(self, capsys: pytest.CaptureFixture) -> None:
+        before = SkillSnapshot(
+            name="b",
+            model_name="m",
+            scores=[
+                SkillScore(category="c", prompt="p", response="r", score=0.8, scoring_method="cosine")
+            ],
+        )
+        after = SkillSnapshot(
+            name="a",
+            model_name="m",
+            scores=[
+                SkillScore(
+                    category="c", prompt="p", response="r", score=0.8, scoring_method="log_likelihood"
+                )
+            ],
+        )
+
+        ForgettingDetector().compare(before, after)
+        captured = capsys.readouterr()
+        assert "different scoring methods" in captured.out

@@ -211,3 +211,32 @@ class TestScoringMethodInSkillScore:
         d = {"category": "c", "prompt": "p", "response": "r", "score": 0.5}
         s = SkillScore.from_dict(d)
         assert s.scoring_method == "cosine"
+
+
+class TestSafeModelName:
+    """#134: long model names must be truncated to stay under filesystem limits."""
+
+    def test_short_name_unchanged_format(self) -> None:
+        from pyrecall.utils import safe_model_name
+
+        assert safe_model_name("meta-llama/Llama-3.2-1B") == "meta-llama--Llama-3.2-1B"
+
+    def test_long_name_is_truncated(self) -> None:
+        from pyrecall.utils import safe_model_name
+
+        long_name = "org/" + "x" * 300
+        result = safe_model_name(long_name)
+        assert len(result) <= 200
+
+    def test_long_name_is_deterministic(self) -> None:
+        from pyrecall.utils import safe_model_name
+
+        long_name = "org/" + "y" * 300
+        assert safe_model_name(long_name) == safe_model_name(long_name)
+
+    def test_different_long_names_produce_different_results(self) -> None:
+        from pyrecall.utils import safe_model_name
+
+        a = safe_model_name("org/" + "a" * 300)
+        b = safe_model_name("org/" + "b" * 300)
+        assert a != b
