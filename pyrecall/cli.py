@@ -664,6 +664,8 @@ def check(
 
         pyrecall check --watch --interval 30
     """
+    ts = ""
+    n = 0
     config = _read_config()
     if ci:
         json_output = True
@@ -674,7 +676,7 @@ def check(
 
     effective_threshold = (
         threshold if threshold is not None else config.get("forgetting_threshold", 0.10)
-    )   
+    )
     if not 0.0 < effective_threshold <= 1.0:
         if ci:
             typer.echo(
