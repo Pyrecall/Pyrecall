@@ -575,10 +575,7 @@ def snapshot(
 def check(
     ci: Annotated[
         bool,
-        typer.Option(
-            "--ci",
-            help="Machine-readable CI mode. Emits JSON and disables Rich output."
-        ),
+        typer.Option("--ci", help="Machine-readable CI mode. Emits JSON and disables Rich output."),
     ] = False,
     before: Annotated[
         str | None,
@@ -679,9 +676,7 @@ def check(
     )
     if not 0.0 < effective_threshold <= 1.0:
         if ci:
-            typer.echo(
-                f"Error: threshold must be between 0 and 1, got {effective_threshold}."
-            )
+            typer.echo(f"Error: threshold must be between 0 and 1, got {effective_threshold}.")
         else:
             console.print(
                 f"[red]Error:[/red] threshold must be between 0 and 1, got {effective_threshold}."
@@ -719,7 +714,9 @@ def check(
                 if ci:
                     typer.echo("Error: Provide both --before and --after, or neither.")
                 else:
-                    console.print("[red]Error:[/red] Provide both --before and --after, or neither.")
+                    console.print(
+                        "[red]Error:[/red] Provide both --before and --after, or neither."
+                    )
                 return 1
             try:
                 snap_before = mgr.load_snapshot(before)
@@ -775,9 +772,7 @@ def check(
     if ci:
         typer.echo(f"{ts} Waiting for a second snapshot ({n}/2)")
     else:
-        console.print(
-            f"[dim][{ts}][/dim] Waiting for a second snapshot ({n}/2)…"
-        )
+        console.print(f"[dim][{ts}][/dim] Waiting for a second snapshot ({n}/2)…")
     last_mtime: float | None = None
     last_exit_code = 0
 
@@ -793,7 +788,9 @@ def check(
                 if ci:
                     typer.echo(f"watch: could not stat snapshot directory: {exc}")
                 else:
-                    console.print(f"[dim][yellow]watch: could not stat snapshot directory: {exc}[/yellow][/dim]")
+                    console.print(
+                        f"[dim][yellow]watch: could not stat snapshot directory: {exc}[/yellow][/dim]"
+                    )
                 current_mtime = 0.0
 
             if current_mtime != last_mtime:
@@ -821,7 +818,9 @@ def check(
                             if ci:
                                 typer.echo(f"Snapshot '{before}' not found.")
                             else:
-                                console.print(f"[dim][{ts}][/dim] [red]Snapshot '{before}' not found.[/red]")
+                                console.print(
+                                    f"[dim][{ts}][/dim] [red]Snapshot '{before}' not found.[/red]"
+                                )
                             last_exit_code = 1
                             _failed = True
 
@@ -832,7 +831,9 @@ def check(
                             if ci:
                                 typer.echo(f"Snapshot '{after}' not found.")
                             else:
-                                console.print( f"[dim][{ts}][/dim] [red]Snapshot '{after}' not found.[/red]")
+                                console.print(
+                                    f"[dim][{ts}][/dim] [red]Snapshot '{after}' not found.[/red]"
+                                )
                             last_exit_code = 1
                             _failed = True
 
@@ -849,13 +850,17 @@ def check(
                         if ci:
                             typer.echo(f"{ts} DEGRADED")
                         else:
-                            console.print(f"[dim][{ts}][/dim] [red]✗ DEGRADED[/red] — {snap_b.name} → {snap_a.name} | {cats}")
+                            console.print(
+                                f"[dim][{ts}][/dim] [red]✗ DEGRADED[/red] — {snap_b.name} → {snap_a.name} | {cats}"
+                            )
                         last_exit_code = 2
                     else:
                         if ci:
                             typer.echo(f"{ts} HEALTHY")
                         else:
-                            console.print( f"[dim][{ts}][/dim] [green]✓ healthy[/green] — {snap_b.name} → {snap_a.name} | {n} snapshots")
+                            console.print(
+                                f"[dim][{ts}][/dim] [green]✓ healthy[/green] — {snap_b.name} → {snap_a.name} | {n} snapshots"
+                            )
                         last_exit_code = 0
 
             time.sleep(interval)
