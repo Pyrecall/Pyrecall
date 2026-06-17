@@ -94,13 +94,17 @@ class SkillSnapshot:
         return max(counts, key=lambda k: counts[k])
 
     # ── persistence ────────────────────────────────────────────────────────────
-    def save(self, directory: Path, privacy: bool = False) -> None:
+    def save(self, directory: Path, privacy: bool = False, passphrase: str | None = None) -> None:
         """Write snapshot metadata to ``directory/snapshot.json``.
 
         The file is always named ``snapshot.json`` inside *directory* —
         no subdirectory is created from the snapshot name.  Pass the
         snapshot's own directory (e.g. ``base / snapshot.name``) if you
         want the canonical on-disk layout used by :class:`RollbackManager`.
+
+        When *privacy* is ``True`` a *passphrase* must be supplied.  The key
+        is derived from the passphrase via PBKDF2-HMAC-SHA256; only the salt
+        (safe to store publicly) is written to disk — the key itself never is.
         """
         directory.mkdir(parents=True, exist_ok=True)
         if not privacy:
@@ -114,12 +118,18 @@ class SkillSnapshot:
                 "adapter_compression": self.adapter_compression,
             }
         else:
+            if not passphrase:
+                raise ValueError(
+                    "privacy=True requires a passphrase. "
+                    "Pass passphrase='your-secret' to snapshot.save()."
+                )
             from .encrypt import Encryptor
 
-            encryptor = Encryptor()
+            encryptor = Encryptor.from_passphrase(passphrase)
+            import base64
             data = {
                 "encrypted": True,
-                "key": encryptor.key.decode(),
+                "salt": base64.b64encode(encryptor.salt).decode(),
                 "name": encryptor.encrypt(self.name),
                 "model_name": encryptor.encrypt(self.model_name),
                 "created_at": encryptor.encrypt(self.created_at.isoformat()),
@@ -132,8 +142,13 @@ class SkillSnapshot:
         (directory / "snapshot.json").write_text(json.dumps(data, indent=2))
 
     @classmethod
-    def load(cls, directory: Path, privacy: bool = False) -> SkillSnapshot:
-        """Load a snapshot from *directory*/snapshot.json."""
+    def load(cls, directory: Path, privacy: bool = False, passphrase: str | None = None) -> "SkillSnapshot":
+        """Load a snapshot from *directory*/snapshot.json.
+
+        When *privacy* is ``True`` the same *passphrase* used during
+        :meth:`save` must be supplied so the key can be re-derived from the
+        stored salt.
+        """
         snapshot_file = directory / "snapshot.json"
         if not snapshot_file.exists():
             raise FileNotFoundError(
@@ -150,7 +165,7 @@ class SkillSnapshot:
         if is_encrypted and not privacy:
             raise ValueError(
                 f"Snapshot '{snapshot_file}' is encrypted but privacy=False was passed. "
-                "Load it with privacy=True and supply the key."
+                "Load it with privacy=True and supply the passphrase."
             )
         if privacy and not is_encrypted:
             raise ValueError(
@@ -158,9 +173,16 @@ class SkillSnapshot:
                 "Load it with privacy=False."
             )
         if privacy:
+            if not passphrase:
+                raise ValueError(
+                    "privacy=True requires a passphrase. "
+                    "Pass the same passphrase used when saving the snapshot."
+                )
+            import base64
             from .encrypt import Encryptor
 
-            encryptor = Encryptor(key=data["key"].encode())
+            salt = base64.b64decode(data["salt"])
+            encryptor = Encryptor.from_passphrase(passphrase, salt=salt)
             return cls(
                 name=encryptor.decrypt(data["name"]),
                 model_name=encryptor.decrypt(data["model_name"]),
