@@ -265,9 +265,7 @@ class Model:
                 raise PyrecallError(
                     f"Access to '{model_name}' is restricted on Hugging Face.\n\n"
                     "To fix this:\n"
-                    "  1. Accept the model license at https://huggingface.co/"
-                    + model_name
-                    + "\n"
+                    "  1. Accept the model license at https://huggingface.co/" + model_name + "\n"
                     "  2. Log in:  huggingface-cli login\n"
                     "     or set:  export HF_TOKEN=<your_token>"
                 ) from exc
@@ -314,9 +312,7 @@ class Model:
                 raise PyrecallError(
                     f"Access to '{model_name}' is restricted on Hugging Face.\n\n"
                     "To fix this:\n"
-                    "  1. Accept the model license at https://huggingface.co/"
-                    + model_name
-                    + "\n"
+                    "  1. Accept the model license at https://huggingface.co/" + model_name + "\n"
                     "  2. Log in:  huggingface-cli login\n"
                     "     or set:  export HF_TOKEN=<your_token>"
                 ) from exc

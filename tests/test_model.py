@@ -429,9 +429,14 @@ class TestLearnDataFormats:
 
 class TestQLoRA:
     def test_qlora_strategy_accepted(self, tmp_snapshot_dir: Path) -> None:
+        import sys
+        import types
+
         mock_tok = _make_mock_tokenizer()
         mock_base = _make_mock_base_model()
         mock_peft = _make_mock_peft_model()
+        fake_bnb = types.ModuleType("bitsandbytes")
+        fake_bnb.__version__ = "0.41.0"
 
         with (
             patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
@@ -439,6 +444,7 @@ class TestQLoRA:
             patch("pyrecall.model.get_peft_model", return_value=mock_peft),
             patch("pyrecall.model.prepare_model_for_kbit_training", return_value=mock_base),
             patch("pyrecall.model.BitsAndBytesConfig") as mock_bnb,
+            patch.dict(sys.modules, {"bitsandbytes": fake_bnb}),
         ):
             from pyrecall.model import Model
 
@@ -474,9 +480,14 @@ class TestQLoRA:
 
     def test_qlora_strategy_alone_enables_4bit(self, tmp_snapshot_dir: Path) -> None:
         """strategy='qlora' with no explicit bit flags must default to load_in_4bit=True."""
+        import sys
+        import types
+
         mock_tok = _make_mock_tokenizer()
         mock_base = _make_mock_base_model()
         mock_peft = _make_mock_peft_model()
+        fake_bnb = types.ModuleType("bitsandbytes")
+        fake_bnb.__version__ = "0.41.0"
 
         with (
             patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
@@ -484,6 +495,7 @@ class TestQLoRA:
             patch("pyrecall.model.get_peft_model", return_value=mock_peft),
             patch("pyrecall.model.prepare_model_for_kbit_training", return_value=mock_base),
             patch("pyrecall.model.BitsAndBytesConfig") as mock_bnb,
+            patch.dict(sys.modules, {"bitsandbytes": fake_bnb}),
         ):
             from pyrecall.model import Model
 
@@ -496,9 +508,14 @@ class TestQLoRA:
 
     def test_qlora_strategy_with_8bit_uses_8bit(self, tmp_snapshot_dir: Path) -> None:
         """strategy='qlora' + load_in_8bit=True should not override to 4-bit."""
+        import sys
+        import types
+
         mock_tok = _make_mock_tokenizer()
         mock_base = _make_mock_base_model()
         mock_peft = _make_mock_peft_model()
+        fake_bnb = types.ModuleType("bitsandbytes")
+        fake_bnb.__version__ = "0.41.0"
 
         with (
             patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
@@ -506,6 +523,7 @@ class TestQLoRA:
             patch("pyrecall.model.get_peft_model", return_value=mock_peft),
             patch("pyrecall.model.prepare_model_for_kbit_training", return_value=mock_base),
             patch("pyrecall.model.BitsAndBytesConfig") as mock_bnb,
+            patch.dict(sys.modules, {"bitsandbytes": fake_bnb}),
         ):
             from pyrecall.model import Model
 
