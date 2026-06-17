@@ -573,6 +573,13 @@ def snapshot(
 
 @app.command()
 def check(
+    ci: Annotated[
+        bool,
+        typer.Option(
+            "--ci",
+            help="Machine-readable CI mode. Emits JSON and disables Rich output."
+        ),
+    ] = False,
     before: Annotated[
         str | None,
         typer.Option("--before", help="Snapshot name to use as baseline"),
@@ -658,17 +665,25 @@ def check(
         pyrecall check --watch --interval 30
     """
     config = _read_config()
+    if ci:
+        json_output = True
+        verbose = False
     mgr = _build_rollback_manager(config)
 
     from pyrecall.detector import ForgettingDetector
 
     effective_threshold = (
         threshold if threshold is not None else config.get("forgetting_threshold", 0.10)
-    )
+    )   
     if not 0.0 < effective_threshold <= 1.0:
-        console.print(
-            f"[red]Error:[/red] threshold must be between 0 and 1, got {effective_threshold}."
-        )
+        if ci:
+            typer.echo(
+                f"Error: threshold must be between 0 and 1, got {effective_threshold}."
+            )
+        else:
+            console.print(
+                f"[red]Error:[/red] threshold must be between 0 and 1, got {effective_threshold}."
+            )
         raise typer.Exit(1)
     effective_cat_thresholds = {
         **config.get("category_thresholds", {}),
@@ -682,10 +697,16 @@ def check(
         """Run a single check pass. Returns 0 (healthy) or 2 (forgetting detected)."""
         all_snaps = mgr.list_snapshots()
         if len(all_snaps) < 2:
-            console.print(
-                "[red]Error:[/red] Need at least two snapshots to run a forgetting check.\n"
-                "Run [bold]pyrecall snapshot <name>[/bold] to create snapshots."
-            )
+            if ci:
+                typer.echo(
+                    "Error: Need at least two snapshots to run a forgetting check.\n"
+                    "Run pyrecall snapshot <name> to create snapshots."
+                )
+            else:
+                console.print(
+                    "[red]Error:[/red] Need at least two snapshots to run a forgetting check.\n"
+                    "Run [bold]pyrecall snapshot <name>[/bold] to create snapshots."
+                )
             return 1
 
         if before is None and after is None:
@@ -693,17 +714,26 @@ def check(
             snap_after = all_snaps[-1]
         else:
             if before is None or after is None:
-                console.print("[red]Error:[/red] Provide both --before and --after, or neither.")
+                if ci:
+                    typer.echo("Error: Provide both --before and --after, or neither.")
+                else:
+                    console.print("[red]Error:[/red] Provide both --before and --after, or neither.")
                 return 1
             try:
                 snap_before = mgr.load_snapshot(before)
             except FileNotFoundError:
-                console.print(f"[red]Error:[/red] Snapshot '{before}' not found.")
+                if ci:
+                    typer.echo(f"Error: Snapshot '{before}' not found.")
+                else:
+                    console.print(f"[red]Error:[/red] Snapshot '{before}' not found.")
                 return 1
             try:
                 snap_after = mgr.load_snapshot(after)
             except FileNotFoundError:
-                console.print(f"[red]Error:[/red] Snapshot '{after}' not found.")
+                if ci:
+                    typer.echo(f"Error: Snapshot '{after}' not found.")
+                else:
+                    console.print(f"[red]Error:[/red] Snapshot '{after}' not found.")
                 return 1
 
         report = detector.compare(snap_before, snap_after)
@@ -716,9 +746,15 @@ def check(
         if output:
             try:
                 report.save(output)
-                console.print(f"[dim]Report saved to {output}[/dim]")
+                if ci:
+                    typer.echo(f"Report saved to {output}")
+                else:
+                    console.print(f"[dim]Report saved to {output}[/dim]")
             except ValueError as exc:
-                console.print(f"[red]Error:[/red] {exc}")
+                if ci:
+                    typer.echo(f"Error: {exc}")
+                else:
+                    console.print(f"[red]Error:[/red] {exc}")
                 return 1
 
         return 2 if report.degraded_skills else 0
@@ -728,12 +764,18 @@ def check(
 
     # ── watch mode ─────────────────────────────────────────────────────────────
     if interval < 1:
-        console.print("[red]Error:[/red] --interval must be at least 1 second.")
+        if ci:
+            typer.echo("Error: --interval must be at least 1 second.")
+        else:
+            console.print("[red]Error:[/red] --interval must be at least 1 second.")
         raise typer.Exit(1)
 
-    console.print(
-        f"[dim]Watching for snapshot changes every {interval}s. Press Ctrl-C to stop.[/dim]\n"
-    )
+    if ci:
+        typer.echo(f"{ts} Waiting for a second snapshot ({n}/2)")
+    else:
+        console.print(
+            f"[dim][{ts}][/dim] Waiting for a second snapshot ({n}/2)…"
+        )
     last_mtime: float | None = None
     last_exit_code = 0
 
@@ -746,9 +788,10 @@ def check(
                     default=0.0,
                 )
             except OSError as exc:
-                console.print(
-                    f"[dim][yellow]watch: could not stat snapshot directory: {exc}[/yellow][/dim]"
-                )
+                if ci:
+                    typer.echo(f"watch: could not stat snapshot directory: {exc}")
+                else:
+                    console.print(f"[dim][yellow]watch: could not stat snapshot directory: {exc}[/yellow][/dim]")
                 current_mtime = 0.0
 
             if current_mtime != last_mtime:
@@ -758,7 +801,10 @@ def check(
                 n = len(all_snaps)
 
                 if n < 2:
-                    console.print(f"[dim][{ts}][/dim] Waiting for a second snapshot ({n}/2)…")
+                    if ci:
+                        typer.echo(f"{ts} Waiting for a second snapshot ({n}/2)")
+                    else:
+                        console.print(f"[dim][{ts}][/dim] Waiting for a second snapshot ({n}/2)…")
                     last_exit_code = 0
                 else:
                     # Default to the last two; override if named snapshots were given.
@@ -770,9 +816,10 @@ def check(
                         try:
                             snap_b = mgr.load_snapshot(before)
                         except FileNotFoundError:
-                            console.print(
-                                f"[dim][{ts}][/dim] [red]Snapshot '{before}' not found.[/red]"
-                            )
+                            if ci:
+                                typer.echo(f"Snapshot '{before}' not found.")
+                            else:
+                                console.print(f"[dim][{ts}][/dim] [red]Snapshot '{before}' not found.[/red]")
                             last_exit_code = 1
                             _failed = True
 
@@ -780,9 +827,10 @@ def check(
                         try:
                             snap_a = mgr.load_snapshot(after)
                         except FileNotFoundError:
-                            console.print(
-                                f"[dim][{ts}][/dim] [red]Snapshot '{after}' not found.[/red]"
-                            )
+                            if ci:
+                                typer.echo(f"Snapshot '{after}' not found.")
+                            else:
+                                console.print( f"[dim][{ts}][/dim] [red]Snapshot '{after}' not found.[/red]")
                             last_exit_code = 1
                             _failed = True
 
@@ -796,20 +844,25 @@ def check(
                             f"{c} ({next((x.severity for x in report.comparisons if x.category == c), 'UNKNOWN')})"
                             for c in report.degraded_skills
                         )
-                        console.print(
-                            f"[dim][{ts}][/dim] [red]✗ DEGRADED[/red] — {snap_b.name} → {snap_a.name} | {cats}"
-                        )
+                        if ci:
+                            typer.echo(f"{ts} DEGRADED")
+                        else:
+                            console.print(f"[dim][{ts}][/dim] [red]✗ DEGRADED[/red] — {snap_b.name} → {snap_a.name} | {cats}")
                         last_exit_code = 2
                     else:
-                        console.print(
-                            f"[dim][{ts}][/dim] [green]✓ healthy[/green] — {snap_b.name} → {snap_a.name} | {n} snapshots"
-                        )
+                        if ci:
+                            typer.echo(f"{ts} HEALTHY")
+                        else:
+                            console.print( f"[dim][{ts}][/dim] [green]✓ healthy[/green] — {snap_b.name} → {snap_a.name} | {n} snapshots")
                         last_exit_code = 0
 
             time.sleep(interval)
 
     except KeyboardInterrupt:
-        console.print("\n[dim]Watch stopped.[/dim]")
+        if ci:
+            typer.echo("Watch stopped.")
+        else:
+            console.print("\n[dim]Watch stopped.[/dim]")
 
     raise typer.Exit(last_exit_code)
 
