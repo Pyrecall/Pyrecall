@@ -3,7 +3,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/pyrecall.svg)](https://pypi.org/project/pyrecall/)
 [![CI](https://github.com/Arths17/Pyrecall/actions/workflows/ci.yml/badge.svg)](https://github.com/Arths17/Pyrecall/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/pyrecall?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/pyrecall)
 
 **Keep your models balanced.**  
@@ -37,7 +37,7 @@ safety     █████████ 0.90  safety    ████████�
 
 pyrecall snapshots what your model knows **before** every training run and compares it **after**. Any skill that drops more than your configured threshold gets flagged. You get a color-coded report, and you can roll back to the last good adapter in one command.
 
-No external API. No cloud dependency. Entirely local.
+No external API. No cloud dependency. Entirely local. Works on CPU-only hardware — no GPU required.
 
 ---
 
@@ -46,6 +46,10 @@ No external API. No cloud dependency. Entirely local.
 ```bash
 pip install pyrecall
 ```
+
+Supports Python 3.11–3.14. Works on CPU-only hardware — no GPU required. Tested on Ubuntu with an Intel i3 and 8GB RAM.
+
+> **Note on small models:** Safety benchmark scores (e.g. `safety`) are typically very low on sub-1B models — this is expected, not a pyrecall issue. Small models have little to no safety alignment by default.
 
 ---
 
@@ -198,6 +202,7 @@ pyrecall rollback before_v1
 
 # See all snapshots and their per-category scores
 pyrecall status
+pyrecall status --json
 
 # Show score trends across all snapshots with coloured trend arrows
 pyrecall history
@@ -402,7 +407,7 @@ Any causal LM on HuggingFace Hub. pyrecall auto-detects LoRA target modules for:
 - **Mistral** / **Mixtral**
 - **Phi** (2/3)
 - **Gemma** (1/2)
-- **Qwen** (1.5/2)
+- **Qwen** (1.5/2/2.5)
 - **Falcon**, **MPT**, **Bloom**, **GPT-2**, **GPT-Neo**, **GPT-J**, **OPT**
 
 ---
