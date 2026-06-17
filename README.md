@@ -15,7 +15,7 @@ Fine-tune on new data and your model quietly loses what it already knew — codi
 ## Install
 
 ```bash
-pip install pyrecall   # Python 3.11–3.14, CPU-only hardware supported
+pip install pyrecall   # Python 3.11–3.14 · CUDA, MPS, and CPU
 ```
 
 ---

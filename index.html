@@ -102,12 +102,12 @@
 
     .nav-links a {
       font-size: 14px;
-      color: var(--text-muted);
+      color: var(--text);
       transition: color 150ms;
     }
 
     .nav-links a:hover {
-      color: var(--text);
+      color: var(--accent);
     }
 
     .nav-copy {
@@ -554,6 +554,10 @@
       }
 
       .nav-links {
+        gap: 16px;
+      }
+
+      .nav-links li:not(:first-child) {
         display: none;
       }
 
