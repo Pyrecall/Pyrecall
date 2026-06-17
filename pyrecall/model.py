@@ -249,8 +249,12 @@ class Model:
         )
         self._snapshot_compression = snapshot_compression
         self._gradient_checkpointing = gradient_checkpointing
+        # Replay buffer lives under ~/.pyrecall/replay/ by default.
+        # When snapshot_dir is overridden (e.g. in tests), put replay alongside it
+        # so tests stay isolated, but keep it separate from the snapshots tree.
+        replay_base = snapshot_dir.parent / "replay" if snapshot_dir is not None else None
         self.replay_buffer: ReplayBuffer | None = (
-            ReplayBuffer(model_name=model_name, max_size=replay_buffer_size, base_dir=snapshot_dir)
+            ReplayBuffer(model_name=model_name, max_size=replay_buffer_size, base_dir=replay_base)
             if replay_buffer_size > 0
             else None
         )

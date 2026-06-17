@@ -340,7 +340,15 @@ class ForgettingReport:
         # Build comparison table rows.
         table_rows: list[str] = []
         for c in self.comparisons:
-            delta_str = f"{'+' if c.delta >= 0 else ''}{c.delta:.3f}"
+            nan_score = math.isnan(c.score_before) or math.isnan(c.score_after)
+            before_cell = "n/a" if math.isnan(c.score_before) else f"{c.score_before:.3f}"
+            after_cell = "n/a" if math.isnan(c.score_after) else f"{c.score_after:.3f}"
+            delta_str = (
+                "n/a"
+                if nan_score or math.isnan(c.delta)
+                else f"{'+' if c.delta >= 0 else ''}{c.delta:.3f}"
+            )
+            cohend_cell = "n/a" if nan_score or math.isnan(c.cohen_d) else f"{c.cohen_d:.3f}"
             sev_col = severity_colours.get(c.severity, "#0969da")
             forgotten = (c.score_before - c.score_after) > self._threshold_for(c.category)
             status_cell = (
@@ -351,10 +359,10 @@ class ForgettingReport:
             table_rows.append(
                 f"<tr>"
                 f"<td>{_html.escape(c.category)}</td>"
-                f"<td>{c.score_before:.3f}</td>"
-                f"<td>{c.score_after:.3f}</td>"
+                f"<td>{before_cell}</td>"
+                f"<td>{after_cell}</td>"
                 f'<td style="color:{sev_col}">{delta_str}</td>'
-                f"<td>{c.cohen_d:.3f}</td>"
+                f"<td>{cohend_cell}</td>"
                 f'<td style="color:{sev_col};font-weight:600">{c.severity}</td>'
                 f"<td>{status_cell}</td>"
                 f"</tr>"
