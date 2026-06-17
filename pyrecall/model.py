@@ -257,7 +257,21 @@ class Model:
 
         console.print(f"[info]Loading {model_name} on {self.device}…[/info]")
 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        except OSError as exc:
+            msg = str(exc)
+            if "401" in msg or "gated" in msg.lower() or "access" in msg.lower():
+                raise PyrecallError(
+                    f"Access to '{model_name}' is restricted on Hugging Face.\n\n"
+                    "To fix this:\n"
+                    "  1. Accept the model license at https://huggingface.co/"
+                    + model_name
+                    + "\n"
+                    "  2. Log in:  huggingface-cli login\n"
+                    "     or set:  export HF_TOKEN=<your_token>"
+                ) from exc
+            raise
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
@@ -271,6 +285,13 @@ class Model:
         if load_in_4bit or load_in_8bit:
             if load_in_4bit and load_in_8bit:
                 raise PyrecallError("Cannot use load_in_4bit and load_in_8bit together.")
+            try:
+                from bitsandbytes import __version__  # noqa: F401
+            except ImportError as exc:
+                raise PyrecallError(
+                    "4-bit/8-bit quantization requires bitsandbytes. "
+                    "Install it with: pip install pyrecall[quantization]"
+                ) from exc
             bnb_config = BitsAndBytesConfig(
                 load_in_4bit=load_in_4bit,
                 load_in_8bit=load_in_8bit,
@@ -280,12 +301,26 @@ class Model:
             )
 
         dtype = torch.float16 if self.device != "cpu" else torch.float32
-        base = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            dtype=dtype,
-            quantization_config=bnb_config,
-            device_map="auto" if bnb_config else None,
-        )
+        try:
+            base = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                dtype=dtype,
+                quantization_config=bnb_config,
+                device_map="auto" if bnb_config else None,
+            )
+        except OSError as exc:
+            msg = str(exc)
+            if "401" in msg or "gated" in msg.lower() or "access" in msg.lower():
+                raise PyrecallError(
+                    f"Access to '{model_name}' is restricted on Hugging Face.\n\n"
+                    "To fix this:\n"
+                    "  1. Accept the model license at https://huggingface.co/"
+                    + model_name
+                    + "\n"
+                    "  2. Log in:  huggingface-cli login\n"
+                    "     or set:  export HF_TOKEN=<your_token>"
+                ) from exc
+            raise
 
         if bnb_config:
             base = prepare_model_for_kbit_training(base)

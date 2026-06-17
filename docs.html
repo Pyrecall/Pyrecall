@@ -1725,6 +1725,15 @@
 <span class="tx">mgr.</span><span class="fn">load_snapshot</span><span class="tx">(</span><span class="str">"before_v1"</span><span class="tx">)</span>  <span class="cm"># SkillSnapshot</span>
 <span class="tx">mgr.</span><span class="fn">delete_snapshot</span><span class="tx">(</span><span class="str">"before_v1"</span><span class="tx">)</span></pre>
         </div>
+        <p><strong>Note on <code>SkillSnapshot.save(directory)</code>:</strong> The method writes <code>snapshot.json</code> directly into the path you give it — it does <em>not</em> create a subdirectory named after the snapshot. Always pass the snapshot's own directory:</p>
+        <div class="code-block">
+<pre><span class="cm"># Correct — pass the snapshot's own directory</span>
+<span class="tx">snap_dir</span> <span class="tx">=</span> <span class="tx">base_dir</span> <span class="tx">/</span> <span class="tx">snapshot.name</span>
+<span class="tx">snapshot.</span><span class="fn">save</span><span class="tx">(</span><span class="tx">snap_dir</span><span class="tx">)</span>          <span class="cm"># writes snap_dir/snapshot.json</span>
+
+<span class="cm"># Wrong — creates base_dir/snapshot.json, not base_dir/&lt;name&gt;/snapshot.json</span>
+<span class="tx">snapshot.</span><span class="fn">save</span><span class="tx">(</span><span class="tx">base_dir</span><span class="tx">)</span>           <span class="cm"># ✗</span></pre>
+        </div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Compression</th><th>Requirement</th></tr></thead>
