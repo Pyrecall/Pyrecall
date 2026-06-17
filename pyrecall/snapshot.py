@@ -142,7 +142,7 @@ class SkillSnapshot:
         (directory / "snapshot.json").write_text(json.dumps(data, indent=2))
 
     @classmethod
-    def load(cls, directory: Path, privacy: bool = False, passphrase: str | None = None) -> "SkillSnapshot":
+    def load(cls, directory: Path, privacy: bool = False, passphrase: str | None = None) -> SkillSnapshot:
         """Load a snapshot from *directory*/snapshot.json.
 
         When *privacy* is ``True`` the same *passphrase* used during
@@ -179,6 +179,7 @@ class SkillSnapshot:
                     "Pass the same passphrase used when saving the snapshot."
                 )
             import base64
+
             from .encrypt import Encryptor
 
             salt = base64.b64decode(data["salt"])

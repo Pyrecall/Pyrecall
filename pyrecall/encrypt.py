@@ -21,6 +21,8 @@ class Encryptor:
     supported for internal use.
     """
 
+    salt: bytes  # set by from_passphrase; not present on direct __init__
+
     def __init__(self, key: bytes) -> None:
         try:
             from cryptography.fernet import Fernet
@@ -36,7 +38,7 @@ class Encryptor:
         self._fernet = Fernet(self.key)
 
     @classmethod
-    def from_passphrase(cls, passphrase: str, salt: bytes | None = None) -> "Encryptor":
+    def from_passphrase(cls, passphrase: str, salt: bytes | None = None) -> Encryptor:
         """Derive a Fernet key from *passphrase* and return a ready Encryptor.
 
         If *salt* is None a fresh 16-byte salt is generated; retrieve it via
