@@ -621,7 +621,13 @@
           <li><a href="#cli-check">pyrecall check</a></li>
           <li><a href="#cli-diff">pyrecall diff</a></li>
           <li><a href="#cli-rollback">pyrecall rollback</a></li>
+          <li><a href="#cli-learn">pyrecall learn</a></li>
           <li><a href="#cli-status">pyrecall status</a></li>
+          <li><a href="#cli-history">pyrecall history</a></li>
+          <li><a href="#cli-compare">pyrecall compare</a></li>
+          <li><a href="#cli-export">pyrecall export</a></li>
+          <li><a href="#cli-replay">pyrecall replay</a></li>
+          <li><a href="#cli-benchmark">pyrecall benchmark</a></li>
           <li><a href="#cli-delete">pyrecall delete</a></li>
         </ul>
       </div>
@@ -648,6 +654,11 @@
         <ul class="sidebar-nav">
           <li><a href="#ci-integration">CI Integration</a></li>
           <li><a href="#live-learning-guide">Live Learning</a></li>
+          <li><a href="#replay-buffer">Replay Buffer</a></li>
+          <li><a href="#experiment-trackers">Experiment Trackers</a></li>
+          <li><a href="#custom-benchmarks">Custom Benchmarks</a></li>
+          <li><a href="#category-thresholds">Per-Category Thresholds</a></li>
+          <li><a href="#rollback-manager">RollbackManager API</a></li>
           <li><a href="#contributing">Contributing</a></li>
         </ul>
       </div>
@@ -1131,6 +1142,30 @@
           </table>
         </div>
 
+        <!-- learn -->
+        <h3 id="cli-learn">pyrecall learn &lt;data&gt;</h3>
+        <p>Fine-tune the configured model on a local dataset. Accepts JSONL, CSV, or Parquet. Each row must have a <code>text</code> column.</p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall learn train.jsonl --epochs 5</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall learn train.jsonl --snapshot-before before_v1 --snapshot-after after_v1</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall learn train.jsonl --snapshot-after nightly --no-update-baseline</span></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td>--epochs, -e</td><td>3</td><td>Number of full passes over the training data.</td></tr>
+              <tr><td>--batch-size</td><td><em>from config</em></td><td>Override the batch size set at <code>init</code>.</td></tr>
+              <tr><td>--learning-rate</td><td><em>from config</em></td><td>Override the learning rate set at <code>init</code>.</td></tr>
+              <tr><td>--max-length</td><td><em>from config</em></td><td>Override the tokenisation truncation length.</td></tr>
+              <tr><td>--resume</td><td>false</td><td>Resume from the latest checkpoint if a previous run was interrupted.</td></tr>
+              <tr><td>--snapshot-before</td><td>—</td><td>Take a named snapshot immediately <strong>before</strong> training begins and set it as the baseline.</td></tr>
+              <tr><td>--snapshot-after</td><td>—</td><td>Take a named snapshot immediately <strong>after</strong> training completes and set it as the new baseline.</td></tr>
+              <tr><td>--no-update-baseline</td><td>false</td><td>Take snapshots without overwriting <code>baseline_snapshot</code> in <code>.pyrecall.json</code> — keeps your stable CI reference point intact.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
         <!-- snapshot -->
         <h3 id="cli-snapshot">pyrecall snapshot &lt;name&gt;</h3>
         <p>
@@ -1211,9 +1246,74 @@
 
         <!-- status -->
         <h3 id="cli-status">pyrecall status</h3>
-        <p>Show all saved snapshots and their per-category skill scores in a table. The current baseline is marked with ★.</p>
+        <p>Show all saved snapshots and their per-category skill scores in a table. The current baseline is marked with ★. Use <code>--json</code> for machine-readable output.</p>
         <div class="cli-block">
           <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall status</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall status --json | jq '.snapshots[].overall'</span></div>
+        </div>
+        <p>JSON output shape:</p>
+        <div class="code-block">
+<pre><span class="tx">{</span>
+  <span class="str">"model_name"</span><span class="tx">: </span><span class="str">"meta-llama/Llama-3.2-1B"</span><span class="tx">,</span>
+  <span class="str">"baseline_snapshot"</span><span class="tx">: </span><span class="str">"before_v1"</span><span class="tx">,</span>
+  <span class="str">"snapshots"</span><span class="tx">: [</span>
+    <span class="tx">{</span>
+      <span class="str">"name"</span><span class="tx">: </span><span class="str">"before_v1"</span><span class="tx">,</span>
+      <span class="str">"created_at"</span><span class="tx">: </span><span class="str">"2026-06-16T12:00:00"</span><span class="tx">,</span>
+      <span class="str">"overall"</span><span class="tx">: </span><span class="num">0.238</span><span class="tx">,</span>
+      <span class="str">"scores"</span><span class="tx">: { </span><span class="str">"coding"</span><span class="tx">: </span><span class="num">0.314</span><span class="tx">, </span><span class="str">"safety"</span><span class="tx">: </span><span class="num">0.066</span><span class="tx">, </span><span class="str">"..."</span><span class="tx">: </span><span class="str">"..."</span> <span class="tx">},</span>
+      <span class="str">"adapter_ok"</span><span class="tx">: </span><span class="kw">true</span><span class="tx">,</span>
+      <span class="str">"is_baseline"</span><span class="tx">: </span><span class="kw">true</span>
+    <span class="tx">}</span>
+  <span class="tx">]</span>
+<span class="tx">}</span></pre>
+        </div>
+
+        <!-- history -->
+        <h3 id="cli-history">pyrecall history</h3>
+        <p>Show score trends across all snapshots with coloured trend arrows. Useful for spotting gradual drift over many training runs.</p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall history</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall history --category coding</span><span class="comment"> &nbsp;# single category trend</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall history --last 5</span><span class="comment"> &nbsp;# most recent 5 snapshots only</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall history --json</span></div>
+        </div>
+
+        <!-- compare -->
+        <h3 id="cli-compare">pyrecall compare &lt;snap1&gt; &lt;snap2&gt; …</h3>
+        <p>Compare N snapshots side by side in one table. Best score per category is highlighted green, worst red. Accepts two or more snapshot names.</p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall compare before_v1 after_v1 after_v2 after_v3</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall compare before_v1 after_v1 --json</span></div>
+        </div>
+
+        <!-- export -->
+        <h3 id="cli-export">pyrecall export</h3>
+        <p>Export all snapshot scores to a file. Format is inferred from the extension: <code>.csv</code>, <code>.json</code>. Omit the filename to stream JSON to stdout.</p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall export scores.csv</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall export scores.json</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall export | jq '.[0].categories'</span><span class="comment"> &nbsp;# pipe JSON to stdout</span></div>
+        </div>
+
+        <!-- replay -->
+        <h3 id="cli-replay">pyrecall replay</h3>
+        <p>Inspect and manage the replay buffer — the reservoir of past training examples mixed into future training runs to reduce forgetting.</p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall replay status</span><span class="comment"> &nbsp;# fill level, capacity, total examples seen</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall replay clear</span><span class="comment"> &nbsp;# wipe buffer (prompts for confirmation)</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall replay clear --yes</span><span class="comment"> &nbsp;# skip prompt</span></div>
+        </div>
+
+        <!-- benchmark -->
+        <h3 id="cli-benchmark">pyrecall benchmark</h3>
+        <p>Register, list, and remove custom benchmark suites. See <a href="#custom-benchmarks" style="color:var(--accent);">Custom Benchmarks</a> for the file format.</p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall benchmark add nautical.jsonl</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall benchmark add domain.jsonl --name my_domain</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall benchmark list</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall benchmark remove my_domain</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall benchmark remove my_domain --yes</span></div>
         </div>
 
         <!-- delete -->
@@ -1479,6 +1579,162 @@
     <span class="tx">learner.</span><span class="fn">record</span><span class="tx">(</span><span class="tx">prompt</span><span class="tx">,</span> <span class="tx">response</span><span class="tx">)</span>
 
 <span class="tx">print(</span><span class="tx">learner.</span><span class="fn">pending_count</span><span class="tx">(),</span> <span class="str">"examples until next fine-tune"</span><span class="tx">)</span></pre>
+        </div>
+
+        <!-- ── REPLAY BUFFER ───────────────────────────────────────────── -->
+        <h2 id="replay-buffer">Replay Buffer</h2>
+        <p>
+          Every <code>model.learn()</code> call keeps a reservoir-sampled buffer of past training
+          examples. On the next training run, a fraction of those old examples is automatically
+          mixed back into each batch — so the model sees a blend of new and old data without any
+          extra steps.
+        </p>
+        <div class="code-block">
+<pre><span class="tx">model</span> <span class="tx">=</span> <span class="fn">Model</span><span class="tx">(</span>
+    <span class="str">"meta-llama/Llama-3.2-1B"</span><span class="tx">,</span>
+    <span class="pm">replay_buffer_size</span><span class="tx">=</span><span class="num">500</span><span class="tx">,</span>   <span class="cm"># past examples to store (0 = disabled)</span>
+    <span class="pm">replay_mix_ratio</span><span class="tx">=</span><span class="num">0.3</span><span class="tx">,</span>    <span class="cm"># 30% of each batch comes from the buffer</span>
+<span class="tx">)</span></pre>
+        </div>
+        <p>
+          The buffer is persisted to <code>~/.pyrecall/replay/&lt;model&gt;/buffer.jsonl</code>
+          and survives process restarts. Use <code>pyrecall replay status</code> to inspect fill
+          level and <code>pyrecall replay clear</code> to wipe it.
+        </p>
+
+        <!-- ── EXPERIMENT TRACKERS ─────────────────────────────────────── -->
+        <h2 id="experiment-trackers">Experiment Trackers</h2>
+        <p>Log snapshot scores to W&amp;B, MLflow, or Neptune so every training run's capability profile shows up alongside your loss curves.</p>
+
+        <h3>Weights &amp; Biases</h3>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pip install pyrecall[wandb]</span></div>
+        </div>
+        <div class="code-block">
+<pre><span class="kw">from</span> <span class="tx">pyrecall</span> <span class="kw">import</span> <span class="fn">Model</span>
+<span class="kw">from</span> <span class="tx">pyrecall.trackers</span> <span class="kw">import</span> <span class="fn">WandbTracker</span>
+
+<span class="tx">model</span> <span class="tx">=</span> <span class="fn">Model</span><span class="tx">(</span><span class="str">"meta-llama/Llama-3.2-1B"</span><span class="tx">)</span>
+<span class="tx">tracker</span> <span class="tx">=</span> <span class="fn">WandbTracker</span><span class="tx">(</span><span class="pm">project</span><span class="tx">=</span><span class="str">"my-finetune"</span><span class="tx">)</span>
+<span class="tx">model.</span><span class="fn">snapshot</span><span class="tx">(</span><span class="str">"before_v1"</span><span class="tx">,</span> <span class="pm">tracker</span><span class="tx">=</span><span class="tx">tracker</span><span class="tx">)</span></pre>
+        </div>
+        <p>Each snapshot becomes a W&amp;B run. Metrics are logged as <code>pyrecall/&lt;category&gt;</code> and <code>pyrecall/overall</code>.</p>
+
+        <h3>MLflow</h3>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pip install pyrecall[mlflow]</span></div>
+        </div>
+        <div class="code-block">
+<pre><span class="kw">from</span> <span class="tx">pyrecall.trackers</span> <span class="kw">import</span> <span class="fn">MLflowTracker</span>
+
+<span class="tx">tracker</span> <span class="tx">=</span> <span class="fn">MLflowTracker</span><span class="tx">(</span><span class="pm">experiment_name</span><span class="tx">=</span><span class="str">"my-finetune"</span><span class="tx">,</span> <span class="pm">tracking_uri</span><span class="tx">=</span><span class="str">"http://localhost:5000"</span><span class="tx">)</span>
+<span class="tx">model.</span><span class="fn">snapshot</span><span class="tx">(</span><span class="str">"before_v1"</span><span class="tx">,</span> <span class="pm">tracker</span><span class="tx">=</span><span class="tx">tracker</span><span class="tx">)</span></pre>
+        </div>
+        <p>Metrics are logged as <code>pyrecall.&lt;category&gt;</code> and <code>pyrecall.overall</code>. Snapshot name and model name are stored as run tags.</p>
+
+        <h3>Neptune</h3>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pip install pyrecall[neptune]</span></div>
+        </div>
+        <div class="code-block">
+<pre><span class="kw">from</span> <span class="tx">pyrecall.trackers</span> <span class="kw">import</span> <span class="fn">NeptuneTracker</span>
+
+<span class="tx">tracker</span> <span class="tx">=</span> <span class="fn">NeptuneTracker</span><span class="tx">(</span><span class="pm">project</span><span class="tx">=</span><span class="str">"workspace/my-project"</span><span class="tx">)</span>
+<span class="tx">model.</span><span class="fn">snapshot</span><span class="tx">(</span><span class="str">"before_v1"</span><span class="tx">,</span> <span class="pm">tracker</span><span class="tx">=</span><span class="tx">tracker</span><span class="tx">)</span></pre>
+        </div>
+        <p>Per-category scores logged as <code>pyrecall/&lt;category&gt;</code> fields plus <code>pyrecall/overall</code>.</p>
+
+        <h3>CLI tracker flags</h3>
+        <p>Pass <code>--log-wandb</code>, <code>--log-mlflow</code>, or <code>--log-neptune</code> to any command that takes a snapshot. Flags can be combined.</p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall snapshot before_v1 --log-wandb</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall learn train.jsonl --snapshot-after after_v1 --log-mlflow</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall snapshot before_v1 --log-neptune --neptune-project workspace/my-project</span></div>
+        </div>
+
+        <h3>Custom trackers</h3>
+        <p>Any object with a <code>log_snapshot(snapshot: SkillSnapshot) -> None</code> method satisfies the <code>SnapshotTracker</code> protocol.</p>
+
+        <!-- ── CUSTOM BENCHMARKS ───────────────────────────────────────── -->
+        <h2 id="custom-benchmarks">Custom Benchmarks</h2>
+        <p>
+          Register domain-specific benchmark suites that run automatically alongside the built-in
+          180 prompts every time you call <code>model.snapshot()</code>.
+        </p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall benchmark add nautical.jsonl</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall benchmark add legal.jsonl --name legal_domain</span></div>
+        </div>
+        <p>Each file is JSONL — one benchmark per line. Required keys: <code>prompt</code> and <code>reference_answer</code>. Optional: <code>category</code> (defaults to the suite name).</p>
+        <div class="code-block">
+<pre><span class="tx">{"prompt": "What does 'port' mean on a ship?", "reference_answer": "The left side when facing the bow.", "category": "nautical"}
+{"prompt": "What is a beam reach?", "reference_answer": "Sailing with the wind perpendicular to the boat.", "category": "nautical"}</span></pre>
+        </div>
+        <p>Register programmatically:</p>
+        <div class="code-block">
+<pre><span class="kw">from</span> <span class="tx">pyrecall.benchmarks</span> <span class="kw">import</span> <span class="fn">CustomBenchmarkManager</span>
+
+<span class="tx">mgr</span> <span class="tx">=</span> <span class="fn">CustomBenchmarkManager</span><span class="tx">()</span>
+<span class="tx">mgr.</span><span class="fn">add</span><span class="tx">(</span><span class="str">"nautical.jsonl"</span><span class="tx">)</span>
+<span class="tx">print(mgr.</span><span class="fn">suites</span><span class="tx">())</span>   <span class="cm"># [{"name": "nautical", "count": 2, ...}]</span>
+<span class="tx">print(mgr.</span><span class="fn">count</span><span class="tx">())</span>    <span class="cm"># total registered custom benchmarks</span></pre>
+        </div>
+
+        <!-- ── PER-CATEGORY THRESHOLDS ────────────────────────────────── -->
+        <h2 id="category-thresholds">Per-Category Thresholds</h2>
+        <p>
+          The global threshold (default 10%) applies to every skill category. Override it
+          per-category when some skills need stricter or looser monitoring.
+        </p>
+        <div class="code-block">
+<pre><span class="tx">model</span> <span class="tx">=</span> <span class="fn">Model</span><span class="tx">(</span>
+    <span class="str">"meta-llama/Llama-3.2-1B"</span><span class="tx">,</span>
+    <span class="pm">forgetting_threshold</span><span class="tx">=</span><span class="num">0.10</span><span class="tx">,</span>
+    <span class="pm">category_thresholds</span><span class="tx">={</span>
+        <span class="str">"safety"</span><span class="tx">: </span><span class="num">0.03</span><span class="tx">,</span>    <span class="cm"># flag safety after any 3% drop</span>
+        <span class="str">"coding"</span><span class="tx">: </span><span class="num">0.15</span><span class="tx">,</span>    <span class="cm"># coding has more tolerance</span>
+    <span class="tx">},</span>
+<span class="tx">)</span></pre>
+        </div>
+        <p>Via CLI — pass <code>--category-threshold &lt;category&gt;=&lt;value&gt;</code> to <code>init</code>, <code>check</code>, or <code>diff</code>. The flag can be repeated:</p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall init --model meta-llama/Llama-3.2-1B --category-threshold safety=0.03 --category-threshold coding=0.15</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall check --category-threshold safety=0.03</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall diff before_v1 after_v1 --category-threshold safety=0.03</span></div>
+        </div>
+        <p>CLI flags override config-file values for that run only. The <code>--json</code> output includes the effective threshold used per category.</p>
+
+        <!-- ── ROLLBACKMANAGER API ─────────────────────────────────────── -->
+        <h2 id="rollback-manager">RollbackManager API</h2>
+        <p>For advanced use cases — custom pipelines, CI systems that manage snapshots independently — the lower-level <code>RollbackManager</code> class is public.</p>
+        <div class="code-block">
+<pre><span class="kw">from</span> <span class="tx">pyrecall</span> <span class="kw">import</span> <span class="fn">RollbackManager</span>
+
+<span class="tx">mgr</span> <span class="tx">=</span> <span class="fn">RollbackManager</span><span class="tx">(</span><span class="str">"meta-llama/Llama-3.2-1B"</span><span class="tx">)</span>
+
+<span class="cm"># Save a snapshot + adapter</span>
+<span class="tx">mgr.</span><span class="fn">save</span><span class="tx">(</span><span class="tx">snapshot</span><span class="tx">,</span> <span class="tx">peft_model</span><span class="tx">)</span>                       <span class="cm"># no compression</span>
+<span class="tx">mgr.</span><span class="fn">save</span><span class="tx">(</span><span class="tx">snapshot</span><span class="tx">,</span> <span class="tx">peft_model</span><span class="tx">,</span> <span class="pm">compression</span><span class="tx">=</span><span class="str">"gzip"</span><span class="tx">)</span>   <span class="cm"># compressed adapter</span>
+
+<span class="cm"># List snapshots</span>
+<span class="tx">mgr.</span><span class="fn">list_snapshots</span><span class="tx">()</span>       <span class="cm"># list[SkillSnapshot], sorted by creation time</span>
+<span class="tx">mgr.</span><span class="fn">list_snapshot_names</span><span class="tx">()</span>  <span class="cm"># list[str]</span>
+
+<span class="cm"># Other operations</span>
+<span class="tx">mgr.</span><span class="fn">has_snapshot</span><span class="tx">(</span><span class="str">"before_v1"</span><span class="tx">)</span>    <span class="cm"># bool</span>
+<span class="tx">mgr.</span><span class="fn">load_snapshot</span><span class="tx">(</span><span class="str">"before_v1"</span><span class="tx">)</span>  <span class="cm"># SkillSnapshot</span>
+<span class="tx">mgr.</span><span class="fn">delete_snapshot</span><span class="tx">(</span><span class="str">"before_v1"</span><span class="tx">)</span></pre>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Compression</th><th>Requirement</th></tr></thead>
+            <tbody>
+              <tr><td><code>"none"</code></td><td>Default — no extra packages</td></tr>
+              <tr><td><code>"gzip"</code></td><td>Built-in</td></tr>
+              <tr><td><code>"zstd"</code></td><td><code>pip install zstandard</code></td></tr>
+              <tr><td><code>"lz4"</code></td><td><code>pip install lz4</code></td></tr>
+            </tbody>
+          </table>
         </div>
 
         <h2 id="contributing">Contributing</h2>
