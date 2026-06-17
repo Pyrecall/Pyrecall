@@ -482,7 +482,9 @@ class ForgettingReport:
                 sign = "+" if comp.delta >= 0 else ""
                 delta_str = f"{sign}{comp.delta:.3f} ({sign}{comp.pct_change:.1f}%)"
                 delta_style = (
-                    "red" if comp.delta < -cat_threshold else ("green" if comp.delta >= 0 else "yellow")
+                    "red"
+                    if comp.delta < -cat_threshold
+                    else ("green" if comp.delta >= 0 else "yellow")
                 )
             d_sign = "+" if comp.cohen_d >= 0 else ""
             cohen_str = f"{d_sign}{comp.cohen_d:.2f}" if comp.n_items >= 2 else "n/a *"

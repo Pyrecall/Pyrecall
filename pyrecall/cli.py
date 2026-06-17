@@ -1975,6 +1975,7 @@ def export(
         raise typer.Exit(1)
 
     if resolved_fmt == "json":
+
         def _safe_round(v: float, n: int) -> float | None:
             return None if math.isnan(v) else round(v, n)
 

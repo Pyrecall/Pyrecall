@@ -20,13 +20,15 @@ logger = get_logger(__name__)
 
 @contextmanager
 def _snap_lock(snap_dir: Path):
-    """Acquire an exclusive filesystem lock for the duration of a snapshot save."""
-    lock_file = snap_dir / ".save_lock"
+    """Acquire an exclusive filesystem lock for a snapshot directory.
+
+    The lock file is placed alongside the snap directory (not inside it) so
+    that shutil.rmtree on snap_dir never tries to delete a held lock file,
+    which would raise PermissionError on Windows.
+    """
+    lock_file = snap_dir.parent / f".{snap_dir.name}.lock"
     lock_file.parent.mkdir(parents=True, exist_ok=True)
-
-    lock = FileLock(str(lock_file))
-
-    with lock:
+    with FileLock(str(lock_file)):
         yield
 
 

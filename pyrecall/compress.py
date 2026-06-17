@@ -61,8 +61,7 @@ def _compress_file(src: Path, dst: Path, codec: str) -> None:
             import lz4.frame as lz4
         except ImportError as exc:
             raise ImportError(
-                "lz4 compression requires the 'lz4' package. "
-                "Install it with: pip install lz4"
+                "lz4 compression requires the 'lz4' package. Install it with: pip install lz4"
             ) from exc
         dst.write_bytes(lz4.compress(data))
     else:
@@ -88,8 +87,7 @@ def _decompress_file(src: Path, dst: Path, codec: str) -> None:
             import lz4.frame as lz4
         except ImportError as exc:
             raise ImportError(
-                "lz4 decompression requires the 'lz4' package. "
-                "Install it with: pip install lz4"
+                "lz4 decompression requires the 'lz4' package. Install it with: pip install lz4"
             ) from exc
         dst.write_bytes(lz4.decompress(data))
     else:
