@@ -678,7 +678,7 @@
           Keep your models balanced — detect exactly what changed and fix it in one command.
         </p>
         <div class="callout">
-          <strong>v0.11.2</strong> &nbsp;·&nbsp; Python 3.10+ &nbsp;·&nbsp; MIT License &nbsp;·&nbsp;
+          <strong>v0.11.9</strong> &nbsp;·&nbsp; Python 3.11+ &nbsp;·&nbsp; MIT License &nbsp;·&nbsp;
           <a href="https://github.com/Pyrecall/Pyrecall" style="color:var(--accent);">GitHub</a> &nbsp;·&nbsp;
           <a href="https://pypi.org/project/pyrecall/" style="color:var(--accent);">PyPI</a>
         </div>
@@ -751,24 +751,22 @@
 
         <h2 id="how-detection-works">How Detection Works</h2>
         <p>
-          pyrecall detects forgetting by running the same 64 benchmark prompts before and after
-          training, scoring each response against a reference answer using cosine similarity over
-          the model's own hidden states — no external API required.
+          pyrecall detects forgetting by running the same 180 benchmark prompts before and after
+          training, scoring each response using log-likelihood — no external API required.
         </p>
         <ol>
-          <li><strong>Snapshot</strong> — run 64 benchmarks across 8 skill categories, embed each response using the model's last hidden layer, score against reference answers via cosine similarity, save scores + LoRA adapter weights.</li>
+          <li><strong>Snapshot</strong> — run 180 benchmarks across 9 skill categories, score each response via log-likelihood, save scores + LoRA adapter weights.</li>
           <li><strong>Train</strong> — fine-tune on your data as usual.</li>
-          <li><strong>Check</strong> — re-run the same 64 benchmarks on the updated model. Diff the per-category averages against the snapshot.</li>
+          <li><strong>Check</strong> — re-run the same 180 benchmarks on the updated model. Diff the per-category averages against the snapshot.</li>
           <li><strong>Flag</strong> — any category whose average score dropped by more than <code>forgetting_threshold</code> (default 10%) is marked <code>FORGOTTEN</code>.</li>
         </ol>
         <p>
-          Scores are cosine similarities normalized to [0, 1]. A score of 0.80 means the
-          model's response embedding is 80% similar to the ideal reference answer.
+          Scores are log-likelihood values normalized to [0, 1]. Higher is better — a score close to 1.0 means the model assigns high probability to the reference answer.
         </p>
 
         <h2 id="skill-categories">Skill Categories</h2>
         <p>
-          64 benchmarks are spread across eight categories. Each category contributes eight
+          180 benchmarks are spread across nine categories. Each category contributes twenty
           prompts to the overall score.
         </p>
         <div class="table-wrap">
@@ -821,6 +819,11 @@
                 <td>Algebra, calculus, combinatorics, proof by induction, probability</td>
                 <td>Solve the quadratic equation 2x² + 5x − 3 = 0…</td>
               </tr>
+              <tr>
+                <td><span class="skill-pill">long_context</span></td>
+                <td>Multi-paragraph comprehension, key-detail extraction, summarization</td>
+                <td>Read the following passage and answer the question…</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -838,9 +841,9 @@
 │       └── after_fine_tune/
 │           ├── snapshot.json
 │           └── adapter/
-└── runs/
+└── replay/
     └── meta-llama--Llama-3.2-1B/
-        └── checkpoint-20/        <span class="cm"># mid-training checkpoints</span></pre>
+        └── buffer.jsonl          <span class="cm"># reservoir-sampled replay buffer</span></pre>
         </div>
         <p>
           Only the LoRA adapter is saved per snapshot, not the full base model.
@@ -904,8 +907,8 @@
         <h3 id="model-snapshot">model.snapshot(name)</h3>
         <div class="method-sig">model.snapshot(name: str, tracker: SnapshotTracker | list[SnapshotTracker] | None = None) → SkillSnapshot</div>
         <p>
-          Benchmark the model and save a named capability snapshot. Runs all 64 default benchmarks
-          across 8 skill categories, scores each response, saves scores and the current LoRA adapter
+          Benchmark the model and save a named capability snapshot. Runs all 180 default benchmarks
+          across 9 skill categories, scores each response, saves scores and the current LoRA adapter
           weights to disk so the model can be rolled back to this exact state later.
         </p>
         <p>
@@ -1169,7 +1172,7 @@
         <!-- snapshot -->
         <h3 id="cli-snapshot">pyrecall snapshot &lt;name&gt;</h3>
         <p>
-          Load the configured model, run all 64 benchmarks across 8 skill categories, and save
+          Load the configured model, run all 180 benchmarks across 9 skill categories, and save
           a named snapshot. This is a slow operation (several minutes on CPU). Updates
           <code>baseline_snapshot</code> in <code>.pyrecall.json</code>.
         </p>
@@ -1757,7 +1760,6 @@
         <p>Areas where contributions are most valuable:</p>
         <ul>
           <li><strong>Distributed training</strong> — multi-GPU support via <code>accelerate launch</code></li>
-          <li><strong>Neptune tracker</strong> — add a <code>NeptuneTracker</code> alongside the existing W&amp;B and MLflow integrations</li>
           <li><strong>Web dashboard</strong> — visualize snapshot history and score trends over time</li>
           <li><strong>More benchmark categories</strong> — multimodal, domain-specific (legal, medical, code review)</li>
         </ul>
