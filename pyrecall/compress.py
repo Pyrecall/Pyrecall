@@ -109,6 +109,9 @@ def decompressed_adapter(adapter_dir: Path, codec: str):
     try:
         ext = f".{codec}"
         for src in adapter_dir.iterdir():
+            if src.is_dir():
+                shutil.copytree(src, tmp / src.name)
+                continue
             original_name = src.name[: -len(ext)]
             if src.name.endswith(ext) and Path(original_name).suffix in _WEIGHT_SUFFIXES:
                 # e.g. adapter_model.bin.gzip → adapter_model.bin

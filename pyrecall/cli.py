@@ -392,12 +392,12 @@ def learn(
         ),
     ] = None,
     gradient_checkpointing: Annotated[
-        bool,
+        bool | None,
         typer.Option(
-            "--gradient-checkpointing",
+            "--gradient-checkpointing/--no-gradient-checkpointing",
             help="Enable gradient checkpointing to cut GPU memory ~40% at the cost of ~20% slower training.",
         ),
-    ] = False,
+    ] = None,
 ) -> None:
     """
     Fine-tune the model on a local dataset.
@@ -458,7 +458,7 @@ def learn(
             learning_rate=learning_rate,
             max_length=max_length,
             resume=resume,
-            gradient_checkpointing=gradient_checkpointing or None,
+            gradient_checkpointing=gradient_checkpointing,
         )
     except PyrecallError as exc:
         console.print(f"[red]Error:[/red] {exc}")

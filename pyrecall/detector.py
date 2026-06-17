@@ -245,16 +245,24 @@ class ForgettingReport:
             "|---|---|---|---|---|---|---|",
         ]
         for c in self.comparisons:
-            delta_str = f"{'+' if c.delta >= 0 else ''}{c.delta:.3f}"
+            nan_score = math.isnan(c.score_before) or math.isnan(c.score_after)
+            before_str = "n/a" if math.isnan(c.score_before) else f"{c.score_before:.3f}"
+            after_str = "n/a" if math.isnan(c.score_after) else f"{c.score_after:.3f}"
+            delta_str = (
+                "n/a"
+                if nan_score or math.isnan(c.delta)
+                else f"{'+' if c.delta >= 0 else ''}{c.delta:.3f}"
+            )
+            cohend_str = "n/a" if nan_score or math.isnan(c.cohen_d) else f"{c.cohen_d:.3f}"
             forgotten = (c.score_before - c.score_after) > self._threshold_for(c.category)
             status = "❌ FORGOTTEN" if forgotten else "✅ OK"
             safe_cat = c.category.replace("|", "\\|")
             lines.append(
                 f"| {safe_cat} "
-                f"| {c.score_before:.3f} "
-                f"| {c.score_after:.3f} "
+                f"| {before_str} "
+                f"| {after_str} "
                 f"| {delta_str} "
-                f"| {c.cohen_d:.3f} "
+                f"| {cohend_str} "
                 f"| {c.severity} "
                 f"| {status} |"
             )
@@ -292,8 +300,12 @@ class ForgettingReport:
         svg_rows: list[str] = []
         for i, c in enumerate(self.comparisons):
             y = i * (bar_h * 2 + bar_gap)
-            before_w = int(c.score_before / max_score * bar_area_w)
-            after_w = int(c.score_after / max_score * bar_area_w)
+            before_w = (
+                0 if math.isnan(c.score_before) else int(c.score_before / max_score * bar_area_w)
+            )
+            after_w = (
+                0 if math.isnan(c.score_after) else int(c.score_after / max_score * bar_area_w)
+            )
             color = severity_colours.get(c.severity, "#0969da")
             label = _html.escape(c.category.replace("_", " "))
             svg_rows.append(
@@ -304,9 +316,11 @@ class ForgettingReport:
                 f'<rect x="{label_w}" y="{y}" width="{before_w}" height="{bar_h}" '
                 f'fill="#0969da" opacity="0.55" rx="3"/>'
             )
+            before_label = "n/a" if math.isnan(c.score_before) else f"{c.score_before:.3f}"
+            after_label = "n/a" if math.isnan(c.score_after) else f"{c.score_after:.3f}"
             svg_rows.append(
                 f'<text x="{label_w + before_w + 4}" y="{y + bar_h - 5}" '
-                f'font-size="10" fill="#57606a">{c.score_before:.3f}</text>'
+                f'font-size="10" fill="#57606a">{before_label}</text>'
             )
             svg_rows.append(
                 f'<rect x="{label_w}" y="{y + bar_h + 2}" width="{after_w}" height="{bar_h}" '
@@ -314,7 +328,7 @@ class ForgettingReport:
             )
             svg_rows.append(
                 f'<text x="{label_w + after_w + 4}" y="{y + bar_h * 2 - 3}" '
-                f'font-size="10" fill="#57606a">{c.score_after:.3f}</text>'
+                f'font-size="10" fill="#57606a">{after_label}</text>'
             )
         svg_h = len(self.comparisons) * (bar_h * 2 + bar_gap) + 10
         svg = (

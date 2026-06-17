@@ -150,7 +150,8 @@ class RollbackManager:
         for snap_dir in sorted(self.base_dir.iterdir()):
             if snap_dir.is_dir() and (snap_dir / "snapshot.json").exists():
                 try:
-                    snapshots.append(SkillSnapshot.load(snap_dir))
+                    with _snap_lock(snap_dir):
+                        snapshots.append(SkillSnapshot.load(snap_dir))
                 except Exception as exc:
                     logger.warning("Could not load snapshot at %s: %s", snap_dir, exc)
         return sorted(snapshots, key=lambda s: s.created_at)

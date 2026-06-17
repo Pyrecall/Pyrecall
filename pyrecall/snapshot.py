@@ -146,10 +146,16 @@ class SkillSnapshot:
             raise ValueError(
                 f"Snapshot file '{snapshot_file}' is corrupted (invalid JSON): {exc}"
             ) from exc
-        if data.get("encrypted", False) and not privacy:
+        is_encrypted = data.get("encrypted", False)
+        if is_encrypted and not privacy:
             raise ValueError(
                 f"Snapshot '{snapshot_file}' is encrypted but privacy=False was passed. "
                 "Load it with privacy=True and supply the key."
+            )
+        if privacy and not is_encrypted:
+            raise ValueError(
+                f"Snapshot '{snapshot_file}' is not encrypted but privacy=True was passed. "
+                "Load it with privacy=False."
             )
         if privacy:
             from .encrypt import Encryptor
