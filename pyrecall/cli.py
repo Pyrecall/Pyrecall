@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import sys
 import time
 from datetime import datetime, timedelta
@@ -1325,12 +1326,18 @@ def status(
         name_markup = f"[bold green]{snap.name} ★[/bold green]" if is_baseline else snap.name
         adapter_ok = "✓" if (snap.adapter_path and snap.adapter_path.exists()) else "✗"
 
+        overall = snap.overall_score()
+        overall_str = "-" if math.isnan(overall) else f"{overall:.3f}"
         row: list[str] = [
             name_markup,
             snap.created_at.strftime("%Y-%m-%d %H:%M"),
-            f"{snap.overall_score():.3f}",
+            overall_str,
         ]
-        row += [f"{cat_scores[cat]:.3f}" if cat in cat_scores else "-" for cat in all_categories]
+
+        def _fmt_score(v: float) -> str:
+            return "-" if math.isnan(v) else f"{v:.3f}"
+
+        row += [_fmt_score(cat_scores[cat]) if cat in cat_scores else "-" for cat in all_categories]
         row.append(adapter_ok)
         table.add_row(*row)
 
@@ -1968,13 +1975,16 @@ def export(
         raise typer.Exit(1)
 
     if resolved_fmt == "json":
+        def _safe_round(v: float, n: int) -> float | None:
+            return None if math.isnan(v) else round(v, n)
+
         records = [
             {
                 "name": snap.name,
                 "created_at": snap.created_at.isoformat(),
-                "overall": round(snap.overall_score(), 4),
+                "overall": _safe_round(snap.overall_score(), 4),
                 "categories": {
-                    cat: round(score, 4) for cat, score in snap.category_scores().items()
+                    cat: _safe_round(score, 4) for cat, score in snap.category_scores().items()
                 },
             }
             for snap in all_snaps
@@ -1999,13 +2009,15 @@ def export(
         rows = []
         for snap in all_snaps:
             cat_scores = snap.category_scores()
+            overall = snap.overall_score()
             row: dict = {
                 "snapshot": snap.name,
                 "created_at": snap.created_at.isoformat(),
-                "overall": round(snap.overall_score(), 4),
+                "overall": "" if math.isnan(overall) else round(overall, 4),
             }
             for cat in all_categories:
-                row[cat] = round(cat_scores[cat], 4) if cat in cat_scores else ""
+                v = cat_scores.get(cat)
+                row[cat] = "" if v is None or math.isnan(v) else round(v, 4)
             rows.append(row)
 
         if output:

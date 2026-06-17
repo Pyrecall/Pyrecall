@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import random
+import tempfile
 from pathlib import Path
 
 from .utils import get_logger, safe_model_name
@@ -179,7 +181,18 @@ class ReplayBuffer:
         lines += [
             json.dumps({"text": e["text"], "category": e.get("category")}) for e in self._buffer
         ]
-        self._path.write_text("\n".join(lines) + "\n")
+        content = "\n".join(lines) + "\n"
+        tmp_fd, tmp_path = tempfile.mkstemp(dir=self._path.parent, prefix=".buffer_tmp_")
+        try:
+            with os.fdopen(tmp_fd, "w") as fh:
+                fh.write(content)
+            os.replace(tmp_path, self._path)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
     def _load(self) -> None:
         if not self._path.exists():

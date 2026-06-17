@@ -29,11 +29,22 @@ class Encryptor:
                 "Install it with: pip install pyrecall[privacy]"
             ) from exc
 
-        self.key: bytes = key or Fernet.generate_key()
+        if key is None:
+            self.key: bytes = Fernet.generate_key()
+        else:
+            if not key:
+                raise ValueError("Encryption key must not be empty.")
+            self.key = key
         self._fernet = Fernet(self.key)
 
     def encrypt(self, value: str) -> str:
         return self._fernet.encrypt(value.encode()).decode()
 
     def decrypt(self, value: str) -> str:
-        return self._fernet.decrypt(value.encode()).decode()
+        try:
+            return self._fernet.decrypt(value.encode()).decode()
+        except Exception as exc:
+            raise ValueError(
+                "Failed to decrypt snapshot data. "
+                "The snapshot may be corrupted or encrypted with a different key."
+            ) from exc

@@ -26,11 +26,18 @@ def compress_adapter_dir(adapter_dir: Path, codec: str) -> None:
         raise ValueError(
             f"Unknown compression codec '{codec}'. Supported: {sorted(SUPPORTED_CODECS)}"
         )
-    for src in list(adapter_dir.iterdir()):
-        if src.suffix not in _WEIGHT_SUFFIXES:
-            continue
-        dst = src.with_suffix(src.suffix + f".{codec}")
-        _compress_file(src, dst, codec)
+    weight_files = [f for f in adapter_dir.iterdir() if f.suffix in _WEIGHT_SUFFIXES]
+    compressed: list[tuple[Path, Path]] = []
+    try:
+        for src in weight_files:
+            dst = src.with_suffix(src.suffix + f".{codec}")
+            _compress_file(src, dst, codec)
+            compressed.append((src, dst))
+    except Exception:
+        for _, dst in compressed:
+            dst.unlink(missing_ok=True)
+        raise
+    for src, _ in compressed:
         src.unlink()
 
 
@@ -40,13 +47,23 @@ def _compress_file(src: Path, dst: Path, codec: str) -> None:
         with gzip.open(dst, "wb", compresslevel=6) as fh:
             fh.write(data)
     elif codec == "zstd":
-        import zstandard as zstd  # optional dep
-
+        try:
+            import zstandard as zstd
+        except ImportError as exc:
+            raise ImportError(
+                "zstd compression requires the 'zstandard' package. "
+                "Install it with: pip install zstandard"
+            ) from exc
         cctx = zstd.ZstdCompressor(level=3)
         dst.write_bytes(cctx.compress(data))
     elif codec == "lz4":
-        import lz4.frame as lz4  # optional dep
-
+        try:
+            import lz4.frame as lz4
+        except ImportError as exc:
+            raise ImportError(
+                "lz4 compression requires the 'lz4' package. "
+                "Install it with: pip install lz4"
+            ) from exc
         dst.write_bytes(lz4.compress(data))
     else:
         raise ValueError(f"Unsupported codec: {codec}")
@@ -57,13 +74,23 @@ def _decompress_file(src: Path, dst: Path, codec: str) -> None:
     if codec == "gzip":
         dst.write_bytes(gzip.decompress(data))
     elif codec == "zstd":
-        import zstandard as zstd
-
+        try:
+            import zstandard as zstd
+        except ImportError as exc:
+            raise ImportError(
+                "zstd decompression requires the 'zstandard' package. "
+                "Install it with: pip install zstandard"
+            ) from exc
         dctx = zstd.ZstdDecompressor()
         dst.write_bytes(dctx.decompress(data))
     elif codec == "lz4":
-        import lz4.frame as lz4
-
+        try:
+            import lz4.frame as lz4
+        except ImportError as exc:
+            raise ImportError(
+                "lz4 decompression requires the 'lz4' package. "
+                "Install it with: pip install lz4"
+            ) from exc
         dst.write_bytes(lz4.decompress(data))
     else:
         raise ValueError(f"Unsupported codec: {codec}")

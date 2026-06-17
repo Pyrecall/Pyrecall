@@ -30,6 +30,15 @@ def _snap_lock(snap_dir: Path):
         yield
 
 
+def _validate_snapshot_name(name: str) -> None:
+    """Raise ValueError if *name* contains path separators or traversal segments."""
+    if not name or "/" in name or "\\" in name or ".." in name:
+        raise ValueError(
+            f"Invalid snapshot name '{name}'. "
+            "Names must not contain path separators or '..' segments."
+        )
+
+
 class RollbackManager:
     """
     Persist and retrieve LoRA adapter checkpoints keyed by snapshot name.
@@ -79,6 +88,7 @@ class RollbackManager:
         """
         from .compress import compress_adapter_dir
 
+        _validate_snapshot_name(snapshot.name)
         snap_dir = self.base_dir / snapshot.name
         snap_dir.mkdir(parents=True, exist_ok=True)
 
@@ -117,12 +127,14 @@ class RollbackManager:
 
         Raises a descriptive error if the snapshot does not exist.
         """
+        _validate_snapshot_name(name)
         snap_dir = self.base_dir / name
         if not snap_dir.exists():
             available = self._available_names()
             hint = f" Available snapshots: {available}" if available else " No snapshots saved yet."
             raise FileNotFoundError(f"Snapshot '{name}' not found under '{self.base_dir}'.{hint}")
-        return SkillSnapshot.load(snap_dir)
+        with _snap_lock(snap_dir):
+            return SkillSnapshot.load(snap_dir)
 
     def list_snapshots(self) -> list[SkillSnapshot]:
         """Return all saved snapshots sorted by creation time (oldest first).
@@ -147,14 +159,20 @@ class RollbackManager:
 
     def delete_snapshot(self, name: str) -> None:
         """Permanently delete a snapshot and its adapter weights."""
+        _validate_snapshot_name(name)
         snap_dir = self.base_dir / name
         if not snap_dir.exists():
             raise FileNotFoundError(f"Cannot delete: snapshot '{name}' not found.")
-        shutil.rmtree(snap_dir)
+        with _snap_lock(snap_dir):
+            shutil.rmtree(snap_dir)
         logger.debug("Deleted snapshot '%s'", name)
 
     def has_snapshot(self, name: str) -> bool:
         """Return True if *name* refers to a saved snapshot."""
+        try:
+            _validate_snapshot_name(name)
+        except ValueError:
+            return False
         return (self.base_dir / name / "snapshot.json").exists()
 
     # ── private ────────────────────────────────────────────────────────────────
