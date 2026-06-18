@@ -627,7 +627,6 @@ class TestResumeTraining:
             call_kwargs = mock_trainer.train.call_args
             assert call_kwargs.kwargs.get("resume_from_checkpoint") is None
 
-
     def test_resume_skips_non_numeric_checkpoint_dirs(self, patched_model, tmp_path: Path) -> None:
         data_file = tmp_path / "train.jsonl"
         data_file.write_text(json.dumps({"text": "hi"}) + "\n")
