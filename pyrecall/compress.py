@@ -55,6 +55,9 @@ def _compress_file(src: Path, dst: Path, codec: str) -> None:
     *dst* must not already exist.
     """
     tmp_fd, tmp_name = tempfile.mkstemp(dir=dst.parent, prefix=".compress_tmp_")
+    # Close the fd immediately so codec libraries can open the same path.
+    # On Windows an open fd blocks any other open() on the same file.
+    os.close(tmp_fd)
     tmp_path = Path(tmp_name)
     try:
         if codec == "gzip":
@@ -68,8 +71,6 @@ def _compress_file(src: Path, dst: Path, codec: str) -> None:
                     "zstd compression requires the 'zstandard' package. "
                     "Install it with: pip install zstandard"
                 ) from exc
-            os.close(tmp_fd)
-            tmp_fd = -1
             cctx = zstd.ZstdCompressor(level=3)
             with src.open("rb") as fsrc, tmp_path.open("wb") as fdst:
                 cctx.copy_stream(fsrc, fdst, read_size=_CHUNK, write_size=_CHUNK)
@@ -91,12 +92,6 @@ def _compress_file(src: Path, dst: Path, codec: str) -> None:
         except OSError:
             pass
         raise
-    finally:
-        if tmp_fd >= 0:
-            try:
-                os.close(tmp_fd)
-            except OSError:
-                pass
 
 
 def _decompress_file(src: Path, dst: Path, codec: str) -> None:
