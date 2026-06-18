@@ -185,14 +185,22 @@ def _load_init_config(path: str) -> dict:
     try:
         if suffix in {".yaml", ".yml"}:
             with open(config_path, encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
+                try:
+                    data = yaml.safe_load(f)
+                    return data
+                except yaml.YAMLError as exc:
+                    raise typer.BadParameter(f"Invalid YAML config: {exc}") from exc
 
         elif suffix == ".toml":
             with open(config_path, "rb") as f:
-                data = tomllib.load(f)
+                try:
+                    data = tomllib.load(f)
+                    return data
+                except tomllib.TOMLDecodeError as exc:
+                    raise typer.BadParameter(f"Invalid TOML config: {exc}") from exc
 
         else:
-            raise typer.BadParameter("Config file must be .yaml, .yml, or .toml")
+            raise typer.BadParameter(f"Unsupported config extension: {suffix}")
 
     except Exception as exc:
         raise typer.BadParameter(f"Failed to parse config file: {exc}") from exc
@@ -326,7 +334,7 @@ def init(
             f"[yellow]⚠  {_CONFIG_FILE} already exists.[/yellow] Delete it first to reinitialise."
         )
         raise typer.Exit(1)
-    
+
     config_values = {}
 
     if from_config:
@@ -354,13 +362,11 @@ def init(
 
     _write_config(config)
 
-
     model = model or config_values.get("model")
     strategy = strategy or config_values.get("strategy")
 
     lora_r = config_values.get("lora_r", lora_r)
 
-    
     lora_alpha = config_values.get("lora_alpha", lora_alpha)
 
     console.print(f"[green]✓ Initialised pyrecall[/green] with [bold]{model}[/bold] ({strategy})")
