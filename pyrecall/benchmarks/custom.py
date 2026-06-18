@@ -11,6 +11,19 @@ from .default import Benchmark
 _DEFAULT_BENCHMARK_DIR = Path.home() / ".pyrecall" / "benchmarks"
 
 
+def _validate_suite_name(name: str) -> str:
+    """Raise ValueError if *name* could escape the benchmark store directory."""
+    # Path(name).name != name catches separators and traversal segments more
+    # robustly than string checks alone; the explicit guards cover edge cases
+    # like "." and ".." which Path.name normalises differently across platforms.
+    if not name or name in (".", "..") or Path(name).name != name:
+        raise ValueError(
+            f"Invalid suite name '{name}'. "
+            "Names must not be '.', '..', contain path separators, or '..' segments."
+        )
+    return name
+
+
 class CustomBenchmarkManager:
     """
     Manages user-defined benchmark suites stored under *base_dir*.
@@ -54,18 +67,7 @@ class CustomBenchmarkManager:
         if not entries:
             raise ValueError(f"'{src}' contains no valid benchmark entries.")
 
-        suite_name = name or src.stem
-        if (
-            not suite_name
-            or suite_name == "."
-            or "/" in suite_name
-            or "\\" in suite_name
-            or ".." in suite_name
-        ):
-            raise ValueError(
-                f"Invalid suite name '{suite_name}'. "
-                "Names must not be '.', contain path separators, or '..' segments."
-            )
+        suite_name = _validate_suite_name(name or src.stem)
         dest = self.base_dir / f"{suite_name}.jsonl"
         shutil.copy2(src, dest)
         return suite_name
@@ -89,11 +91,7 @@ class CustomBenchmarkManager:
 
         Raises ``FileNotFoundError`` if no suite with that name exists.
         """
-        if not name or name == "." or "/" in name or "\\" in name or ".." in name:
-            raise ValueError(
-                f"Invalid suite name '{name}'. "
-                "Names must not be '.', contain path separators, or '..' segments."
-            )
+        _validate_suite_name(name)
         target = self.base_dir / f"{name}.jsonl"
         if not target.exists():
             raise FileNotFoundError(f"No benchmark suite named '{name}'.")
