@@ -898,6 +898,77 @@ class Model:
 
         uvicorn.run(app, host="0.0.0.0", port=port)
 
+    # ── hub ────────────────────────────────────────────────────────────────────
+
+    def push_snapshot(
+        self,
+        name: str,
+        repo_id: str,
+        *,
+        include_weights: bool = True,
+        private: bool = False,
+    ) -> str:
+        """Upload a saved snapshot to a Hugging Face Hub dataset repo.
+
+        Creates the repo if it doesn't exist.  Requires ``huggingface_hub``
+        and a valid HF token (run ``huggingface-cli login`` first).
+
+        Args:
+            name: Name of a locally saved snapshot (must already exist).
+            repo_id: Hub repo in ``"owner/repo-name"`` format.
+            include_weights: When False, only scores are uploaded (faster,
+                no adapter weights — useful for score-only sharing).
+            private: Create the Hub repo as private if it doesn't exist yet.
+
+        Returns:
+            URL string pointing to the snapshot folder on the Hub.
+        """
+        from .hub import push_snapshot as _push
+
+        snap = self.rollback_manager.load_snapshot(name)
+        snap_dir = self.rollback_manager.base_dir / name
+        url = _push(snap_dir, snap, repo_id, include_weights=include_weights, private=private)
+        console.print(
+            f"[success]✓ Snapshot '{name}' pushed to [link={url}]{repo_id}[/link][/success]"
+        )
+        return url
+
+    def pull_snapshot(
+        self,
+        name: str,
+        repo_id: str,
+        *,
+        include_weights: bool = True,
+    ) -> SkillSnapshot:
+        """Download a snapshot from a Hugging Face Hub dataset repo.
+
+        Registers the snapshot locally so it appears in ``pyrecall status`` and
+        can be used for rollback.  Requires ``huggingface_hub``.
+
+        Args:
+            name: Snapshot name to pull (must match the name used when pushing).
+            repo_id: Hub repo in ``"owner/repo-name"`` format.
+            include_weights: When False, skip downloading adapter weights.
+
+        Returns:
+            The loaded :class:`~pyrecall.snapshot.SkillSnapshot`.
+        """
+        from .hub import pull_snapshot as _pull
+
+        console.print(f"[info]Pulling snapshot '{name}' from '{repo_id}'…[/info]")
+        snap = _pull(
+            name,
+            self.model_name,
+            repo_id,
+            self.rollback_manager.base_dir,
+            include_weights=include_weights,
+        )
+        console.print(
+            f"[success]✓ Snapshot '{name}' pulled from {repo_id}. "
+            f"Overall score: {snap.overall_score():.3f}[/success]"
+        )
+        return snap
+
     # ── private helpers ────────────────────────────────────────────────────────
     def _set_baseline(self, name: str) -> None:
         self._baseline_snapshot_name = name
