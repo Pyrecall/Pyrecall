@@ -82,8 +82,15 @@ class LiveLearner:
                 "INSERT INTO interactions (prompt, response, timestamp) VALUES (?, ?, ?)",
                 (prompt, response, datetime.now().isoformat()),
             )
+            # Read the count inside the same transaction so insert + count are
+            # atomic — avoids a race where a concurrent record() call observes
+            # a stale count and either misses or double-triggers a training run.
+            pending = conn.execute(
+                "SELECT COUNT(*) FROM interactions WHERE trained = 0"
+            ).fetchone()[0]
 
-        self._maybe_trigger_training()
+        if pending >= self.batch_size:
+            self._maybe_trigger_training()
 
     def pending_count(self) -> int:
         """Number of interactions not yet used for training."""
@@ -122,22 +129,23 @@ class LiveLearner:
         finally:
             conn.close()
 
-    def _join(self) -> None:
+    def _join(self, timeout: float | None = None) -> None:
         """Wait for any in-progress background training thread to finish."""
-        if self._training_thread is not None:
-            self._training_thread.join()
+        if self._training_thread is not None and self._training_thread.is_alive():
+            self._training_thread.join(timeout=timeout)
 
     def _maybe_trigger_training(self) -> None:
-        if self.pending_count() >= self.batch_size:
-            if self._training_lock.acquire(blocking=False):
-                try:
-                    self._training_thread = threading.Thread(
-                        target=self._trigger_training_locked, daemon=True
-                    )
-                    self._training_thread.start()
-                except Exception:
-                    self._training_lock.release()
-                    raise
+        if self._training_thread is not None and self._training_thread.is_alive():
+            return
+        if self._training_lock.acquire(blocking=False):
+            try:
+                self._training_thread = threading.Thread(
+                    target=self._trigger_training_locked, daemon=True
+                )
+                self._training_thread.start()
+            except Exception:
+                self._training_lock.release()
+                raise
 
     def _trigger_training_locked(self) -> None:
         try:
