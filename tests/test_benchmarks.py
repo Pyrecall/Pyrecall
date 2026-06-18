@@ -92,6 +92,20 @@ class TestCustomBenchmarkManagerAdd:
         with pytest.raises(ValueError):
             mgr.add(src)
 
+    def test_add_rejects_path_traversal_name(self, tmp_path: Path) -> None:
+        src = tmp_path / "suite.jsonl"
+        _write_jsonl(src, [_valid_entry()])
+        mgr = CustomBenchmarkManager(base_dir=tmp_path / "store")
+        with pytest.raises(ValueError):
+            mgr.add(src, name="../../evil")
+
+    def test_add_rejects_dot_name(self, tmp_path: Path) -> None:
+        src = tmp_path / "suite.jsonl"
+        _write_jsonl(src, [_valid_entry()])
+        mgr = CustomBenchmarkManager(base_dir=tmp_path / "store")
+        with pytest.raises(ValueError):
+            mgr.add(src, name=".")
+
 
 class TestCustomBenchmarkManagerList:
     def test_list_empty_when_no_suites(self, tmp_path: Path) -> None:
@@ -134,6 +148,11 @@ class TestCustomBenchmarkManagerRemove:
         mgr = CustomBenchmarkManager(base_dir=tmp_path / "store")
         with pytest.raises(FileNotFoundError):
             mgr.remove("missing")
+
+    def test_remove_rejects_path_traversal(self, tmp_path: Path) -> None:
+        mgr = CustomBenchmarkManager(base_dir=tmp_path / "store")
+        with pytest.raises(ValueError):
+            mgr.remove("../../etc/passwd")
 
 
 class TestCustomBenchmarkManagerLoadAll:

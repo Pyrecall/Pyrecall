@@ -55,6 +55,17 @@ class CustomBenchmarkManager:
             raise ValueError(f"'{src}' contains no valid benchmark entries.")
 
         suite_name = name or src.stem
+        if (
+            not suite_name
+            or suite_name == "."
+            or "/" in suite_name
+            or "\\" in suite_name
+            or ".." in suite_name
+        ):
+            raise ValueError(
+                f"Invalid suite name '{suite_name}'. "
+                "Names must not be '.', contain path separators, or '..' segments."
+            )
         dest = self.base_dir / f"{suite_name}.jsonl"
         shutil.copy2(src, dest)
         return suite_name
@@ -78,6 +89,11 @@ class CustomBenchmarkManager:
 
         Raises ``FileNotFoundError`` if no suite with that name exists.
         """
+        if not name or name == "." or "/" in name or "\\" in name or ".." in name:
+            raise ValueError(
+                f"Invalid suite name '{name}'. "
+                "Names must not be '.', contain path separators, or '..' segments."
+            )
         target = self.base_dir / f"{name}.jsonl"
         if not target.exists():
             raise FileNotFoundError(f"No benchmark suite named '{name}'.")
