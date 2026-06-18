@@ -371,6 +371,7 @@ class Model:
         self,
         name: str,
         tracker: SnapshotTracker | list[SnapshotTracker] | None = None,
+        dry_run: bool = False,
     ) -> SkillSnapshot:
         """
         Benchmark the model and save a named capability snapshot.
@@ -384,22 +385,34 @@ class Model:
             tracker: An optional :class:`~pyrecall.trackers.SnapshotTracker` (or list
                 of trackers) to log scores to an experiment tracker such as W&B or
                 MLflow immediately after the snapshot is saved.
+            dry_run: When ``True``, run benchmarks and return scores but do **not**
+                save adapter weights or update the baseline.  Useful for a quick
+                sanity-check score without committing disk space.
 
         Returns:
-            The :class:`~pyrecall.snapshot.SkillSnapshot` that was saved.
+            The :class:`~pyrecall.snapshot.SkillSnapshot` that was saved (or scored
+            but not saved when *dry_run* is ``True``).
         """
-        console.print(f"[info]Taking snapshot '{name}'…[/info]")
+        if dry_run:
+            console.print(f"[info]Scoring snapshot '{name}' (dry run — not saving)…[/info]")
+        else:
+            console.print(f"[info]Taking snapshot '{name}'…[/info]")
 
         scores = self._run_benchmarks()
         snap = SkillSnapshot(name=name, model_name=self.model_name, scores=scores)
-        self.rollback_manager.save(snap, self.model, compression=self._snapshot_compression)
 
-        self._set_baseline(name)
-
-        console.print(
-            f"[success]✓ Snapshot '{name}' saved. "
-            f"Overall score: {snap.overall_score():.3f}[/success]"
-        )
+        if not dry_run:
+            self.rollback_manager.save(snap, self.model, compression=self._snapshot_compression)
+            self._set_baseline(name)
+            console.print(
+                f"[success]✓ Snapshot '{name}' saved. "
+                f"Overall score: {snap.overall_score():.3f}[/success]"
+            )
+        else:
+            console.print(
+                f"[info]Dry run complete. Overall score: {snap.overall_score():.3f} "
+                f"(not saved)[/info]"
+            )
 
         if tracker is not None:
             trackers = tracker if isinstance(tracker, list) else [tracker]

@@ -517,6 +517,13 @@ def snapshot(
             help="Compress adapter weights: 'none' (default), 'gzip', 'zstd', or 'lz4'.",
         ),
     ] = "none",
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Score without saving adapter weights or updating the baseline.",
+        ),
+    ] = False,
 ) -> None:
     """
     Load the model, run all benchmarks, and save a named capability snapshot.
@@ -527,6 +534,9 @@ def snapshot(
     Pass --no-update-baseline to take the snapshot without overwriting the
     current baseline in .pyrecall.json.  Useful when you want to capture a
     point-in-time reading without disturbing your stable reference point.
+
+    Pass --dry-run to score without saving adapter weights. Faster and uses no
+    extra disk space — useful for a quick sanity check before committing.
 
     Use --compression gzip to reduce adapter storage by 40-60% (no extra deps).
     Use --compression zstd for faster compression with similar ratios (pip install zstandard).
@@ -561,9 +571,11 @@ def snapshot(
         category_thresholds=config.get("category_thresholds", {}),
     )
     tracker = _build_trackers(log_wandb, log_mlflow, log_neptune, neptune_project)
-    model_obj.snapshot(name=name, tracker=tracker)
+    model_obj.snapshot(name=name, tracker=tracker, dry_run=dry_run)
 
-    if not no_update_baseline:
+    if dry_run:
+        console.print("[dim]  Dry run — no data saved, baseline unchanged.[/dim]")
+    elif not no_update_baseline:
         config["baseline_snapshot"] = name
         _write_config(config)
         console.print(f"[dim]  Baseline updated to '{name}' in {_CONFIG_FILE}.[/dim]")
