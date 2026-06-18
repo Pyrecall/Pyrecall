@@ -61,13 +61,17 @@ class LiveLearner:
 
     # ── public API ─────────────────────────────────────────────────────────────
 
-    def record(self, prompt: str, response: str) -> None:
+    def record(self, prompt: str, response: str) -> bool:
         """
         Store one interaction.
 
         Silently skips responses shorter than *min_response_length* (likely
         error messages or empty outputs that would degrade training).
         Triggers a training run if the untrained batch is full.
+
+        Returns:
+            ``True`` if the interaction was recorded, ``False`` if it was
+            skipped because the response was too short.
         """
         if len(response.strip()) < self.min_response_length:
             logger.debug(
@@ -75,7 +79,7 @@ class LiveLearner:
                 len(response.strip()),
                 self.min_response_length,
             )
-            return
+            return False
 
         with self._connect() as conn:
             conn.execute(
@@ -91,6 +95,7 @@ class LiveLearner:
 
         if pending >= self.batch_size:
             self._maybe_trigger_training()
+        return True
 
     def pending_count(self) -> int:
         """Number of interactions not yet used for training."""
