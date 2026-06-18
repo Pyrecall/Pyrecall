@@ -429,3 +429,32 @@ class TestPrimaryScoringMethod:
         ] + [SkillScore(category="c", prompt="p", response="r", score=0.5, scoring_method="cosine")]
         snap = SkillSnapshot(name="s", model_name="m", scores=scores)
         assert snap.primary_scoring_method() == "log_likelihood"
+
+
+class TestSnapshotTags:
+    def test_tags_default_to_empty_dict(self, tmp_path):
+        snap = SkillSnapshot(name="s", model_name="m")
+        assert snap.tags == {}
+
+    def test_tags_roundtrip_through_save_load(self, tmp_path):
+        snap = SkillSnapshot(name="s", model_name="m", tags={"commit": "abc123", "dataset": "cs"})
+        snap.save(tmp_path)
+        loaded = SkillSnapshot.load(tmp_path)
+        assert loaded.tags == {"commit": "abc123", "dataset": "cs"}
+
+    def test_old_snapshot_without_tags_loads_as_empty(self, tmp_path):
+        snap = SkillSnapshot(name="s", model_name="m")
+        snap.save(tmp_path)
+        # Remove tags key to simulate an old snapshot
+        path = tmp_path / "snapshot.json"
+        data = json.loads(path.read_text())
+        data.pop("tags", None)
+        path.write_text(json.dumps(data))
+        loaded = SkillSnapshot.load(tmp_path)
+        assert loaded.tags == {}
+
+    def test_tags_persisted_in_json(self, tmp_path):
+        snap = SkillSnapshot(name="s", model_name="m", tags={"k": "v"})
+        snap.save(tmp_path)
+        raw = json.loads((tmp_path / "snapshot.json").read_text())
+        assert raw["tags"] == {"k": "v"}

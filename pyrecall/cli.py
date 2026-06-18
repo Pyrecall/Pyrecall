@@ -124,6 +124,20 @@ def _build_rollback_manager(config: dict):
     return RollbackManager(model_name=config["model_name"])
 
 
+def _parse_tags(raw: list[str]) -> dict[str, str]:
+    """Parse ['commit=abc123', 'dataset=customer_support'] into a dict."""
+    result: dict[str, str] = {}
+    for item in raw:
+        if "=" not in item:
+            raise typer.BadParameter(
+                f"Expected 'key=value', got '{item}'",
+                param_hint="--tag",
+            )
+        key, _, val = item.partition("=")
+        result[key.strip()] = val.strip()
+    return result
+
+
 def _parse_category_thresholds(raw: list[str]) -> dict[str, float]:
     """Parse ['safety=0.03', 'coding=0.15'] into {'safety': 0.03, 'coding': 0.15}."""
     result: dict[str, float] = {}
@@ -517,6 +531,34 @@ def snapshot(
             help="Compress adapter weights: 'none' (default), 'gzip', 'zstd', or 'lz4'.",
         ),
     ] = "none",
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Score without saving adapter weights (no disk usage)."),
+    ] = False,
+    push_to: Annotated[
+        str | None,
+        typer.Option(
+            "--push",
+            help="After saving, push the snapshot to this Hub repo (e.g. 'my-org/my-model-snapshots')",
+        ),
+    ] = None,
+    no_weights: Annotated[
+        bool,
+        typer.Option(
+            "--no-weights", help="When --push is set, upload scores only (no adapter weights)"
+        ),
+    ] = False,
+    push_private: Annotated[
+        bool,
+        typer.Option("--private", help="When --push is set, create the Hub repo as private"),
+    ] = False,
+    tag: Annotated[
+        list[str],
+        typer.Option(
+            "--tag",
+            help="Attach a key=value tag to this snapshot (repeatable), e.g. --tag commit=abc123f",
+        ),
+    ] = [],
 ) -> None:
     """
     Load the model, run all benchmarks, and save a named capability snapshot.
@@ -528,8 +570,12 @@ def snapshot(
     current baseline in .pyrecall.json.  Useful when you want to capture a
     point-in-time reading without disturbing your stable reference point.
 
+    Pass --dry-run to score without saving adapter weights. Faster and uses no
+    extra disk space — useful for a quick sanity check before committing.
+
     Use --compression gzip to reduce adapter storage by 40-60% (no extra deps).
     Use --compression zstd for faster compression with similar ratios (pip install zstandard).
+    Use --push to immediately upload the snapshot to Hugging Face Hub after saving.
     """
     from pyrecall.compress import SUPPORTED_CODECS
 
@@ -561,7 +607,24 @@ def snapshot(
         category_thresholds=config.get("category_thresholds", {}),
     )
     tracker = _build_trackers(log_wandb, log_mlflow, log_neptune, neptune_project)
-    model_obj.snapshot(name=name, tracker=tracker)
+    model_obj.snapshot(name=name, tracker=tracker, dry_run=dry_run, tags=_parse_tags(tag))
+
+    if push_to and not dry_run:
+        from pyrecall.hub import push_snapshot
+        from pyrecall.rollback import RollbackManager
+
+        mgr = RollbackManager(model_name=config["model_name"])
+        snap = mgr.load_snapshot(name)
+        snap_dir = mgr.base_dir / name
+        try:
+            url = push_snapshot(
+                snap_dir, snap, push_to, include_weights=not no_weights, private=push_private
+            )
+            console.print(f"[success]✓ Pushed to {push_to}[/success]")
+            console.print(f"[dim]  {url}[/dim]")
+        except Exception as exc:
+            console.print(f"[red]Error:[/red] Could not push to Hub: {exc}")
+            raise typer.Exit(1)
 
     if not no_update_baseline:
         config["baseline_snapshot"] = name
@@ -1356,6 +1419,8 @@ def status(
                     "scores": snap.category_scores(),
                     "adapter_ok": bool(snap.adapter_path and snap.adapter_path.exists()),
                     "is_baseline": snap.name == baseline,
+                    "hub_repo": snap.hub_repo,
+                    "tags": snap.tags,
                 }
                 for snap in all_snaps
             ],
@@ -1380,6 +1445,9 @@ def status(
     for cat in all_categories:
         table.add_column(cat.replace("_", " ").title(), justify="right")
     table.add_column("Adapter", justify="center")
+    has_tags = any(snap.tags for snap in all_snaps)
+    if has_tags:
+        table.add_column("Tags", style="dim")
 
     for snap in all_snaps:
         cat_scores = snap.category_scores()
@@ -1400,6 +1468,8 @@ def status(
 
         row += [_fmt_score(cat_scores[cat]) if cat in cat_scores else "-" for cat in all_categories]
         row.append(adapter_ok)
+        if has_tags:
+            row.append(", ".join(f"{k}={v}" for k, v in snap.tags.items()) if snap.tags else "")
         table.add_row(*row)
 
     console.print(table)

@@ -55,6 +55,8 @@ class SkillSnapshot:
     adapter_path: Path | None = None
     encrypted: bool = False
     adapter_compression: str = "none"
+    hub_repo: str | None = None  # set when snapshot was pulled from HF Hub
+    tags: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not isinstance(self.created_at, datetime):
@@ -116,6 +118,8 @@ class SkillSnapshot:
                 "scores": [s.to_dict() for s in self.scores],
                 "adapter_path": str(self.adapter_path) if self.adapter_path else None,
                 "adapter_compression": self.adapter_compression,
+                "hub_repo": self.hub_repo,
+                "tags": self.tags,
             }
         else:
             if not passphrase:
@@ -207,4 +211,6 @@ class SkillSnapshot:
             scores=[SkillScore.from_dict(s) for s in data["scores"]],
             adapter_path=Path(data["adapter_path"]) if data["adapter_path"] else None,
             adapter_compression=data.get("adapter_compression", "none"),
+            hub_repo=data.get("hub_repo"),
+            tags=data.get("tags", {}),
         )
