@@ -127,6 +127,7 @@ class SkillSnapshot:
 
             encryptor = Encryptor.from_passphrase(passphrase)
             import base64
+
             data = {
                 "encrypted": True,
                 "salt": base64.b64encode(encryptor.salt).decode(),
@@ -142,7 +143,9 @@ class SkillSnapshot:
         (directory / "snapshot.json").write_text(json.dumps(data, indent=2))
 
     @classmethod
-    def load(cls, directory: Path, privacy: bool = False, passphrase: str | None = None) -> SkillSnapshot:
+    def load(
+        cls, directory: Path, privacy: bool = False, passphrase: str | None = None
+    ) -> SkillSnapshot:
         """Load a snapshot from *directory*/snapshot.json.
 
         When *privacy* is ``True`` the same *passphrase* used during
