@@ -379,6 +379,20 @@ class TestBenchmarkValidateCli:
         assert result.exit_code == 1
         assert "duplicate" in result.output.lower()
 
+    def test_triple_duplicate_reported_once(self, tmp_path: Path) -> None:
+        # A prompt appearing 3 times should produce exactly one "duplicate" error,
+        # not one per extra occurrence.
+        entries = [
+            {"prompt": _LONG_PROMPT, "reference_answer": _LONG_REF, "category": "x"},
+            {"prompt": _LONG_PROMPT, "reference_answer": "Answer B.", "category": "x"},
+            {"prompt": _LONG_PROMPT, "reference_answer": "Answer C.", "category": "x"},
+        ]
+        mgr = _make_store(tmp_path, "dup3", entries)
+        with patch("pyrecall.benchmarks.custom.CustomBenchmarkManager", return_value=mgr):
+            result = runner.invoke(app, ["benchmark", "validate", "dup3"])
+        assert result.exit_code == 1
+        assert result.output.lower().count("duplicate") == 1
+
     def test_single_item_category_is_warning_not_error(self, tmp_path: Path) -> None:
         entries = [
             {"prompt": _LONG_PROMPT + " 1", "reference_answer": _LONG_REF, "category": "a"},
