@@ -41,11 +41,13 @@ def compress_adapter_dir(adapter_dir: Path, codec: str) -> None:
         src.unlink()
 
 
+_CHUNK = 4 * 1024 * 1024  # 4 MiB read/write chunks
+
+
 def _compress_file(src: Path, dst: Path, codec: str) -> None:
-    data = src.read_bytes()
     if codec == "gzip":
-        with gzip.open(dst, "wb", compresslevel=6) as fh:
-            fh.write(data)
+        with src.open("rb") as fsrc, gzip.open(dst, "wb", compresslevel=6) as fdst:
+            shutil.copyfileobj(fsrc, fdst, length=_CHUNK)
     elif codec == "zstd":
         try:
             import zstandard as zstd
@@ -55,7 +57,8 @@ def _compress_file(src: Path, dst: Path, codec: str) -> None:
                 "Install it with: pip install zstandard"
             ) from exc
         cctx = zstd.ZstdCompressor(level=3)
-        dst.write_bytes(cctx.compress(data))
+        with src.open("rb") as fsrc, dst.open("wb") as fdst:
+            cctx.copy_stream(fsrc, fdst, read_size=_CHUNK, write_size=_CHUNK)
     elif codec == "lz4":
         try:
             import lz4.frame as lz4
@@ -63,15 +66,16 @@ def _compress_file(src: Path, dst: Path, codec: str) -> None:
             raise ImportError(
                 "lz4 compression requires the 'lz4' package. Install it with: pip install lz4"
             ) from exc
-        dst.write_bytes(lz4.compress(data))
+        with src.open("rb") as fsrc, lz4.open(dst, "wb") as fdst:
+            shutil.copyfileobj(fsrc, fdst, length=_CHUNK)
     else:
         raise ValueError(f"Unsupported codec: {codec}")
 
 
 def _decompress_file(src: Path, dst: Path, codec: str) -> None:
-    data = src.read_bytes()
     if codec == "gzip":
-        dst.write_bytes(gzip.decompress(data))
+        with gzip.open(src, "rb") as fsrc, dst.open("wb") as fdst:
+            shutil.copyfileobj(fsrc, fdst, length=_CHUNK)
     elif codec == "zstd":
         try:
             import zstandard as zstd
@@ -81,7 +85,8 @@ def _decompress_file(src: Path, dst: Path, codec: str) -> None:
                 "Install it with: pip install zstandard"
             ) from exc
         dctx = zstd.ZstdDecompressor()
-        dst.write_bytes(dctx.decompress(data))
+        with src.open("rb") as fsrc, dst.open("wb") as fdst:
+            dctx.copy_stream(fsrc, fdst, read_size=_CHUNK, write_size=_CHUNK)
     elif codec == "lz4":
         try:
             import lz4.frame as lz4
@@ -89,7 +94,8 @@ def _decompress_file(src: Path, dst: Path, codec: str) -> None:
             raise ImportError(
                 "lz4 decompression requires the 'lz4' package. Install it with: pip install lz4"
             ) from exc
-        dst.write_bytes(lz4.decompress(data))
+        with lz4.open(src, "rb") as fsrc, dst.open("wb") as fdst:
+            shutil.copyfileobj(fsrc, fdst, length=_CHUNK)
     else:
         raise ValueError(f"Unsupported codec: {codec}")
 
