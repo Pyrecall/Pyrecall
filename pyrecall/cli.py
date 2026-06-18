@@ -1822,11 +1822,9 @@ def benchmark_validate(
             )
 
     # ERROR: duplicate prompts within the suite
-    seen: set[str] = set()
-    for p in prompts:
-        if p in seen:
-            errors.append(f'Duplicate prompt: "{p[:60]}"')
-        seen.add(p)
+    for p, cnt in Counter(prompts).items():
+        if cnt > 1:
+            errors.append(f'Duplicate prompt ({cnt}×): "{p[:60]}"')
 
     # WARNING: any category with only 1 prompt (Cohen's d unavailable)
     cat_counts = Counter(cats)
