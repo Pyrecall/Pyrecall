@@ -326,6 +326,11 @@ def init(
             f"[yellow]⚠  {_CONFIG_FILE} already exists.[/yellow] Delete it first to reinitialise."
         )
         raise typer.Exit(1)
+    
+    config_values = {}
+
+    if from_config:
+        config_values = _load_init_config(from_config)
 
     config = {
         "model_name": model,
@@ -344,21 +349,19 @@ def init(
         "created_at": datetime.now().isoformat(),
         "baseline_snapshot": None,
     }
+
+    config.update({k: v for k, v in config_values.items() if v is not None})
+
     _write_config(config)
 
-    config_values = {}
-
-    if from_config:
-        config_values = _load_init_config(from_config)
 
     model = model or config_values.get("model")
     strategy = strategy or config_values.get("strategy")
 
-    if lora_r is None:
-        lora_r = config_values.get("lora_r")
+    lora_r = config_values.get("lora_r", lora_r)
 
-    if lora_alpha is None:
-        lora_alpha = config_values.get("lora_alpha")
+    
+    lora_alpha = config_values.get("lora_alpha", lora_alpha)
 
     console.print(f"[green]✓ Initialised pyrecall[/green] with [bold]{model}[/bold] ({strategy})")
     console.print(f"[dim]  Config saved to {_CONFIG_FILE}[/dim]")
