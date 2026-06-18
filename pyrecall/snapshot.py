@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from dataclasses import dataclass, field
@@ -120,11 +121,13 @@ class SkillSnapshot:
             encryptor = Encryptor()
 
             # Store encryption key in centralized ~/.pyrecall/keys/ directory
-            # Use directory name (not internal snapshot name) for key file
+            # Use SHA256 hash of absolute path to prevent filename collisions
             key_dir = Path.home() / ".pyrecall" / "keys"
             key_dir.mkdir(parents=True, exist_ok=True)
-            key_file = key_dir / f"{Path(directory).name}.key"
+            key_filename = hashlib.sha256(str(directory.resolve()).encode()).hexdigest()[:16] + ".key"
+            key_file = key_dir / key_filename
             key_file.write_bytes(encryptor.key)
+            # Note: os.chmod with 0o600 does not strictly enforce file permissions on Windows systems.
             os.chmod(key_file, 0o600)  # Read/write for owner only
 
             data = {
@@ -164,12 +167,13 @@ class SkillSnapshot:
             from .encrypt import Encryptor
 
             # Load encryption key from centralized ~/.pyrecall/keys/ directory
-            # Use directory name (snapshot name) to locate the key file
-            key_file = Path.home() / ".pyrecall" / "keys" / f"{directory.name}.key"
+            # Use SHA256 hash of absolute path to locate the key file
+            key_filename = hashlib.sha256(str(directory.resolve()).encode()).hexdigest()[:16] + ".key"
+            key_file = Path.home() / ".pyrecall" / "keys" / key_filename
             if not key_file.exists():
                 raise FileNotFoundError(
                     f"Decryption key not found at '{key_file}'. "
-                    f"The key for snapshot '{directory.name}' may have been deleted or moved."
+                    f"The key for snapshot '{directory}' may have been deleted or moved."
                 )
 
             key_bytes = key_file.read_bytes()

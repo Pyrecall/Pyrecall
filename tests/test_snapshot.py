@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -16,6 +17,11 @@ from pyrecall.snapshot import SkillScore, SkillSnapshot
 # ── helpers ────────────────────────────────────────────────────────────────────
 
 _DT = datetime(2024, 6, 1, 12, 0, 0)
+
+
+def _get_key_filename(directory: Path) -> str:
+    """Generate the hashed key filename for a given directory."""
+    return hashlib.sha256(str(directory.resolve()).encode()).hexdigest()[:16] + ".key"
 
 
 def _make_snapshot(
@@ -246,9 +252,12 @@ class TestSkillSnapshotPrivacy:
         monkeypatch.setattr(Path, "home", lambda: fake_home)
 
         snap = _make_snapshot(name="test-snapshot")
-        snap.save(tmp_path / "v1", privacy=True)
+        snapshot_dir = tmp_path / "v1"
+        snap.save(snapshot_dir, privacy=True)
 
-        key_file = fake_home / ".pyrecall" / "keys" / "v1.key"
+        # Key file uses hash of absolute path
+        key_filename = _get_key_filename(snapshot_dir)
+        key_file = fake_home / ".pyrecall" / "keys" / key_filename
         assert key_file.exists()
         assert key_file.is_file()
 
@@ -261,9 +270,12 @@ class TestSkillSnapshotPrivacy:
         monkeypatch.setattr(Path, "home", lambda: fake_home)
 
         snap = _make_snapshot(name="test-snapshot")
-        snap.save(tmp_path / "v1", privacy=True)
+        snapshot_dir = tmp_path / "v1"
+        snap.save(snapshot_dir, privacy=True)
 
-        key_file = fake_home / ".pyrecall" / "keys" / "v1.key"
+        # Key file uses hash of absolute path
+        key_filename = _get_key_filename(snapshot_dir)
+        key_file = fake_home / ".pyrecall" / "keys" / key_filename
         # Check that file has 0o600 permissions (owner read/write only)
         # Windows doesn't support Unix permissions, so skip this check on Windows
         if sys.platform != "win32":
@@ -358,15 +370,17 @@ class TestSkillSnapshotPrivacy:
         monkeypatch.setattr(Path, "home", lambda: fake_home)
 
         snap = _make_snapshot()
-        snap.save(tmp_path / "v1", privacy=True)
+        snapshot_dir = tmp_path / "v1"
+        snap.save(snapshot_dir, privacy=True)
 
         # Delete the key file
-        key_file = fake_home / ".pyrecall" / "keys" / "v1.key"
+        key_filename = _get_key_filename(snapshot_dir)
+        key_file = fake_home / ".pyrecall" / "keys" / key_filename
         key_file.unlink()
 
         # Attempt to load should raise FileNotFoundError
         with pytest.raises(FileNotFoundError, match="Decryption key not found"):
-            SkillSnapshot.load(tmp_path / "v1", privacy=True)
+            SkillSnapshot.load(snapshot_dir, privacy=True)
 
     def test_privacy_save_without_cryptography_raises(self, tmp_path: Path) -> None:
         with patch.dict(
