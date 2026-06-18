@@ -623,7 +623,8 @@ class Model:
         resume_from = None
         if resume:
             checkpoints = sorted(
-                run_dir.glob("checkpoint-*"), key=lambda p: int(p.name.split("-")[-1])
+                (p for p in run_dir.glob("checkpoint-*") if p.name.split("-")[-1].isdigit()),
+                key=lambda p: int(p.name.split("-")[-1]),
             )
             if checkpoints:
                 resume_from = str(checkpoints[-1])

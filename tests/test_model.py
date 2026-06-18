@@ -628,6 +628,39 @@ class TestResumeTraining:
             assert call_kwargs.kwargs.get("resume_from_checkpoint") is None
 
 
+    def test_resume_skips_non_numeric_checkpoint_dirs(self, patched_model, tmp_path: Path) -> None:
+        data_file = tmp_path / "train.jsonl"
+        data_file.write_text(json.dumps({"text": "hi"}) + "\n")
+
+        run_dir = Path.home() / ".pyrecall" / "runs" / "test--model"
+        good_checkpoint = run_dir / "checkpoint-20"
+        bad_checkpoint = run_dir / "checkpoint-final"
+        good_checkpoint.mkdir(parents=True, exist_ok=True)
+        bad_checkpoint.mkdir(parents=True, exist_ok=True)
+
+        mock_trainer = MagicMock()
+        try:
+            with (
+                patch("pyrecall.model.load_dataset") as mock_ds,
+                patch("pyrecall.model.Trainer", return_value=mock_trainer),
+                patch("pyrecall.model.TrainingArguments"),
+                patch("pyrecall.model.DataCollatorForLanguageModeling"),
+            ):
+                mock_dataset = MagicMock()
+                mock_dataset.column_names = ["text"]
+                mock_dataset.__len__.return_value = 1
+                mock_dataset.map.return_value = mock_dataset
+                mock_ds.return_value = mock_dataset
+
+                # Should not raise even though checkpoint-final exists.
+                patched_model.learn(str(data_file), epochs=1, resume=True)
+                call_kwargs = mock_trainer.train.call_args
+                assert call_kwargs.kwargs.get("resume_from_checkpoint") == str(good_checkpoint)
+        finally:
+            good_checkpoint.rmdir()
+            bad_checkpoint.rmdir()
+
+
 class TestLoraTargets:
     def test_llama_targets(self) -> None:
         from pyrecall.model import Model
