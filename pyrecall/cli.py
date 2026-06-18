@@ -530,6 +530,10 @@ def snapshot(
             "--no-weights", help="When --push is set, upload scores only (no adapter weights)"
         ),
     ] = False,
+    push_private: Annotated[
+        bool,
+        typer.Option("--private", help="When --push is set, create the Hub repo as private"),
+    ] = False,
 ) -> None:
     """
     Load the model, run all benchmarks, and save a named capability snapshot.
@@ -585,11 +589,14 @@ def snapshot(
         snap = mgr.load_snapshot(name)
         snap_dir = mgr.base_dir / name
         try:
-            url = push_snapshot(snap_dir, snap, push_to, include_weights=not no_weights)
+            url = push_snapshot(
+                snap_dir, snap, push_to, include_weights=not no_weights, private=push_private
+            )
             console.print(f"[success]✓ Pushed to {push_to}[/success]")
             console.print(f"[dim]  {url}[/dim]")
-        except ImportError as exc:
-            console.print(f"[yellow]Warning:[/yellow] Could not push to Hub: {exc}")
+        except Exception as exc:
+            console.print(f"[red]Error:[/red] Could not push to Hub: {exc}")
+            raise typer.Exit(1)
 
     if not no_update_baseline:
         config["baseline_snapshot"] = name
@@ -2303,7 +2310,7 @@ def push(
         )
         console.print(f"[success]✓ Snapshot '{name}' pushed to {repo_id}[/success]")
         console.print(f"[dim]  {url}[/dim]")
-    except ImportError as exc:
+    except Exception as exc:
         console.print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(1)
 

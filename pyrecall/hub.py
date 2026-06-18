@@ -1,4 +1,4 @@
-"""HuggingFace Hub push/pull helpers for Pyrecall snapshots."""
+"""Hugging Face Hub push/pull helpers for Pyrecall snapshots."""
 
 from __future__ import annotations
 
@@ -6,13 +6,9 @@ import json
 import shutil
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from .snapshot import SkillSnapshot
 from .utils import get_logger, safe_model_name
-
-if TYPE_CHECKING:
-    pass
 
 logger = get_logger(__name__)
 
@@ -106,7 +102,7 @@ def push_snapshot(
             path_in_repo=hub_prefix,
         )
 
-    url = f"https://huggingface.co/datasets/{repo_id}/tree/main/{hub_prefix}"
+    url = f"{api.endpoint}/datasets/{repo_id}/tree/main/{hub_prefix}"
     logger.debug("Snapshot '%s' pushed to %s", snapshot.name, url)
     return url
 
@@ -159,7 +155,7 @@ def pull_snapshot(
                 f"Original error: {exc}"
             ) from exc
 
-        # Read meta to check if weights exist on Hub
+        # Read meta to check if weights exist on Hub (optional — older pushes may not have it)
         meta: dict = {}
         try:
             hf.hf_hub_download(
@@ -171,8 +167,12 @@ def pull_snapshot(
             meta_path = tmp_path / hub_prefix / _HUB_META_FILE
             if meta_path.exists():
                 meta = json.loads(meta_path.read_text())
-        except Exception:
-            pass  # meta file is optional — older pushes may not have it
+        except Exception as _meta_exc:
+            logger.debug(
+                "Could not fetch pyrecall_meta.json for snapshot '%s' (treating as weights-included): %s",
+                name,
+                _meta_exc,
+            )
 
         hub_has_weights = meta.get("has_weights", True)
 
