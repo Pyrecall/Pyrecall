@@ -130,10 +130,14 @@ class LiveLearner:
     def _maybe_trigger_training(self) -> None:
         if self.pending_count() >= self.batch_size:
             if self._training_lock.acquire(blocking=False):
-                self._training_thread = threading.Thread(
-                    target=self._trigger_training_locked, daemon=True
-                )
-                self._training_thread.start()
+                try:
+                    self._training_thread = threading.Thread(
+                        target=self._trigger_training_locked, daemon=True
+                    )
+                    self._training_thread.start()
+                except Exception:
+                    self._training_lock.release()
+                    raise
 
     def _trigger_training_locked(self) -> None:
         try:

@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from pyrecall.live import LiveLearner
 
@@ -422,3 +424,21 @@ class TestEdgeCases:
         learner, _ = _make_learner(tmp_path, batch_size=100)
         # _join() before any training has been triggered must not raise
         learner._join()
+
+    def test_lock_released_when_thread_start_fails(self, tmp_path: Path) -> None:
+        # If Thread.start() raises (e.g. during interpreter shutdown), the
+        # training lock must be released so subsequent record() calls can
+        # still trigger training.
+        learner, model = _make_learner(tmp_path, batch_size=2)
+        learner.record("p1", "response long enough here")
+
+        with patch("threading.Thread") as mock_thread_cls:
+            bad_thread = MagicMock()
+            bad_thread.start.side_effect = RuntimeError("cannot start thread")
+            mock_thread_cls.return_value = bad_thread
+
+            with pytest.raises(RuntimeError, match="cannot start thread"):
+                learner.record("p2", "response long enough here")
+
+        # Lock must be free — a subsequent batch should be trainable.
+        assert not learner._training_lock.locked()
