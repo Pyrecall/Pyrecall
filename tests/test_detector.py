@@ -440,12 +440,15 @@ class TestCohensD:
         comp = next(c for c in report.comparisons if c.category == "coding")
         assert comp.cohen_d == pytest.approx(0.0)
 
-    def test_cohen_d_negative_when_scores_drop(self) -> None:
+    def test_cohen_d_zero_and_delta_severity_when_uniform_drop(self) -> None:
+        # All deltas are ~identical (-0.2), so std_d is numerically zero.
+        # cohen_d falls back to 0.0; severity is determined by delta instead.
         before = _make_snapshot_with_items("b", {"coding": [0.9, 0.85, 0.88, 0.91, 0.87]})
         after = _make_snapshot_with_items("a", {"coding": [0.7, 0.65, 0.68, 0.71, 0.67]})
         report = ForgettingDetector().compare(before, after)
         comp = next(c for c in report.comparisons if c.category == "coding")
-        assert comp.cohen_d < 0.0
+        assert comp.cohen_d == pytest.approx(0.0)
+        assert comp.severity in ("SEVERE", "CRITICAL")
 
     def test_cohen_d_positive_when_scores_improve(self) -> None:
         before = _make_snapshot_with_items("b", {"coding": [0.6, 0.62, 0.58, 0.61, 0.59]})

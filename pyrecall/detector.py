@@ -641,7 +641,7 @@ class ForgettingDetector:
                 mean_d = sum(deltas) / n
                 variance = sum((d - mean_d) ** 2 for d in deltas) / (n - 1)
                 std_d = variance**0.5
-                cohen_d = mean_d / std_d if std_d > 0.0 else 0.0
+                cohen_d = mean_d / std_d if std_d > 1e-10 else 0.0
             else:
                 cohen_d = 0.0
             comparisons.append(
