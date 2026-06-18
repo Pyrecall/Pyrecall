@@ -909,6 +909,7 @@ def diff(
         str | None,
         typer.Option(
             "--output",
+            "--save_report",
             "-o",
             help="Save the report to a file. Format inferred from extension: .html, .md, or .json.",
         ),
