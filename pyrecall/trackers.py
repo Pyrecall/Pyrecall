@@ -61,8 +61,10 @@ class WandbTracker:
             tags=["pyrecall", snapshot.model_name],
             **self._init_kwargs,
         )
-        run.log(metrics)
-        run.finish()
+        try:
+            run.log(metrics)
+        finally:
+            run.finish()
 
 
 class MLflowTracker:

@@ -258,3 +258,27 @@ class TestSaveLock:
         assert errors == [], f"Concurrent saves raised: {errors}"
         snap = mgr.load_snapshot("v1")
         assert snap.name == "v1"
+
+
+class TestSnapshotNameValidation:
+    """_validate_snapshot_name edge cases."""
+
+    def test_dot_name_raises(self, tmp_path: Path) -> None:
+        mgr = RollbackManager(model_name="test/model", base_dir=tmp_path)
+        with pytest.raises(ValueError, match=r"\."):
+            mgr.save(_make_snapshot("."), _make_mock_peft_model())
+
+    def test_slash_name_raises(self, tmp_path: Path) -> None:
+        mgr = RollbackManager(model_name="test/model", base_dir=tmp_path)
+        with pytest.raises(ValueError):
+            mgr.save(_make_snapshot("a/b"), _make_mock_peft_model())
+
+    def test_dotdot_name_raises(self, tmp_path: Path) -> None:
+        mgr = RollbackManager(model_name="test/model", base_dir=tmp_path)
+        with pytest.raises(ValueError):
+            mgr.save(_make_snapshot(".."), _make_mock_peft_model())
+
+    def test_valid_name_accepted(self, tmp_path: Path) -> None:
+        mgr = RollbackManager(model_name="test/model", base_dir=tmp_path)
+        mgr.save(_make_snapshot("valid-snap_v1"), _make_mock_peft_model())
+        assert mgr.has_snapshot("valid-snap_v1")

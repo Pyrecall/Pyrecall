@@ -34,10 +34,10 @@ def _snap_lock(snap_dir: Path):
 
 def _validate_snapshot_name(name: str) -> None:
     """Raise ValueError if *name* contains path separators or traversal segments."""
-    if not name or "/" in name or "\\" in name or ".." in name:
+    if not name or name == "." or "/" in name or "\\" in name or ".." in name:
         raise ValueError(
             f"Invalid snapshot name '{name}'. "
-            "Names must not contain path separators or '..' segments."
+            "Names must not be '.', contain path separators, or '..' segments."
         )
 
 

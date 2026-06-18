@@ -309,3 +309,20 @@ class TestNeptuneTracker:
     def test_default_project_stored(self) -> None:
         tracker = NeptuneTracker(project="workspace/myproject")
         assert tracker.project == "workspace/myproject"
+
+
+class TestWandbTrackerFinishOnError:
+    """WandbTracker.log_snapshot() must call run.finish() even if run.log() raises."""
+
+    def test_finish_called_when_log_raises(self) -> None:
+        snap = _make_snapshot()
+        mock_wandb = MagicMock()
+        mock_run = MagicMock()
+        mock_run.log.side_effect = RuntimeError("network error")
+        mock_wandb.init.return_value = mock_run
+
+        with patch.dict("sys.modules", {"wandb": mock_wandb}):
+            with pytest.raises(RuntimeError, match="network error"):
+                WandbTracker().log_snapshot(snap)
+
+        mock_run.finish.assert_called_once()
