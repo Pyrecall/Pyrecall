@@ -581,7 +581,9 @@ class TestSnapshot:
         with patch("pyrecall.model.Model", return_value=mock_model):
             runner.invoke(app, ["snapshot", "new_snap", "--no-update-baseline"])
 
-        mock_model.snapshot.assert_called_once_with(name="new_snap", tracker=None, dry_run=False, tags={})
+        mock_model.snapshot.assert_called_once_with(
+            name="new_snap", tracker=None, dry_run=False, tags={}
+        )
 
     def test_default_updates_baseline(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
