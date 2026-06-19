@@ -126,6 +126,20 @@ def _build_rollback_manager(config: dict):
     return RollbackManager(model_name=config["model_name"])
 
 
+def _parse_tags(raw: list[str]) -> dict[str, str]:
+    """Parse ['commit=abc123', 'dataset=customer_support'] into a dict."""
+    result: dict[str, str] = {}
+    for item in raw:
+        if "=" not in item:
+            raise typer.BadParameter(
+                f"Expected 'key=value', got '{item}'",
+                param_hint="--tag",
+            )
+        key, _, val = item.partition("=")
+        result[key.strip()] = val.strip()
+    return result
+
+
 def _parse_category_thresholds(raw: list[str]) -> dict[str, float]:
     """Parse ['safety=0.03', 'coding=0.15'] into {'safety': 0.03, 'coding': 0.15}."""
     result: dict[str, float] = {}
@@ -603,6 +617,13 @@ def snapshot(
         bool,
         typer.Option("--private", help="When --push is set, create the Hub repo as private"),
     ] = False,
+    tag: Annotated[
+        list[str],
+        typer.Option(
+            "--tag",
+            help="Attach a key=value tag to this snapshot (repeatable), e.g. --tag commit=abc123f",
+        ),
+    ] = [],
 ) -> None:
     """
     Load the model, run all benchmarks, and save a named capability snapshot.
@@ -651,7 +672,7 @@ def snapshot(
         category_thresholds=config.get("category_thresholds", {}),
     )
     tracker = _build_trackers(log_wandb, log_mlflow, log_neptune, neptune_project)
-    model_obj.snapshot(name=name, tracker=tracker, dry_run=dry_run)
+    model_obj.snapshot(name=name, tracker=tracker, dry_run=dry_run, tags=_parse_tags(tag))
 
     if push_to and not dry_run:
         from pyrecall.hub import push_snapshot
@@ -1464,6 +1485,7 @@ def status(
                     "adapter_ok": bool(snap.adapter_path and snap.adapter_path.exists()),
                     "is_baseline": snap.name == baseline,
                     "hub_repo": snap.hub_repo,
+                    "tags": snap.tags,
                 }
                 for snap in all_snaps
             ],
@@ -1488,6 +1510,9 @@ def status(
     for cat in all_categories:
         table.add_column(cat.replace("_", " ").title(), justify="right")
     table.add_column("Adapter", justify="center")
+    has_tags = any(snap.tags for snap in all_snaps)
+    if has_tags:
+        table.add_column("Tags", style="dim")
 
     for snap in all_snaps:
         cat_scores = snap.category_scores()
@@ -1512,6 +1537,8 @@ def status(
 
         row += [_fmt_score(cat_scores[cat]) if cat in cat_scores else "-" for cat in all_categories]
         row.append(adapter_ok)
+        if has_tags:
+            row.append(", ".join(f"{k}={v}" for k, v in snap.tags.items()) if snap.tags else "")
         table.add_row(*row)
 
     console.print(table)

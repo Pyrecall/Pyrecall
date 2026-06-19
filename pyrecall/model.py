@@ -372,6 +372,7 @@ class Model:
         name: str,
         tracker: SnapshotTracker | list[SnapshotTracker] | None = None,
         dry_run: bool = False,
+        tags: dict[str, str] | None = None,
     ) -> SkillSnapshot:
         """
         Benchmark the model and save a named capability snapshot.
@@ -386,8 +387,8 @@ class Model:
                 of trackers) to log scores to an experiment tracker such as W&B or
                 MLflow immediately after the snapshot is saved.
             dry_run: When ``True``, run benchmarks and return scores but do **not**
-                save adapter weights or update the baseline.  Useful for a quick
-                sanity-check score without committing disk space.
+                save adapter weights or update the baseline.
+            tags: Arbitrary key/value metadata to attach to the snapshot.
 
         Returns:
             The :class:`~pyrecall.snapshot.SkillSnapshot` that was saved (or scored
@@ -399,7 +400,7 @@ class Model:
             console.print(f"[info]Taking snapshot '{name}'…[/info]")
 
         scores = self._run_benchmarks()
-        snap = SkillSnapshot(name=name, model_name=self.model_name, scores=scores)
+        snap = SkillSnapshot(name=name, model_name=self.model_name, scores=scores, tags=tags or {})
 
         if not dry_run:
             self.rollback_manager.save(snap, self.model, compression=self._snapshot_compression)
