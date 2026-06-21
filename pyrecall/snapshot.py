@@ -143,6 +143,8 @@ class SkillSnapshot:
                     encryptor.encrypt(str(self.adapter_path)) if self.adapter_path else None
                 ),
                 "adapter_compression": self.adapter_compression,
+                "hub_repo": encryptor.encrypt(self.hub_repo) if self.hub_repo else None,
+                "tags": encryptor.encrypt(json.dumps(self.tags)) if self.tags else {},
             }
         (directory / "snapshot.json").write_text(json.dumps(data, indent=2))
 
@@ -202,6 +204,12 @@ class SkillSnapshot:
                     Path(encryptor.decrypt(data["adapter_path"])) if data["adapter_path"] else None
                 ),
                 adapter_compression=data.get("adapter_compression", "none"),
+                hub_repo=(encryptor.decrypt(data["hub_repo"]) if data.get("hub_repo") else None),
+                tags=(
+                    json.loads(encryptor.decrypt(data["tags"]))
+                    if isinstance(data.get("tags"), str)
+                    else {}
+                ),
                 encrypted=True,
             )
         return cls(
