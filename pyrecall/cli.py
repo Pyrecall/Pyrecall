@@ -382,7 +382,8 @@ def init(
 
     # Re-validate after config-file override so bad values can't bypass CLI checks.
     config_errors: list[str] = []
-    _final_threshold = float(config.get("forgetting_threshold") or threshold)
+    _ft = config.get("forgetting_threshold")
+    _final_threshold: float = float(_ft) if isinstance(_ft, (int, float)) else threshold
     if not 0.0 < _final_threshold <= 1.0:
         config_errors.append(f"forgetting_threshold must be > 0 and <= 1, got {_final_threshold}")
     if config.get("strategy") not in ("lora", "qlora"):
