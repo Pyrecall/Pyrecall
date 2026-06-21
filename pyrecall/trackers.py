@@ -161,6 +161,7 @@ class NeptuneTracker:
     def __init__(self, project: str, **neptune_init_kwargs) -> None:
         self.project = project
         self._init_kwargs = neptune_init_kwargs
+        self._training_run = None  # lazy-opened on first log_step, closed on log_snapshot
 
     def log_snapshot(self, snapshot: SkillSnapshot) -> None:
         try:
@@ -169,6 +170,14 @@ class NeptuneTracker:
             raise ImportError(
                 "neptune is not installed. Install it with: pip install pyrecall[neptune]"
             ) from exc
+
+        # Close any open training run before logging the snapshot run.
+        if self._training_run is not None:
+            try:
+                self._training_run.stop()
+            except Exception:
+                pass
+            self._training_run = None
 
         run = neptune.init_run(
             project=self.project,
@@ -193,8 +202,10 @@ class NeptuneTracker:
             import neptune
         except ImportError:
             return
-        run = neptune.init_run(project=self.project, **self._init_kwargs)
-        try:
-            run["train/loss"].append(loss, step=step)
-        finally:
-            run.stop()
+        if self._training_run is None:
+            self._training_run = neptune.init_run(
+                project=self.project,
+                tags=["pyrecall", "training"],
+                **self._init_kwargs,
+            )
+        self._training_run["train/loss"].append(loss, step=step)
