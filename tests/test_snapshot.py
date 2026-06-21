@@ -458,3 +458,58 @@ class TestSnapshotTags:
         snap.save(tmp_path)
         raw = json.loads((tmp_path / "snapshot.json").read_text())
         assert raw["tags"] == {"k": "v"}
+
+
+class TestEncryptedSnapshotHubRepoAndTags:
+    _PW = "test-passphrase-hub"
+
+    def _requires_cryptography(self) -> None:
+        try:
+            import cryptography  # noqa: F401
+        except ImportError:
+            pytest.skip("cryptography not installed")
+
+    def _make_snap(self, **kwargs) -> SkillSnapshot:
+        from datetime import datetime
+
+        return SkillSnapshot(
+            name="enc_snap",
+            model_name="test/model",
+            created_at=datetime(2025, 1, 1),
+            **kwargs,
+        )
+
+    def test_hub_repo_round_trips_encrypted(self, tmp_path: Path) -> None:
+        self._requires_cryptography()
+        snap = self._make_snap(hub_repo="myorg/myrepo")
+        snap.save(tmp_path / "s", privacy=True, passphrase=self._PW)
+        loaded = SkillSnapshot.load(tmp_path / "s", privacy=True, passphrase=self._PW)
+        assert loaded.hub_repo == "myorg/myrepo"
+
+    def test_hub_repo_none_round_trips_encrypted(self, tmp_path: Path) -> None:
+        self._requires_cryptography()
+        snap = self._make_snap()
+        snap.save(tmp_path / "s", privacy=True, passphrase=self._PW)
+        loaded = SkillSnapshot.load(tmp_path / "s", privacy=True, passphrase=self._PW)
+        assert loaded.hub_repo is None
+
+    def test_tags_round_trip_encrypted(self, tmp_path: Path) -> None:
+        self._requires_cryptography()
+        snap = self._make_snap(tags={"commit": "abc123", "env": "prod"})
+        snap.save(tmp_path / "s", privacy=True, passphrase=self._PW)
+        loaded = SkillSnapshot.load(tmp_path / "s", privacy=True, passphrase=self._PW)
+        assert loaded.tags == {"commit": "abc123", "env": "prod"}
+
+    def test_empty_tags_round_trip_encrypted(self, tmp_path: Path) -> None:
+        self._requires_cryptography()
+        snap = self._make_snap()
+        snap.save(tmp_path / "s", privacy=True, passphrase=self._PW)
+        loaded = SkillSnapshot.load(tmp_path / "s", privacy=True, passphrase=self._PW)
+        assert loaded.tags == {}
+
+    def test_hub_repo_stored_encrypted_not_plaintext(self, tmp_path: Path) -> None:
+        self._requires_cryptography()
+        snap = self._make_snap(hub_repo="secret/repo")
+        snap.save(tmp_path / "s", privacy=True, passphrase=self._PW)
+        raw = (tmp_path / "s" / "snapshot.json").read_text()
+        assert "secret/repo" not in raw
