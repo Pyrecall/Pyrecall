@@ -665,12 +665,18 @@ class Model:
 
         console.print(f"[success]✓ Fine-tuning complete ({epochs} epoch(s)).[/success]")
 
-    def check(self) -> ForgettingReport:
+    def check(self, name: str | None = None) -> ForgettingReport:
         """
         Detect forgetting by benchmarking the current model and comparing to
         the most recent snapshot.
 
         Must be called after at least one :meth:`snapshot` call.
+
+        Args:
+            name: Optional name for the post-training snapshot. When ``None``
+                the snapshot is saved as ``<baseline>__after``. Providing a
+                name lets you call ``check()`` multiple times without
+                overwriting the previous after-snapshot.
 
         Returns:
             A :class:`~pyrecall.detector.ForgettingReport` with per-category scores
@@ -695,7 +701,7 @@ class Model:
         console.print("[info]Running post-training benchmarks…[/info]")
         after_scores = self._run_benchmarks()
         after = SkillSnapshot(
-            name=f"{self._baseline_snapshot_name}__after",
+            name=name if name is not None else f"{self._baseline_snapshot_name}__after",
             model_name=self.model_name,
             scores=after_scores,
         )

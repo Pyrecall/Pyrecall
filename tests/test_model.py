@@ -215,6 +215,23 @@ class TestModelCheck:
         report = patched_model.check()
         assert len(report.comparisons) > 0
 
+    def test_check_custom_name_used_in_report(self, patched_model) -> None:
+        patched_model.snapshot(name="base")
+        report = patched_model.check(name="after_epoch_1")
+        assert report.snapshot_after == "after_epoch_1"
+
+    def test_check_default_name_uses_baseline_suffix(self, patched_model) -> None:
+        patched_model.snapshot(name="base")
+        report = patched_model.check()
+        assert report.snapshot_after == "base__after"
+
+    def test_check_two_custom_names_produce_distinct_reports(self, patched_model) -> None:
+        patched_model.snapshot(name="base")
+        r1 = patched_model.check(name="after_epoch_1")
+        r2 = patched_model.check(name="after_epoch_2")
+        assert r1.snapshot_after == "after_epoch_1"
+        assert r2.snapshot_after == "after_epoch_2"
+
 
 class TestModelDiff:
     def test_diff_returns_report(self, patched_model) -> None:
