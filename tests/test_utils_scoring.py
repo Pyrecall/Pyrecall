@@ -240,3 +240,103 @@ class TestSafeModelName:
         a = safe_model_name("org/" + "a" * 300)
         b = safe_model_name("org/" + "b" * 300)
         assert a != b
+
+
+class TestComputeLogLikelihoodBatch:
+    """Tests for the batched scoring utility."""
+
+    def _make_model_and_tokenizer(self, vocab_size: int = 50, seq_len: int = 6):
+        """Return a minimal mock model + tokenizer for batch scoring tests."""
+        import torch
+
+        tok = MagicMock()
+        tok.pad_token_id = 0
+        tok.is_fast = False
+
+        def _tokenizer_call(*args, **kwargs):
+            text = args[0] if args else ""
+            # Prompt-only calls are shorter; use a short fixed length.
+            n = 3 if len(str(text)) < 20 else seq_len
+            out = MagicMock()
+            out.input_ids = torch.zeros(1, n, dtype=torch.long)
+            out.attention_mask = torch.ones(1, n, dtype=torch.long)
+            out.__getitem__ = lambda s, k: out.input_ids if k == "input_ids" else out.attention_mask
+            out.to = lambda d: out
+            return out
+
+        tok.side_effect = _tokenizer_call
+
+        model = MagicMock()
+
+        def _forward(**kwargs):
+            input_ids = kwargs["input_ids"]
+            b, t = input_ids.shape
+            out = MagicMock()
+            out.logits = torch.randn(b, t, vocab_size, device=input_ids.device)
+            return out
+
+        model.side_effect = _forward
+        return model, tok
+
+    def test_returns_list_of_floats(self) -> None:
+        from pyrecall.utils import compute_log_likelihood_batch
+
+        model, tok = self._make_model_and_tokenizer()
+        scores = compute_log_likelihood_batch(model, tok, ["hi there world"], ["yes"], device="cpu")
+        assert isinstance(scores, list)
+        assert len(scores) == 1
+        assert isinstance(scores[0], float)
+
+    def test_scores_in_0_1_range(self) -> None:
+        from pyrecall.utils import compute_log_likelihood_batch
+
+        model, tok = self._make_model_and_tokenizer()
+        prompts = ["hello world foo", "second prompt bar", "third one baz"]
+        completions = ["ans one", "ans two", "ans three"]
+        scores = compute_log_likelihood_batch(model, tok, prompts, completions, device="cpu")
+        for s in scores:
+            assert 0.0 <= s <= 1.0
+
+    def test_empty_input_returns_empty_list(self) -> None:
+        from pyrecall.utils import compute_log_likelihood_batch
+
+        model, tok = self._make_model_and_tokenizer()
+        assert compute_log_likelihood_batch(model, tok, [], [], device="cpu") == []
+
+    def test_batch_size_1_matches_single_call(self) -> None:
+        """batch_size=1 must give the same score as a single-item batch."""
+        import torch
+
+        from pyrecall.utils import compute_log_likelihood_batch
+
+        torch.manual_seed(42)
+        model, tok = self._make_model_and_tokenizer()
+
+        torch.manual_seed(0)
+        score_single = compute_log_likelihood_batch(
+            model, tok, ["hello world xyz"], ["answer"], device="cpu"
+        )
+        torch.manual_seed(0)
+        score_batch = compute_log_likelihood_batch(
+            model, tok, ["hello world xyz"], ["answer"], device="cpu"
+        )
+        assert abs(score_single[0] - score_batch[0]) < 1e-5
+
+    def test_model_called_once_for_single_batch(self) -> None:
+        from pyrecall.utils import compute_log_likelihood_batch
+
+        model, tok = self._make_model_and_tokenizer()
+        compute_log_likelihood_batch(
+            model, tok, ["prompt one two", "prompt two bar"], ["a", "b"], device="cpu"
+        )
+        assert model.call_count == 1
+
+    def test_benchmark_batch_size_stored_on_model(self) -> None:
+        from unittest.mock import patch
+
+        from pyrecall.model import Model
+
+        with patch.object(Model, "__init__", lambda self, *a, **kw: None):
+            m = object.__new__(Model)
+            m._benchmark_batch_size = 16
+        assert m._benchmark_batch_size == 16

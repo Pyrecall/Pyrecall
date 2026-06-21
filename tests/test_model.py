@@ -17,6 +17,8 @@ def _make_mock_tokenizer() -> MagicMock:
     tok.pad_token = None
     tok.eos_token = "<eos>"
     tok.eos_token_id = 0
+    tok.pad_token_id = 0
+    tok.is_fast = False
     # Simulate tokenizer call returning tensors
     token_out = MagicMock()
     token_out.__getitem__ = lambda self, key: MagicMock(
@@ -52,6 +54,16 @@ def _make_mock_peft_model() -> MagicMock:
     outputs = MagicMock()
     outputs.hidden_states = [hidden] * 4
     outputs.loss = torch.tensor(1.0)
+
+    # Return logits matching the input batch shape + device for compute_log_likelihood_batch.
+    def _forward_side_effect(*args, **kwargs):
+        input_ids = kwargs.get("input_ids", args[0] if args else None)
+        if input_ids is not None and hasattr(input_ids, "shape"):
+            b, t = input_ids.shape
+            outputs.logits = torch.randn(b, t, 100, device=input_ids.device)
+        return outputs
+
+    peft.side_effect = _forward_side_effect
     peft.return_value = outputs
 
     peft.generate.return_value = torch.zeros(1, 10, dtype=torch.long)
@@ -83,7 +95,10 @@ def patched_model(tmp_snapshot_dir: Path):
         patch("pyrecall.model.get_peft_model", return_value=mock_peft),
         patch("pyrecall.model.compute_embeddings", return_value=torch.randn(32)),
         patch("pyrecall.model.cosine_similarity", return_value=0.75),
-        patch("pyrecall.model.compute_log_likelihood", return_value=0.368),
+        patch(
+            "pyrecall.model.compute_log_likelihood_batch",
+            side_effect=lambda model, tok, prompts, completions, **kw: [0.368] * len(prompts),
+        ),
     ):
         from pyrecall.model import Model
 

@@ -174,6 +174,112 @@ def compute_log_likelihood(
     return math.exp(-mean_nll)
 
 
+def compute_log_likelihood_batch(
+    model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizerBase,
+    prompts: list[str],
+    completions: list[str],
+    device: str = "cpu",
+    max_length: int = 512,
+) -> list[float]:
+    """Batched variant of :func:`compute_log_likelihood`.
+
+    Tokenises all (prompt, completion) pairs, right-pads to the longest sequence
+    in the batch, and runs a single forward pass to compute per-item NLL.
+    Returns a list of scores in the same order as the inputs.
+    """
+    if not prompts:
+        return []
+
+    all_input_ids: list[list[int]] = []
+    all_labels: list[list[int]] = []
+
+    for prompt, completion in zip(prompts, completions):
+        prompt_char_len = len(prompt)
+        if getattr(tokenizer, "is_fast", False) is True:
+            enc = tokenizer(
+                prompt + completion,
+                return_tensors="pt",
+                truncation=True,
+                max_length=max_length,
+                add_special_tokens=True,
+                return_offsets_mapping=True,
+            )
+            offsets = enc.pop("offset_mapping")[0].tolist()
+            prompt_len = next(
+                (i for i, (_, end) in enumerate(offsets) if end > prompt_char_len),
+                len(offsets),
+            )
+        else:
+            prompt_enc = tokenizer(
+                prompt,
+                return_tensors="pt",
+                truncation=True,
+                max_length=max_length,
+                add_special_tokens=True,
+            )
+            enc = tokenizer(
+                prompt + completion,
+                return_tensors="pt",
+                truncation=True,
+                max_length=max_length,
+                add_special_tokens=True,
+            )
+            prompt_len = prompt_enc["input_ids"].shape[1]
+
+        ids = enc["input_ids"][0].tolist()
+        labels = ids[:]
+        for i in range(prompt_len):
+            labels[i] = -100
+        all_input_ids.append(ids)
+        all_labels.append(labels)
+
+    pad_id = tokenizer.pad_token_id or 0
+    max_len = max(len(ids) for ids in all_input_ids)
+    padded_ids = torch.full((len(prompts), max_len), pad_id, dtype=torch.long)
+    padded_labels = torch.full((len(prompts), max_len), -100, dtype=torch.long)
+    attn_mask = torch.zeros(len(prompts), max_len, dtype=torch.long)
+    for i, (ids, lbls) in enumerate(zip(all_input_ids, all_labels)):
+        n = len(ids)
+        padded_ids[i, :n] = torch.tensor(ids, dtype=torch.long)
+        padded_labels[i, :n] = torch.tensor(lbls, dtype=torch.long)
+        attn_mask[i, :n] = 1
+
+    padded_ids = padded_ids.to(device)
+    padded_labels = padded_labels.to(device)
+    attn_mask = attn_mask.to(device)
+
+    with torch.no_grad():
+        outputs = model(input_ids=padded_ids, attention_mask=attn_mask)
+
+    # Shift: logits[t] predicts token[t+1].
+    logits = outputs.logits[:, :-1, :].contiguous()
+    shift_labels = padded_labels[:, 1:].contiguous()
+
+    loss_per_token = F.cross_entropy(
+        logits.view(-1, logits.size(-1)),
+        shift_labels.view(-1),
+        ignore_index=-100,
+        reduction="none",
+    ).view(len(prompts), -1)
+
+    n_scored = (shift_labels != -100).sum(dim=1).float()
+
+    scores: list[float] = []
+    for nll_sum, n in zip(loss_per_token.sum(dim=1), n_scored):
+        if n.item() == 0:
+            logger.warning(
+                "compute_log_likelihood_batch: no completion tokens remain after masking "
+                "(prompt may exceed max_length=%d). Returning NaN.",
+                max_length,
+            )
+            scores.append(float("nan"))
+        else:
+            mean_nll = nll_sum.item() / n.item()
+            scores.append(1.0 if mean_nll <= 0.0 else math.exp(-mean_nll))
+    return scores
+
+
 def safe_model_name(model_name: str) -> str:
     """Convert a HuggingFace model name to a filesystem-safe string.
 

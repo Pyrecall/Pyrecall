@@ -624,6 +624,13 @@ def snapshot(
             help="Attach a key=value tag to this snapshot (repeatable), e.g. --tag commit=abc123f",
         ),
     ] = [],
+    benchmark_batch_size: Annotated[
+        int,
+        typer.Option(
+            "--benchmark-batch-size",
+            help="Number of benchmark prompts scored per forward pass (default 8). Set to 1 for sequential.",
+        ),
+    ] = 8,
 ) -> None:
     """
     Load the model, run all benchmarks, and save a named capability snapshot.
@@ -670,6 +677,7 @@ def snapshot(
         scoring_method=config.get("scoring_method", "log_likelihood"),
         snapshot_compression=compression,
         category_thresholds=config.get("category_thresholds", {}),
+        benchmark_batch_size=benchmark_batch_size,
     )
     tracker = _build_trackers(log_wandb, log_mlflow, log_neptune, neptune_project)
     model_obj.snapshot(name=name, tracker=tracker, dry_run=dry_run, tags=_parse_tags(tag))

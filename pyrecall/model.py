@@ -41,7 +41,7 @@ from .snapshot import SkillScore, SkillSnapshot
 from .trackers import SnapshotTracker
 from .utils import (
     compute_embeddings,
-    compute_log_likelihood,
+    compute_log_likelihood_batch,
     console,
     cosine_similarity,
     get_logger,
@@ -213,6 +213,7 @@ class Model:
         on_healthy: ForgettingCallback | list[ForgettingCallback] | None = None,
         snapshot_compression: str = "none",
         gradient_checkpointing: bool = False,
+        benchmark_batch_size: int = 8,
     ) -> None:
         """
         Load *model_name* from HuggingFace Hub (or local cache) and wrap it with LoRA.
@@ -250,6 +251,10 @@ class Model:
                 ``"lz4"`` (requires ``pip install lz4``).
             gradient_checkpointing: Enable gradient checkpointing during training to
                 reduce GPU memory usage by ~40 % at the cost of ~20 % slower training.
+            benchmark_batch_size: Number of benchmark prompts scored in a single forward
+                pass during :meth:`snapshot` and :meth:`check`.  Default 8 gives a
+                4–8× speedup over the sequential path.  Set to 1 to restore the
+                old sequential behaviour.
         """
         if strategy not in ("lora", "qlora"):
             raise PyrecallError(
@@ -285,6 +290,7 @@ class Model:
         )
         self._snapshot_compression = snapshot_compression
         self._gradient_checkpointing = gradient_checkpointing
+        self._benchmark_batch_size = benchmark_batch_size
         # Replay buffer lives under ~/.pyrecall/replay/ by default.
         # When snapshot_dir is overridden (e.g. in tests), put replay alongside it
         # so tests stay isolated, but keep it separate from the snapshots tree.
@@ -1048,26 +1054,43 @@ class Model:
         ) as progress:
             task = progress.add_task("Benchmarking", total=len(all_benchmarks))
 
-            for bench in all_benchmarks:
-                progress.update(
-                    task,
-                    description=f"Benchmarking  [dim cyan]{bench.category}[/dim cyan]",
-                )
-
-                if self.scoring_method == "log_likelihood":
-                    score = compute_log_likelihood(
+            if self.scoring_method == "log_likelihood":
+                # Score in batches; generate responses sequentially for storage.
+                batch_size = max(1, self._benchmark_batch_size)
+                for batch_start in range(0, len(all_benchmarks), batch_size):
+                    batch = all_benchmarks[batch_start : batch_start + batch_size]
+                    batch_scores = compute_log_likelihood_batch(
                         self.model,
                         self.tokenizer,
-                        bench.prompt,
-                        bench.reference_answer,
+                        [b.prompt for b in batch],
+                        [b.reference_answer for b in batch],
                         device=self.device,  # type: ignore[arg-type]
                         max_length=self.max_length,
                     )
-                    # Still generate for human-readable storage / --verbose display
-                    response = self.generate(bench.prompt)
-                    if not response.strip():
-                        response = "[no response]"
-                else:
+                    for bench, score in zip(batch, batch_scores):
+                        progress.update(
+                            task,
+                            description=f"Benchmarking  [dim cyan]{bench.category}[/dim cyan]",
+                        )
+                        response = self.generate(bench.prompt)
+                        if not response.strip():
+                            response = "[no response]"
+                        scores.append(
+                            SkillScore(
+                                category=bench.category,
+                                prompt=bench.prompt,
+                                response=response,
+                                score=score,
+                                scoring_method=self.scoring_method,
+                            )
+                        )
+                        progress.advance(task)
+            else:
+                for bench in all_benchmarks:
+                    progress.update(
+                        task,
+                        description=f"Benchmarking  [dim cyan]{bench.category}[/dim cyan]",
+                    )
                     response = self.generate(bench.prompt)
                     if not response.strip():
                         response = "[no response]"
@@ -1085,18 +1108,16 @@ class Model:
                     )
                     raw_sim = cosine_similarity(resp_emb, ref_emb)
                     score = (raw_sim + 1.0) / 2.0
-
-                scores.append(
-                    SkillScore(
-                        category=bench.category,
-                        prompt=bench.prompt,
-                        response=response,
-                        score=score,
-                        scoring_method=self.scoring_method,
+                    scores.append(
+                        SkillScore(
+                            category=bench.category,
+                            prompt=bench.prompt,
+                            response=response,
+                            score=score,
+                            scoring_method=self.scoring_method,
+                        )
                     )
-                )
-
-                progress.advance(task)
+                    progress.advance(task)
 
         return scores
 
