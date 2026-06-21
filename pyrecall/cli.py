@@ -1195,13 +1195,16 @@ def compare(
             if cat not in all_cats:
                 all_cats.append(cat)
 
+    def _safe_round4(v: float) -> float | None:
+        return None if math.isnan(v) else round(v, 4)
+
     if json_output:
         out: dict = {
             "snapshots": [s.name for s in loaded],
             "categories": {
-                "overall": {s.name: round(s.overall_score(), 4) for s in loaded},
+                "overall": {s.name: _safe_round4(s.overall_score()) for s in loaded},
                 **{
-                    cat: {s.name: round(s.category_scores().get(cat, 0.0), 4) for s in loaded}
+                    cat: {s.name: _safe_round4(s.category_scores().get(cat, 0.0)) for s in loaded}
                     for cat in all_cats
                 },
             },
@@ -1218,14 +1221,18 @@ def compare(
         table.add_column(snap.name, justify="right")
 
     def _fmt_row(label: str, values: list[float]) -> None:
-        best = max(values)
-        worst = min(values)
+        finite = [v for v in values if not math.isnan(v)]
+        best = max(finite) if finite else None
+        worst = min(finite) if finite else None
         cells: list[str] = [label]
         for v in values:
+            if math.isnan(v):
+                cells.append("-")
+                continue
             s = f"{v:.3f}"
-            if v == best and best != worst:
+            if best != worst and v == best:
                 cells.append(f"[green]{s}[/green]")
-            elif v == worst and best != worst:
+            elif best != worst and v == worst:
                 cells.append(f"[red]{s}[/red]")
             else:
                 cells.append(s)
