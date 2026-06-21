@@ -999,15 +999,18 @@ class Model:
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            MofNCompleteColumn(),
+            TimeRemainingColumn(),
             console=console,
             transient=True,
         ) as progress:
-            task = progress.add_task("Running benchmarks…", total=len(all_benchmarks))
+            task = progress.add_task("Benchmarking", total=len(all_benchmarks))
 
             for bench in all_benchmarks:
                 progress.update(
                     task,
-                    description=(f"[{bench.category}] {bench.prompt[:55].rstrip()}…"),
+                    description=f"Benchmarking  [dim cyan]{bench.category}[/dim cyan]",
                 )
 
                 if self.scoring_method == "log_likelihood":
