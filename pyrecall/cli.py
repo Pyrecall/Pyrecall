@@ -1696,6 +1696,8 @@ def history(
                 _comp_map = {x.category: x for x in report.comparisons}
                 dropped_notes = [
                     f"{c} {_comp_map[c].delta:+.3f}"
+                    if not math.isnan(_comp_map[c].delta)
+                    else f"{c} (n/a)"
                     for c in report.degraded_skills
                     if c in _comp_map
                 ]
