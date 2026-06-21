@@ -1032,3 +1032,218 @@ class TestReplayWeightsValidation:
             self._run_learn(
                 patched_model, data_file, replay_weights={"coding": -1.0, "safety": -2.0}
             )
+
+
+class TestWatchMode:
+    """Tests for model.learn(watch_every=N, watch_action=...)."""
+
+    def _make_data(self, tmp_path: Path) -> Path:
+        f = tmp_path / "train.jsonl"
+        f.write_text(json.dumps({"text": "hi"}) + "\n")
+        return f
+
+    def _learn_with_watch(self, patched_model, data_file, **kwargs):
+        """Run learn() with Trainer mocked out."""
+        mock_trainer = MagicMock()
+
+        with (
+            patch("pyrecall.model.load_dataset") as mock_ds,
+            patch("pyrecall.model.Trainer", return_value=mock_trainer),
+            patch("pyrecall.model.TrainingArguments"),
+            patch("pyrecall.model.DataCollatorForLanguageModeling"),
+        ):
+            mock_dataset = MagicMock()
+            mock_dataset.column_names = ["text"]
+            mock_dataset.__len__.return_value = 1
+            mock_dataset.map.return_value = mock_dataset
+            mock_ds.return_value = mock_dataset
+            patched_model.learn(str(data_file), epochs=1, **kwargs)
+
+        return mock_trainer
+
+    def test_watch_every_requires_baseline(self, patched_model, tmp_path: Path) -> None:
+        from pyrecall.model import PyrecallError
+
+        patched_model._baseline_snapshot_name = None
+        data_file = self._make_data(tmp_path)
+        with pytest.raises(PyrecallError, match="baseline"):
+            self._learn_with_watch(patched_model, data_file, watch_every=1)
+
+    def test_invalid_watch_action_raises(self, patched_model, tmp_path: Path) -> None:
+        from pyrecall.model import PyrecallError
+
+        patched_model.snapshot(name="base")
+        data_file = self._make_data(tmp_path)
+        with pytest.raises(PyrecallError, match="watch_action"):
+            self._learn_with_watch(patched_model, data_file, watch_every=1, watch_action="invalid")
+
+    def test_watch_every_less_than_1_raises(self, patched_model, tmp_path: Path) -> None:
+        from pyrecall.model import PyrecallError
+
+        patched_model.snapshot(name="base")
+        data_file = self._make_data(tmp_path)
+        with pytest.raises(PyrecallError, match="watch_every"):
+            self._learn_with_watch(patched_model, data_file, watch_every=0)
+
+    def test_no_watch_every_no_watch_callback(self, patched_model, tmp_path: Path) -> None:
+        from pyrecall.model import _WatchCallback
+
+        data_file = self._make_data(tmp_path)
+        mock_trainer = MagicMock()
+
+        captured_callbacks: list = []
+
+        def _capture_trainer(**kwargs):
+            captured_callbacks.extend(kwargs.get("callbacks", []))
+            return mock_trainer
+
+        with (
+            patch("pyrecall.model.load_dataset") as mock_ds,
+            patch("pyrecall.model.Trainer", side_effect=_capture_trainer),
+            patch("pyrecall.model.TrainingArguments"),
+            patch("pyrecall.model.DataCollatorForLanguageModeling"),
+        ):
+            mock_dataset = MagicMock()
+            mock_dataset.column_names = ["text"]
+            mock_dataset.__len__.return_value = 1
+            mock_dataset.map.return_value = mock_dataset
+            mock_ds.return_value = mock_dataset
+            patched_model.learn(str(data_file), epochs=1)
+
+        assert not any(isinstance(cb, _WatchCallback) for cb in captured_callbacks)
+
+    def test_watch_every_adds_watch_callback(self, patched_model, tmp_path: Path) -> None:
+        from pyrecall.model import _WatchCallback
+
+        patched_model.snapshot(name="base")
+        data_file = self._make_data(tmp_path)
+        mock_trainer = MagicMock()
+        captured_callbacks: list = []
+
+        def _capture_trainer(**kwargs):
+            captured_callbacks.extend(kwargs.get("callbacks", []))
+            return mock_trainer
+
+        with (
+            patch("pyrecall.model.load_dataset") as mock_ds,
+            patch("pyrecall.model.Trainer", side_effect=_capture_trainer),
+            patch("pyrecall.model.TrainingArguments"),
+            patch("pyrecall.model.DataCollatorForLanguageModeling"),
+        ):
+            mock_dataset = MagicMock()
+            mock_dataset.column_names = ["text"]
+            mock_dataset.__len__.return_value = 1
+            mock_dataset.map.return_value = mock_dataset
+            mock_ds.return_value = mock_dataset
+            patched_model.learn(str(data_file), epochs=3, watch_every=1)
+
+        assert any(isinstance(cb, _WatchCallback) for cb in captured_callbacks)
+
+    def test_watch_callback_skips_non_boundary_epochs(self, patched_model) -> None:
+        from pyrecall.model import _WatchCallback
+
+        patched_model.snapshot(name="base")
+        cb = _WatchCallback(
+            model_ref=patched_model,
+            baseline_name="base",
+            watch_every=5,
+            watch_action="warn",
+        )
+        state = MagicMock()
+        state.epoch = 3.0
+        control = MagicMock()
+
+        with patch.object(patched_model, "_run_benchmarks") as mock_bench:
+            cb.on_epoch_end(None, state, control)
+            mock_bench.assert_not_called()
+
+    def test_watch_callback_fires_on_boundary_epoch(self, patched_model, tmp_snapshot_dir) -> None:
+        from pyrecall.model import _WatchCallback
+        from pyrecall.snapshot import SkillScore
+
+        patched_model.snapshot(name="base")
+
+        mock_scores = [SkillScore(category="coding", prompt="p", response="r", score=0.8)]
+        cb = _WatchCallback(
+            model_ref=patched_model,
+            baseline_name="base",
+            watch_every=5,
+            watch_action="warn",
+        )
+        state = MagicMock()
+        state.epoch = 5.0
+        control = MagicMock()
+
+        with patch.object(patched_model, "_run_benchmarks", return_value=mock_scores):
+            cb.on_epoch_end(None, state, control)
+
+        names = patched_model.rollback_manager.list_snapshot_names()
+        assert any("epoch5" in n for n in names)
+
+    def test_watch_action_warn_continues_training(self, patched_model, tmp_snapshot_dir) -> None:
+        from pyrecall.model import _WatchCallback
+        from pyrecall.snapshot import SkillScore
+
+        patched_model.snapshot(name="base")
+        cb = _WatchCallback(
+            model_ref=patched_model,
+            baseline_name="base",
+            watch_every=1,
+            watch_action="warn",
+        )
+        state = MagicMock()
+        state.epoch = 1.0
+        control = MagicMock()
+        control.should_training_stop = False
+
+        # Return degraded scores to trigger forgetting
+        bad_scores = [SkillScore(category="coding", prompt="p", response="r", score=0.0)]
+        with patch.object(patched_model, "_run_benchmarks", return_value=bad_scores):
+            cb.on_epoch_end(None, state, control)
+
+        # warn action must NOT stop training
+        assert not control.should_training_stop
+
+    def test_watch_action_stop_sets_flag(self, patched_model, tmp_snapshot_dir) -> None:
+        from pyrecall.model import _WatchCallback, _WatchStopSignal
+        from pyrecall.snapshot import SkillScore
+
+        patched_model.snapshot(name="base")
+        cb = _WatchCallback(
+            model_ref=patched_model,
+            baseline_name="base",
+            watch_every=1,
+            watch_action="stop",
+        )
+        state = MagicMock()
+        state.epoch = 1.0
+        control = MagicMock()
+
+        bad_scores = [SkillScore(category="coding", prompt="p", response="r", score=0.0)]
+        with patch.object(patched_model, "_run_benchmarks", return_value=bad_scores):
+            with pytest.raises(_WatchStopSignal):
+                cb.on_epoch_end(None, state, control)
+
+        assert control.should_training_stop
+
+    def test_watch_action_rollback_sets_flag(self, patched_model, tmp_snapshot_dir) -> None:
+        from pyrecall.model import _WatchCallback, _WatchRollbackSignal
+        from pyrecall.snapshot import SkillScore
+
+        patched_model.snapshot(name="base")
+        cb = _WatchCallback(
+            model_ref=patched_model,
+            baseline_name="base",
+            watch_every=1,
+            watch_action="rollback",
+        )
+        state = MagicMock()
+        state.epoch = 1.0
+        control = MagicMock()
+
+        bad_scores = [SkillScore(category="coding", prompt="p", response="r", score=0.0)]
+        with patch.object(patched_model, "_run_benchmarks", return_value=bad_scores):
+            with pytest.raises(_WatchRollbackSignal):
+                cb.on_epoch_end(None, state, control)
+
+        assert control.should_training_stop
