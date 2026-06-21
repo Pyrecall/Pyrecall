@@ -1,9 +1,9 @@
-"""
-pyrecall — Keep your models balanced.
 
-Continuous fine-tuning with automatic forgetting detection and skill rollback.
+//pyrecall — Keep your models balanced.
 
-Quick start::
+//Continuous fine-tuning with automatic forgetting detection and skill rollback.
+
+//Quick start::
 
     from pyrecall import Model
 
@@ -13,7 +13,7 @@ Quick start::
     report = model.check()
     if not report.is_healthy:
         model.rollback(to="before_v1")
-"""
+//
 
 from importlib.metadata import PackageNotFoundError, version
 
