@@ -715,7 +715,9 @@ def snapshot(
             console.print(f"[red]Error:[/red] Could not push to Hub: {exc}")
             raise typer.Exit(1)
 
-    if not no_update_baseline:
+    if dry_run:
+        pass  # dry-run never persists weights, so there is nothing to set as baseline
+    elif not no_update_baseline:
         config["baseline_snapshot"] = name
         _write_config(config)
         console.print(f"[dim]  Baseline updated to '{name}' in {_CONFIG_FILE}.[/dim]")

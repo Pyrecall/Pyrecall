@@ -599,6 +599,21 @@ class TestSnapshot:
         config = json.loads((tmp_path / _CONFIG_FILE).read_text())
         assert config["baseline_snapshot"] == "new_snap"
 
+    def test_dry_run_does_not_update_baseline(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path, baseline="stable_baseline")
+        mock_model = MagicMock()
+        mock_model.snapshot.return_value = _make_snapshot("dry_snap")
+
+        with patch("pyrecall.model.Model", return_value=mock_model):
+            result = runner.invoke(app, ["snapshot", "dry_snap", "--dry-run"])
+
+        assert result.exit_code == 0
+        config = json.loads((tmp_path / _CONFIG_FILE).read_text())
+        assert config["baseline_snapshot"] == "stable_baseline"
+
 
 # ── check ─────────────────────────────────────────────────────────────────────
 
