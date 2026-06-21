@@ -195,7 +195,7 @@ class _WatchCallback(TrainerCallback):
         self._watch_action = watch_action
 
     def on_epoch_end(self, args, state, control, **kwargs) -> None:  # type: ignore[override]
-        epoch = int(state.epoch)
+        epoch = round(state.epoch)
         if epoch % self._watch_every != 0:
             return
 

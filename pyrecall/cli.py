@@ -396,7 +396,7 @@ def learn(
     data: Annotated[
         str,
         typer.Argument(
-            help="Path to training data (.jsonl, .csv, or .parquet). Each row needs a 'text' column."
+            help="Path to training data (.jsonl, .csv, or .parquet). Supports 'text', 'messages', and 'prompt'+'response' column layouts."
         ),
     ],
     epochs: Annotated[
@@ -477,6 +477,20 @@ def learn(
             help="Enable gradient checkpointing to cut GPU memory ~40% at the cost of ~20% slower training.",
         ),
     ] = None,
+    watch_every: Annotated[
+        int | None,
+        typer.Option(
+            "--watch-every",
+            help="Run benchmarks and check for forgetting every N epochs during training.",
+        ),
+    ] = None,
+    watch_action: Annotated[
+        str,
+        typer.Option(
+            "--watch-action",
+            help="Action on forgetting: 'warn' (default), 'stop', or 'rollback'.",
+        ),
+    ] = "warn",
     format: Annotated[
         str,
         typer.Option(
@@ -552,6 +566,9 @@ def learn(
             max_length=max_length,
             resume=resume,
             gradient_checkpointing=gradient_checkpointing,
+            tracker=tracker,
+            watch_every=watch_every,
+            watch_action=watch_action,
             format=format,
             messages_column=messages_column,
         )

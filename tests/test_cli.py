@@ -484,6 +484,64 @@ class TestLearn:
         mock_model.learn.assert_called_once()
         mock_model.snapshot.assert_called_once_with(name="after_v1", tracker=None)
 
+    def test_watch_every_passed_through(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        self._config(tmp_path)
+        data = tmp_path / "train.jsonl"
+        data.write_text('{"text": "hi"}\n')
+        mock_model = MagicMock()
+
+        with patch("pyrecall.model.Model", return_value=mock_model):
+            runner.invoke(app, ["learn", str(data), "--watch-every", "5"])
+
+        assert mock_model.learn.call_args[1]["watch_every"] == 5
+
+    def test_watch_action_passed_through(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        self._config(tmp_path)
+        data = tmp_path / "train.jsonl"
+        data.write_text('{"text": "hi"}\n')
+        mock_model = MagicMock()
+
+        with patch("pyrecall.model.Model", return_value=mock_model):
+            runner.invoke(app, ["learn", str(data), "--watch-action", "rollback"])
+
+        assert mock_model.learn.call_args[1]["watch_action"] == "rollback"
+
+    def test_watch_every_default_is_none(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        self._config(tmp_path)
+        data = tmp_path / "train.jsonl"
+        data.write_text('{"text": "hi"}\n')
+        mock_model = MagicMock()
+
+        with patch("pyrecall.model.Model", return_value=mock_model):
+            runner.invoke(app, ["learn", str(data)])
+
+        assert mock_model.learn.call_args[1]["watch_every"] is None
+
+    def test_tracker_forwarded_to_learn(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        self._config(tmp_path)
+        data = tmp_path / "train.jsonl"
+        data.write_text('{"text": "hi"}\n')
+        mock_model = MagicMock()
+
+        with patch("pyrecall.model.Model", return_value=mock_model):
+            runner.invoke(app, ["learn", str(data), "--log-wandb"])
+
+        call_kwargs = mock_model.learn.call_args[1]
+        assert "tracker" in call_kwargs
+        assert call_kwargs["tracker"] is not None
+
 
 # ── snapshot ──────────────────────────────────────────────────────────────────
 
