@@ -516,8 +516,8 @@ class ForgettingReport:
 
             table.add_row(
                 comp.category,
-                f"{comp.score_before:.3f}",
-                f"{comp.score_after:.3f}",
+                "n/a" if math.isnan(comp.score_before) else f"{comp.score_before:.3f}",
+                "n/a" if math.isnan(comp.score_after) else f"{comp.score_after:.3f}",
                 f"[{delta_style}]{delta_str}[/{delta_style}]",
                 cohen_str,
                 status_markup,
