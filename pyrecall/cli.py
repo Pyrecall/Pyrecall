@@ -874,19 +874,19 @@ def check(
                 return 1
             try:
                 snap_before = mgr.load_snapshot(before)
-            except FileNotFoundError:
+            except (FileNotFoundError, ValueError) as exc:
                 if ci:
-                    typer.echo(f"Error: Snapshot '{before}' not found.")
+                    typer.echo(f"Error: {exc}")
                 else:
-                    console.print(f"[red]Error:[/red] Snapshot '{before}' not found.")
+                    console.print(f"[red]Error:[/red] {exc}")
                 return 1
             try:
                 snap_after = mgr.load_snapshot(after)
-            except FileNotFoundError:
+            except (FileNotFoundError, ValueError) as exc:
                 if ci:
-                    typer.echo(f"Error: Snapshot '{after}' not found.")
+                    typer.echo(f"Error: {exc}")
                 else:
-                    console.print(f"[red]Error:[/red] Snapshot '{after}' not found.")
+                    console.print(f"[red]Error:[/red] {exc}")
                 return 1
 
         report = detector.compare(snap_before, snap_after)
@@ -968,26 +968,22 @@ def check(
                     if before is not None:
                         try:
                             snap_b = mgr.load_snapshot(before)
-                        except FileNotFoundError:
+                        except (FileNotFoundError, ValueError) as exc:
                             if ci:
-                                typer.echo(f"Snapshot '{before}' not found.")
+                                typer.echo(f"Error: {exc}")
                             else:
-                                console.print(
-                                    f"[dim][{ts}][/dim] [red]Snapshot '{before}' not found.[/red]"
-                                )
+                                console.print(f"[dim][{ts}][/dim] [red]Error: {exc}[/red]")
                             last_exit_code = 1
                             _failed = True
 
                     if after is not None:
                         try:
                             snap_a = mgr.load_snapshot(after)
-                        except FileNotFoundError:
+                        except (FileNotFoundError, ValueError) as exc:
                             if ci:
-                                typer.echo(f"Snapshot '{after}' not found.")
+                                typer.echo(f"Error: {exc}")
                             else:
-                                console.print(
-                                    f"[dim][{ts}][/dim] [red]Snapshot '{after}' not found.[/red]"
-                                )
+                                console.print(f"[dim][{ts}][/dim] [red]Error: {exc}[/red]")
                             last_exit_code = 1
                             _failed = True
 
@@ -1085,13 +1081,13 @@ def diff(
 
     try:
         snap_before = mgr.load_snapshot(snap1)
-    except FileNotFoundError:
-        console.print(f"[red]Error:[/red] Snapshot '{snap1}' not found.")
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(1)
     try:
         snap_after = mgr.load_snapshot(snap2)
-    except FileNotFoundError:
-        console.print(f"[red]Error:[/red] Snapshot '{snap2}' not found.")
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(1)
 
     from pyrecall.detector import ForgettingDetector
@@ -1165,8 +1161,8 @@ def compare(
     for name in snapshots:
         try:
             loaded.append(mgr.load_snapshot(name))
-        except FileNotFoundError:
-            console.print(f"[red]Error:[/red] Snapshot '{name}' not found.")
+        except (FileNotFoundError, ValueError) as exc:
+            console.print(f"[red]Error:[/red] {exc}")
             raise typer.Exit(1)
 
     # Collect all category names in a stable order.
