@@ -570,14 +570,22 @@ class ForgettingReport:
                 pt.add_column("After", justify="right")
                 pt.add_column("Δ", justify="right")
                 for p in prompts:
-                    sign = "+" if p.delta >= 0 else ""
-                    delta_style = "red" if p.delta < 0 else "green"
-                    pt.add_row(
-                        p.prompt,
-                        f"{p.score_before:.3f}",
-                        f"{p.score_after:.3f}",
-                        f"[{delta_style}]{sign}{p.delta:.3f}[/{delta_style}]",
-                    )
+                    if math.isnan(p.delta):
+                        pt.add_row(
+                            p.prompt,
+                            "n/a" if math.isnan(p.score_before) else f"{p.score_before:.3f}",
+                            "n/a" if math.isnan(p.score_after) else f"{p.score_after:.3f}",
+                            "[dim]n/a[/dim]",
+                        )
+                    else:
+                        sign = "+" if p.delta >= 0 else ""
+                        delta_style = "red" if p.delta < 0 else "green"
+                        pt.add_row(
+                            p.prompt,
+                            f"{p.score_before:.3f}",
+                            f"{p.score_after:.3f}",
+                            f"[{delta_style}]{sign}{p.delta:.3f}[/{delta_style}]",
+                        )
                 console.print(pt)
                 console.print()
 
