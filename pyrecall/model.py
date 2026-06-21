@@ -214,7 +214,9 @@ class _WatchCallback(TrainerCallback):
         try:
             baseline_snap = self._model_ref.rollback_manager.load_snapshot(self._baseline_name)
         except Exception:
-            logger.warning("Watch: could not load baseline '%s' — skipping check.", self._baseline_name)
+            logger.warning(
+                "Watch: could not load baseline '%s' — skipping check.", self._baseline_name
+            )
             return
 
         report = self._model_ref.detector.compare(baseline_snap, snap)
@@ -802,7 +804,9 @@ class Model:
             if streaming_cb is not None:
                 streaming_cb._progress.stop()
             self.model.eval()
-            console.print("[warning]Training stopped — rolling back to baseline snapshot.[/warning]")
+            console.print(
+                "[warning]Training stopped — rolling back to baseline snapshot.[/warning]"
+            )
             _fire_callbacks(self._on_forgetting, exc.report)
             baseline = self._baseline_snapshot_name
             if baseline:
