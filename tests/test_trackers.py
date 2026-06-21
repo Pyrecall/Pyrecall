@@ -326,3 +326,52 @@ class TestWandbTrackerFinishOnError:
                 WandbTracker().log_snapshot(snap)
 
         mock_run.finish.assert_called_once()
+
+
+class TestLogStep:
+    def test_wandb_log_step_calls_wandb_log(self) -> None:
+        mock_wandb = MagicMock()
+        with patch.dict("sys.modules", {"wandb": mock_wandb}):
+            WandbTracker().log_step(10, 0.42)
+        mock_wandb.log.assert_called_once_with({"train/loss": 0.42, "train/step": 10}, step=10)
+
+    def test_mlflow_log_step_calls_log_metric(self) -> None:
+        mock_mlflow = MagicMock()
+        with patch.dict("sys.modules", {"mlflow": mock_mlflow}):
+            MLflowTracker().log_step(5, 0.9)
+        mock_mlflow.log_metric.assert_called_once_with("train/loss", 0.9, step=5)
+
+    def test_log_step_silent_when_import_missing(self) -> None:
+        with patch.dict("sys.modules", {"wandb": None}):
+            WandbTracker().log_step(1, 0.5)  # should not raise
+
+    def test_tracker_step_callback_calls_log_step(self) -> None:
+        from pyrecall.model import _TrackerStepCallback
+
+        mock_tracker = MagicMock()
+        cb = _TrackerStepCallback(trackers=[mock_tracker])
+        state = MagicMock()
+        state.global_step = 3
+        cb.on_log(None, state, None, logs={"loss": 0.75})
+        mock_tracker.log_step.assert_called_once_with(3, 0.75)
+
+    def test_tracker_step_callback_skips_tracker_without_log_step(self) -> None:
+        from pyrecall.model import _TrackerStepCallback
+
+        class NoLogStep:
+            pass
+
+        cb = _TrackerStepCallback(trackers=[NoLogStep()])
+        state = MagicMock()
+        state.global_step = 1
+        cb.on_log(None, state, None, logs={"loss": 0.5})  # should not raise
+
+    def test_tracker_step_callback_ignores_empty_logs(self) -> None:
+        from pyrecall.model import _TrackerStepCallback
+
+        mock_tracker = MagicMock()
+        cb = _TrackerStepCallback(trackers=[mock_tracker])
+        state = MagicMock()
+        state.global_step = 1
+        cb.on_log(None, state, None, logs=None)
+        mock_tracker.log_step.assert_not_called()

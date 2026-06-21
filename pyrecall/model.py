@@ -103,8 +103,9 @@ def _fire_callbacks(
 class _StreamingCallback(TrainerCallback):
     """Rich progress bar that surfaces per-step loss during model.learn(stream=True)."""
 
-    def __init__(self, total_steps: int) -> None:
+    def __init__(self, total_steps: int, trackers: list | None = None) -> None:
         self._total = total_steps
+        self._trackers = trackers or []
         self._progress = Progress(
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
@@ -129,6 +130,12 @@ class _StreamingCallback(TrainerCallback):
                 completed=state.global_step,
                 loss=f"{loss:.4f}",
             )
+            for t in self._trackers:
+                if callable(getattr(t, "log_step", None)):
+                    try:
+                        t.log_step(state.global_step, float(loss))
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("Tracker %s failed log_step: %s", type(t).__name__, exc)
 
     def on_train_end(self, args, state, control, **kwargs) -> None:  # type: ignore[override]
         self._progress.update(
@@ -137,6 +144,25 @@ class _StreamingCallback(TrainerCallback):
             loss=f"{self.last_loss:.4f}" if self.last_loss is not None else "—",
         )
         self._progress.stop()
+
+
+class _TrackerStepCallback(TrainerCallback):
+    """Forwards per-step loss to trackers without showing a progress bar."""
+
+    def __init__(self, trackers: list) -> None:
+        self._trackers = trackers
+
+    def on_log(self, args, state, control, logs=None, **kwargs) -> None:  # type: ignore[override]
+        if not logs:
+            return
+        loss = logs.get("loss")
+        if loss is not None:
+            for t in self._trackers:
+                if callable(getattr(t, "log_step", None)):
+                    try:
+                        t.log_step(state.global_step, float(loss))
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("Tracker %s failed log_step: %s", type(t).__name__, exc)
 
 
 class Model:
@@ -436,6 +462,7 @@ class Model:
         gradient_checkpointing: bool | None = None,
         replay_weights: dict[str, float] | ForgettingReport | None = None,
         stream: bool = False,
+        tracker: SnapshotTracker | list[SnapshotTracker] | None = None,
     ) -> None:
         """
         Fine-tune the model on *data_path* using LoRA.
@@ -466,6 +493,9 @@ class Model:
                 when ``None`` or when buffer entries have no category metadata.
             stream: If True, display a live Rich progress bar with per-step loss
                 during training.  Default False keeps the current silent behaviour.
+            tracker: An optional :class:`~pyrecall.trackers.SnapshotTracker` (or list)
+                that implements ``log_step(step, loss)`` to receive per-step training
+                loss.  Trackers that don't implement ``log_step`` are silently skipped.
         """
         batch_size = batch_size if batch_size is not None else self.batch_size
         learning_rate = learning_rate if learning_rate is not None else self.learning_rate
@@ -622,9 +652,14 @@ class Model:
 
         collator = DataCollatorForLanguageModeling(tokenizer=self.tokenizer, mlm=False)
 
-        callbacks: list[TrainerCallback] = (
-            [_StreamingCallback(total_steps=total_steps)] if stream else []
-        )
+        trackers: list = tracker if isinstance(tracker, list) else ([tracker] if tracker else [])
+        callbacks: list[TrainerCallback]
+        if stream:
+            callbacks = [_StreamingCallback(total_steps=total_steps, trackers=trackers)]
+        elif trackers:
+            callbacks = [_TrackerStepCallback(trackers=trackers)]
+        else:
+            callbacks = []
         trainer = Trainer(
             model=self.model,
             args=args,

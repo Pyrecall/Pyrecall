@@ -66,6 +66,13 @@ class WandbTracker:
         finally:
             run.finish()
 
+    def log_step(self, step: int, loss: float) -> None:
+        try:
+            import wandb
+        except ImportError:
+            return
+        wandb.log({"train/loss": loss, "train/step": step}, step=step)
+
 
 class MLflowTracker:
     """
@@ -119,6 +126,15 @@ class MLflowTracker:
             mlflow.set_tag("pyrecall.snapshot", snapshot.name)
             mlflow.set_tag("pyrecall.model", snapshot.model_name)
 
+    def log_step(self, step: int, loss: float) -> None:
+        try:
+            import mlflow
+        except ImportError:
+            return
+        if self.tracking_uri:
+            mlflow.set_tracking_uri(self.tracking_uri)
+        mlflow.log_metric("train/loss", loss, step=step)
+
 
 class NeptuneTracker:
     """
@@ -169,5 +185,16 @@ class NeptuneTracker:
             run["pyrecall/metadata/model_name"] = snapshot.model_name
             run["pyrecall/metadata/snapshot_name"] = snapshot.name
             run["pyrecall/metadata/timestamp"] = snapshot.created_at.isoformat()
+        finally:
+            run.stop()
+
+    def log_step(self, step: int, loss: float) -> None:
+        try:
+            import neptune
+        except ImportError:
+            return
+        run = neptune.init_run(project=self.project, **self._init_kwargs)
+        try:
+            run["train/loss"].append(loss, step=step)
         finally:
             run.stop()
