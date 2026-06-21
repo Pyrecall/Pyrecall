@@ -375,3 +375,39 @@ class TestLogStep:
         state.global_step = 1
         cb.on_log(None, state, None, logs=None)
         mock_tracker.log_step.assert_not_called()
+
+    def test_neptune_log_step_reuses_single_run(self) -> None:
+        """log_step() must open exactly one Neptune run regardless of how many steps fire."""
+        mock_neptune = MagicMock()
+        mock_run = MagicMock()
+        mock_neptune.init_run.return_value = mock_run
+
+        tracker = NeptuneTracker(project="ws/proj")
+        with patch.dict("sys.modules", {"neptune": mock_neptune}):
+            tracker.log_step(1, 0.9)
+            tracker.log_step(2, 0.8)
+            tracker.log_step(3, 0.7)
+
+        mock_neptune.init_run.assert_called_once()
+        assert mock_run["train/loss"].append.call_count == 3
+
+    def test_neptune_log_step_silent_when_import_missing(self) -> None:
+        tracker = NeptuneTracker(project="ws/proj")
+        with patch.dict("sys.modules", {"neptune": None}):
+            tracker.log_step(1, 0.5)  # should not raise
+
+    def test_neptune_log_step_closes_training_run_before_snapshot_run(self) -> None:
+        """log_snapshot() must stop any open training run before opening its own."""
+        mock_neptune = MagicMock()
+        mock_training_run = MagicMock()
+        mock_snapshot_run = MagicMock()
+        mock_neptune.init_run.side_effect = [mock_training_run, mock_snapshot_run]
+
+        snap = _make_snapshot("after_v1")
+        tracker = NeptuneTracker(project="ws/proj")
+        with patch.dict("sys.modules", {"neptune": mock_neptune}):
+            tracker.log_step(1, 0.9)
+            tracker.log_snapshot(snap)
+
+        mock_training_run.stop.assert_called_once()
+        assert mock_neptune.init_run.call_count == 2
