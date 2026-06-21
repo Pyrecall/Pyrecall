@@ -208,4 +208,5 @@ class NeptuneTracker:
                 tags=["pyrecall", "training"],
                 **self._init_kwargs,
             )
-        self._training_run["train/loss"].append(loss, step=step)
+        run = self._training_run
+        run["train/loss"].append(loss, step=step)

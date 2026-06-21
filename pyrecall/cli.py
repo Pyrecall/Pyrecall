@@ -382,10 +382,9 @@ def init(
 
     # Re-validate after config-file override so bad values can't bypass CLI checks.
     config_errors: list[str] = []
-    if not 0.0 < config.get("forgetting_threshold", threshold) <= 1.0:
-        config_errors.append(
-            f"forgetting_threshold must be > 0 and <= 1, got {config.get('forgetting_threshold')}"
-        )
+    _final_threshold = float(config.get("forgetting_threshold", threshold))
+    if not 0.0 < _final_threshold <= 1.0:
+        config_errors.append(f"forgetting_threshold must be > 0 and <= 1, got {_final_threshold}")
     if config.get("strategy") not in ("lora", "qlora"):
         config_errors.append(f"strategy must be 'lora' or 'qlora', got '{config.get('strategy')}'")
     if config.get("scoring_method") not in ("log_likelihood", "cosine"):
