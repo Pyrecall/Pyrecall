@@ -1143,9 +1143,8 @@ class TestWatchMode:
             mock_bench.assert_not_called()
 
     def test_watch_callback_fires_on_boundary_epoch(self, patched_model, tmp_snapshot_dir) -> None:
-        from pyrecall.snapshot import SkillScore, SkillSnapshot
-
         from pyrecall.model import _WatchCallback
+        from pyrecall.snapshot import SkillScore
 
         patched_model.snapshot(name="base")
 
@@ -1167,9 +1166,8 @@ class TestWatchMode:
         assert any("epoch5" in n for n in names)
 
     def test_watch_action_warn_continues_training(self, patched_model, tmp_snapshot_dir) -> None:
-        from pyrecall.snapshot import SkillScore
-
         from pyrecall.model import _WatchCallback
+        from pyrecall.snapshot import SkillScore
 
         patched_model.snapshot(name="base")
         cb = _WatchCallback(
@@ -1192,9 +1190,8 @@ class TestWatchMode:
         assert not control.should_training_stop
 
     def test_watch_action_stop_sets_flag(self, patched_model, tmp_snapshot_dir) -> None:
-        from pyrecall.snapshot import SkillScore
-
         from pyrecall.model import _WatchCallback, _WatchStopSignal
+        from pyrecall.snapshot import SkillScore
 
         patched_model.snapshot(name="base")
         cb = _WatchCallback(
@@ -1215,9 +1212,8 @@ class TestWatchMode:
         assert control.should_training_stop
 
     def test_watch_action_rollback_sets_flag(self, patched_model, tmp_snapshot_dir) -> None:
-        from pyrecall.snapshot import SkillScore
-
         from pyrecall.model import _WatchCallback, _WatchRollbackSignal
+        from pyrecall.snapshot import SkillScore
 
         patched_model.snapshot(name="base")
         cb = _WatchCallback(
