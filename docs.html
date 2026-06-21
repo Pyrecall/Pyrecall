@@ -626,6 +626,8 @@
           <li><a href="#cli-history">pyrecall history</a></li>
           <li><a href="#cli-compare">pyrecall compare</a></li>
           <li><a href="#cli-export">pyrecall export</a></li>
+          <li><a href="#cli-push">pyrecall push</a></li>
+          <li><a href="#cli-pull">pyrecall pull</a></li>
           <li><a href="#cli-replay">pyrecall replay</a></li>
           <li><a href="#cli-benchmark">pyrecall benchmark</a></li>
           <li><a href="#cli-delete">pyrecall delete</a></li>
@@ -905,22 +907,30 @@
 
         <!-- snapshot -->
         <h3 id="model-snapshot">model.snapshot(name)</h3>
-        <div class="method-sig">model.snapshot(name: str, tracker: SnapshotTracker | list[SnapshotTracker] | None = None) → SkillSnapshot</div>
+        <div class="method-sig">model.snapshot(
+    name: str,
+    tracker: SnapshotTracker | list[SnapshotTracker] | None = None,
+    dry_run: bool = False,
+    tags: dict[str, str] | None = None,
+) → SkillSnapshot</div>
         <p>
           Benchmark the model and save a named capability snapshot. Runs all 180 default benchmarks
           across 9 skill categories, scores each response, saves scores and the current LoRA adapter
           weights to disk so the model can be rolled back to this exact state later.
         </p>
         <p>
-          This sets <code>model._baseline_snapshot_name</code> internally so that
-          <code>model.check()</code> knows what to compare against without needing explicit arguments.
+          This sets the internal baseline so that <code>model.check()</code> knows what to compare
+          against without needing explicit arguments. When <code>dry_run=True</code>, scores are
+          computed but no adapter weights are written and the baseline is not updated.
         </p>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td>name</td><td>str</td><td>Human-readable label, e.g. <code>"before_v1"</code>. Used as the directory name on disk.</td></tr>
-              <tr><td>tracker</td><td>SnapshotTracker | list | None</td><td>Optional experiment tracker(s) — <code>WandbTracker</code>, <code>MLflowTracker</code>, or any object with a <code>log_snapshot()</code> method. Tracker failures emit a warning and never abort the snapshot.</td></tr>
+              <tr><td>tracker</td><td>SnapshotTracker | list | None</td><td>Optional experiment tracker(s) — <code>WandbTracker</code>, <code>MLflowTracker</code>, <code>NeptuneTracker</code>, or any object with a <code>log_snapshot()</code> method. Tracker failures emit a warning and never abort the snapshot.</td></tr>
+              <tr><td>dry_run</td><td>bool</td><td>When <code>True</code>, run benchmarks and return scores without saving adapter weights or updating the baseline. Useful for a quick health check before committing disk space.</td></tr>
+              <tr><td>tags</td><td>dict[str, str] | None</td><td>Arbitrary key/value metadata stored with the snapshot, e.g. <code>{"commit": "abc123f", "dataset": "v2"}</code>. Visible in <code>pyrecall status</code>.</td></tr>
             </tbody>
           </table>
         </div>
@@ -1127,6 +1137,7 @@
         <div class="cli-block">
           <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall init --model meta-llama/Llama-3.2-1B</span></div>
           <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall init -m gpt2 --strategy qlora --lora-r 32 --threshold 0.08</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall init --from-config config.yaml</span><span class="comment"> &nbsp;# load settings from a YAML or TOML file</span></div>
         </div>
         <div class="table-wrap">
           <table>
@@ -1141,17 +1152,29 @@
               <tr><td>--batch-size</td><td>4</td><td>Per-device training batch size.</td></tr>
               <tr><td>--max-length</td><td>512</td><td>Tokenisation truncation length.</td></tr>
               <tr><td>--threshold</td><td>0.10</td><td>Score drop fraction that counts as forgetting (0–1). Used by <code>pyrecall check</code>.</td></tr>
+              <tr><td>--from-config</td><td>—</td><td>Load all settings from a YAML or TOML file instead of passing flags individually. CLI flags override file values when both are present.</td></tr>
             </tbody>
           </table>
+        </div>
+        <p>Example <code>config.yaml</code>:</p>
+        <div class="code-block">
+<pre><span class="kw">model</span><span class="tx">: meta-llama/Llama-3.2-1B</span>
+<span class="kw">strategy</span><span class="tx">: lora</span>
+<span class="kw">lora_r</span><span class="tx">: 16</span>
+<span class="kw">threshold</span><span class="tx">: 0.08</span>
+<span class="kw">batch_size</span><span class="tx">: 4</span>
+<span class="kw">learning_rate</span><span class="tx">: 2e-4</span></pre>
         </div>
 
         <!-- learn -->
         <h3 id="cli-learn">pyrecall learn &lt;data&gt;</h3>
-        <p>Fine-tune the configured model on a local dataset. Accepts JSONL, CSV, or Parquet. Each row must have a <code>text</code> column.</p>
+        <p>Fine-tune the configured model on a local dataset. Accepts JSONL, CSV, or Parquet. Each row must have a <code>text</code> column (or <code>messages</code> for chat format).</p>
         <div class="cli-block">
           <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall learn train.jsonl --epochs 5</span></div>
           <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall learn train.jsonl --snapshot-before before_v1 --snapshot-after after_v1</span></div>
           <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall learn train.jsonl --snapshot-after nightly --no-update-baseline</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall learn train.jsonl --watch-every 1 --watch-action rollback</span><span class="comment"> &nbsp;# auto-rollback if forgetting detected mid-run</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall learn chats.jsonl --format messages --messages-column messages</span></div>
         </div>
         <div class="table-wrap">
           <table>
@@ -1165,6 +1188,10 @@
               <tr><td>--snapshot-before</td><td>—</td><td>Take a named snapshot immediately <strong>before</strong> training begins and set it as the baseline.</td></tr>
               <tr><td>--snapshot-after</td><td>—</td><td>Take a named snapshot immediately <strong>after</strong> training completes and set it as the new baseline.</td></tr>
               <tr><td>--no-update-baseline</td><td>false</td><td>Take snapshots without overwriting <code>baseline_snapshot</code> in <code>.pyrecall.json</code> — keeps your stable CI reference point intact.</td></tr>
+              <tr><td>--watch-every</td><td>—</td><td>Run benchmarks every N epochs <em>during</em> training and check for forgetting in real time. Disabled by default.</td></tr>
+              <tr><td>--watch-action</td><td>warn</td><td>What to do when mid-run forgetting is detected: <code>warn</code> (print a warning and continue), <code>stop</code> (abort training), or <code>rollback</code> (abort and restore the baseline adapter).</td></tr>
+              <tr><td>--format</td><td>auto</td><td>Training data format: <code>auto</code>, <code>text</code>, <code>messages</code> (chat turns), or <code>prompt_response</code>.</td></tr>
+              <tr><td>--messages-column</td><td>messages</td><td>Column holding chat messages when <code>--format=messages</code>.</td></tr>
             </tbody>
           </table>
         </div>
@@ -1178,6 +1205,24 @@
         </p>
         <div class="cli-block">
           <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall snapshot before_v1</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall snapshot before_v1 --dry-run</span><span class="comment"> &nbsp;# score only, no weights saved</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall snapshot before_v1 --compression gzip</span><span class="comment"> &nbsp;# compress adapter (~50% smaller)</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall snapshot before_v1 --tag commit=abc123f --tag dataset=v2</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall snapshot before_v1 --push my-org/my-model-snapshots</span></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td>--dry-run</td><td>false</td><td>Run benchmarks and score without saving adapter weights. Useful for a quick sanity check — uses no extra disk space and doesn't update the baseline.</td></tr>
+              <tr><td>--compression</td><td>none</td><td>Compress adapter weights on disk: <code>none</code>, <code>gzip</code> (40–60% smaller, no extra deps), <code>zstd</code> (faster, <code>pip install zstandard</code>), or <code>lz4</code>.</td></tr>
+              <tr><td>--tag</td><td>—</td><td>Attach a <code>key=value</code> metadata tag to this snapshot. Repeatable. Tags appear in <code>pyrecall status</code> and are preserved when pushing to the Hub.</td></tr>
+              <tr><td>--push</td><td>—</td><td>After saving, push the snapshot to a Hugging Face Hub dataset repo (<code>owner/repo-name</code>).</td></tr>
+              <tr><td>--no-weights</td><td>false</td><td>When <code>--push</code> is set, upload scores only — skip the adapter weights.</td></tr>
+              <tr><td>--private</td><td>false</td><td>When <code>--push</code> is set, create the Hub repo as private.</td></tr>
+              <tr><td>--no-update-baseline</td><td>false</td><td>Save the snapshot without overwriting <code>baseline_snapshot</code> in <code>.pyrecall.json</code>.</td></tr>
+            </tbody>
+          </table>
         </div>
 
         <!-- check -->
@@ -1297,6 +1342,50 @@
           <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall export scores.csv</span></div>
           <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall export scores.json</span></div>
           <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall export | jq '.[0].categories'</span><span class="comment"> &nbsp;# pipe JSON to stdout</span></div>
+        </div>
+
+        <!-- push -->
+        <h3 id="cli-push">pyrecall push &lt;snapshot&gt; <span class="badge badge-new">new</span></h3>
+        <p>
+          Push a local snapshot to a Hugging Face Hub dataset repo so it can be shared with
+          teammates or pulled on another machine. Requires <code>pip install huggingface_hub</code>
+          and a valid token (<code>huggingface-cli login</code>).
+        </p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall push before_v1 --to my-org/my-model-snapshots</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall push before_v1 --to my-org/my-model-snapshots --no-weights</span><span class="comment"> &nbsp;# scores only</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall push before_v1 --to my-org/my-model-snapshots --private</span></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td>--to</td><td>—</td><td><strong>Required.</strong> Hub repo in <code>owner/repo-name</code> format. Created automatically if it doesn't exist.</td></tr>
+              <tr><td>--no-weights</td><td>false</td><td>Upload benchmark scores only — skip the adapter weights. Useful for lightweight sharing when rollback isn't needed.</td></tr>
+              <tr><td>--private</td><td>false</td><td>Create the Hub repo as private if it doesn't already exist.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- pull -->
+        <h3 id="cli-pull">pyrecall pull &lt;snapshot&gt; <span class="badge badge-new">new</span></h3>
+        <p>
+          Download a snapshot from a Hugging Face Hub dataset repo and register it locally.
+          After pulling, the snapshot appears in <code>pyrecall status</code> and can be used
+          for <code>pyrecall diff</code> or <code>pyrecall rollback</code>.
+        </p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall pull before_v1 --from-repo my-org/my-model-snapshots</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall pull before_v1 --from-repo my-org/my-model-snapshots --no-weights</span><span class="comment"> &nbsp;# scores only</span></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td>--from-repo</td><td>—</td><td><strong>Required.</strong> Hub repo in <code>owner/repo-name</code> format.</td></tr>
+              <tr><td>--no-weights</td><td>false</td><td>Download benchmark scores only — skip adapter weights.</td></tr>
+            </tbody>
+          </table>
         </div>
 
         <!-- replay -->
