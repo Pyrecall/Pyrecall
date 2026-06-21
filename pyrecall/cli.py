@@ -1501,6 +1501,10 @@ def status(
     baseline = config.get("baseline_snapshot")
 
     if json_output:
+
+        def _nan_safe(v: float) -> float | None:
+            return None if math.isnan(v) else v
+
         out = {
             "model_name": config.get("model_name"),
             "baseline_snapshot": baseline,
@@ -1508,8 +1512,8 @@ def status(
                 {
                     "name": snap.name,
                     "created_at": snap.created_at.isoformat(),
-                    "overall": snap.overall_score(),
-                    "scores": snap.category_scores(),
+                    "overall": _nan_safe(snap.overall_score()),
+                    "scores": {k: _nan_safe(v) for k, v in snap.category_scores().items()},
                     "adapter_ok": bool(snap.adapter_path and snap.adapter_path.exists()),
                     "is_baseline": snap.name == baseline,
                     "hub_repo": snap.hub_repo,
