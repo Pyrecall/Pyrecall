@@ -165,6 +165,77 @@ class _TrackerStepCallback(TrainerCallback):
                         logger.warning("Tracker %s failed log_step: %s", type(t).__name__, exc)
 
 
+class _WatchStopSignal(Exception):
+    """Raised inside _WatchCallback to abort training when watch_action='stop'."""
+
+    def __init__(self, report: ForgettingReport) -> None:
+        self.report = report
+
+
+class _WatchRollbackSignal(Exception):
+    """Raised inside _WatchCallback to trigger rollback when watch_action='rollback'."""
+
+    def __init__(self, report: ForgettingReport) -> None:
+        self.report = report
+
+
+class _WatchCallback(TrainerCallback):
+    """Runs benchmarks and checks for forgetting at configurable epoch intervals."""
+
+    def __init__(
+        self,
+        model_ref: Model,
+        baseline_name: str,
+        watch_every: int,
+        watch_action: str,
+    ) -> None:
+        self._model_ref = model_ref
+        self._baseline_name = baseline_name
+        self._watch_every = watch_every
+        self._watch_action = watch_action
+
+    def on_epoch_end(self, args, state, control, **kwargs) -> None:  # type: ignore[override]
+        epoch = int(state.epoch)
+        if epoch % self._watch_every != 0:
+            return
+
+        snap_name = f"{self._baseline_name}__epoch{epoch}"
+        console.print(f"[info]Watch checkpoint at epoch {epoch} — running benchmarks…[/info]")
+
+        scores = self._model_ref._run_benchmarks()
+        snap = SkillSnapshot(name=snap_name, model_name=self._model_ref.model_name, scores=scores)
+        self._model_ref.rollback_manager.save(
+            snap,
+            self._model_ref.model,
+            compression=self._model_ref._snapshot_compression,
+        )
+        console.print(f"[dim]  Saved watch snapshot '{snap_name}'.[/dim]")
+
+        try:
+            baseline_snap = self._model_ref.rollback_manager.load_snapshot(self._baseline_name)
+        except Exception:
+            logger.warning("Watch: could not load baseline '%s' — skipping check.", self._baseline_name)
+            return
+
+        report = self._model_ref.detector.compare(baseline_snap, snap)
+
+        if report.is_healthy:
+            console.print(f"[success]  ✓ Epoch {epoch}: no forgetting detected.[/success]")
+            return
+
+        console.print(f"[warning]  ⚠ Epoch {epoch}: forgetting detected.[/warning]")
+        _fire_callbacks(self._model_ref._on_forgetting, report)
+
+        if self._watch_action == "warn":
+            pass
+        elif self._watch_action == "stop":
+            control.should_training_stop = True
+            raise _WatchStopSignal(report)
+        elif self._watch_action == "rollback":
+            control.should_training_stop = True
+            raise _WatchRollbackSignal(report)
+
+
 class Model:
     """
     A HuggingFace causal LM wrapped for continuous fine-tuning.
@@ -463,6 +534,8 @@ class Model:
         replay_weights: dict[str, float] | ForgettingReport | None = None,
         stream: bool = False,
         tracker: SnapshotTracker | list[SnapshotTracker] | None = None,
+        watch_every: int | None = None,
+        watch_action: str = "warn",
     ) -> None:
         """
         Fine-tune the model on *data_path* using LoRA.
@@ -496,6 +569,13 @@ class Model:
             tracker: An optional :class:`~pyrecall.trackers.SnapshotTracker` (or list)
                 that implements ``log_step(step, loss)`` to receive per-step training
                 loss.  Trackers that don't implement ``log_step`` are silently skipped.
+            watch_every: If set, run benchmarks and check for forgetting every this
+                many epochs.  Each check saves a snapshot named
+                ``<baseline>__epoch<N>``.  Requires a baseline snapshot to exist.
+            watch_action: What to do when forgetting is detected during a watch check.
+                ``"warn"`` (default) — print a warning and continue training.
+                ``"stop"`` — stop training immediately and raise.
+                ``"rollback"`` — stop and restore the last healthy snapshot.
         """
         batch_size = batch_size if batch_size is not None else self.batch_size
         learning_rate = learning_rate if learning_rate is not None else self.learning_rate
@@ -652,6 +732,13 @@ class Model:
 
         collator = DataCollatorForLanguageModeling(tokenizer=self.tokenizer, mlm=False)
 
+        _VALID_WATCH_ACTIONS = ("warn", "stop", "rollback")
+        if watch_action not in _VALID_WATCH_ACTIONS:
+            raise PyrecallError(
+                f"Unknown watch_action '{watch_action}'. "
+                f"Use one of: {', '.join(_VALID_WATCH_ACTIONS)}."
+            )
+
         trackers: list = tracker if isinstance(tracker, list) else ([tracker] if tracker else [])
         callbacks: list[TrainerCallback]
         if stream:
@@ -660,6 +747,25 @@ class Model:
             callbacks = [_TrackerStepCallback(trackers=trackers)]
         else:
             callbacks = []
+
+        if watch_every is not None:
+            if watch_every < 1:
+                raise PyrecallError("watch_every must be >= 1.")
+            baseline = self._baseline_snapshot_name
+            if baseline is None:
+                raise PyrecallError(
+                    "watch_every requires a baseline snapshot. "
+                    "Call model.snapshot() before model.learn()."
+                )
+            callbacks.append(
+                _WatchCallback(
+                    model_ref=self,
+                    baseline_name=baseline,
+                    watch_every=watch_every,
+                    watch_action=watch_action,
+                )
+            )
+
         trainer = Trainer(
             model=self.model,
             args=args,
@@ -685,6 +791,23 @@ class Model:
         self.model.train()
         try:
             trainer.train(resume_from_checkpoint=resume_from)
+        except _WatchStopSignal as exc:
+            if streaming_cb is not None:
+                streaming_cb._progress.stop()
+            self.model.eval()
+            console.print("[warning]Training stopped by watch — forgetting detected.[/warning]")
+            _fire_callbacks(self._on_forgetting, exc.report)
+            return
+        except _WatchRollbackSignal as exc:
+            if streaming_cb is not None:
+                streaming_cb._progress.stop()
+            self.model.eval()
+            console.print("[warning]Training stopped — rolling back to baseline snapshot.[/warning]")
+            _fire_callbacks(self._on_forgetting, exc.report)
+            baseline = self._baseline_snapshot_name
+            if baseline:
+                self.rollback(to=baseline)
+            return
         except Exception:
             if streaming_cb is not None:
                 streaming_cb._progress.stop()

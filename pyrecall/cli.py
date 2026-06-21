@@ -477,6 +477,20 @@ def learn(
             help="Enable gradient checkpointing to cut GPU memory ~40% at the cost of ~20% slower training.",
         ),
     ] = None,
+    watch_every: Annotated[
+        int | None,
+        typer.Option(
+            "--watch-every",
+            help="Run benchmarks and check for forgetting every N epochs during training.",
+        ),
+    ] = None,
+    watch_action: Annotated[
+        str,
+        typer.Option(
+            "--watch-action",
+            help="Action when forgetting is detected: 'warn' (default), 'stop', or 'rollback'.",
+        ),
+    ] = "warn",
 ) -> None:
     """
     Fine-tune the model on a local dataset.
@@ -538,6 +552,8 @@ def learn(
             max_length=max_length,
             resume=resume,
             gradient_checkpointing=gradient_checkpointing,
+            watch_every=watch_every,
+            watch_action=watch_action,
         )
     except PyrecallError as exc:
         console.print(f"[red]Error:[/red] {exc}")
