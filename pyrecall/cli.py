@@ -1648,6 +1648,10 @@ def history(
             category_thresholds=config.get("category_thresholds", {}),
         )
 
+        def _safe_overall(snap) -> float | None:
+            v = snap.overall_score()
+            return None if math.isnan(v) else round(v, 4)
+
         health_rows: list[dict] = []
         for i, snap in enumerate(snaps):
             is_baseline = snap.name == baseline
@@ -1656,7 +1660,7 @@ def history(
                     {
                         "name": snap.name,
                         "created_at": snap.created_at.isoformat(),
-                        "overall": round(snap.overall_score(), 4),
+                        "overall": _safe_overall(snap),
                         "status": "first",
                         "degraded_skills": [],
                         "notes": "(baseline)" if is_baseline else "(first snapshot)",
@@ -1675,7 +1679,7 @@ def history(
                     {
                         "name": snap.name,
                         "created_at": snap.created_at.isoformat(),
-                        "overall": round(snap.overall_score(), 4),
+                        "overall": _safe_overall(snap),
                         "status": "degraded" if report.degraded_skills else "healthy",
                         "degraded_skills": report.degraded_skills,
                         "notes": ", ".join(dropped_notes) if dropped_notes else "",
@@ -1722,7 +1726,7 @@ def history(
             table.add_row(
                 name_str,
                 hr["created_at"][:16].replace("T", " "),
-                f"{hr['overall']:.3f}",
+                "-" if hr["overall"] is None else f"{hr['overall']:.3f}",
                 status_str,
                 notes,
             )
@@ -1774,9 +1778,14 @@ def history(
         prev = snaps[i - 1].category_scores() if i > 0 else None
         prev_overall = snaps[i - 1].overall_score() if i > 0 else None
 
-        overall_str = f"{snap.overall_score():.3f}"
-        if prev_overall is not None:
-            overall_str += f" {_trend(prev_overall, snap.overall_score())}"
+        curr_overall = snap.overall_score()
+        overall_str = "-" if math.isnan(curr_overall) else f"{curr_overall:.3f}"
+        if (
+            prev_overall is not None
+            and not math.isnan(curr_overall)
+            and not math.isnan(prev_overall)
+        ):
+            overall_str += f" {_trend(prev_overall, curr_overall)}"
 
         name_markup = (
             f"[bold green]{snap.name} ★[/bold green]" if snap.name == baseline else snap.name
@@ -1792,8 +1801,13 @@ def history(
                 row.append("-")
                 continue
             score = cat_scores[cat]
-            cell = f"{score:.3f}"
-            if prev is not None and cat in prev:
+            cell = "-" if math.isnan(score) else f"{score:.3f}"
+            if (
+                prev is not None
+                and cat in prev
+                and not math.isnan(score)
+                and not math.isnan(prev[cat])
+            ):
                 cell += f" {_trend(prev[cat], score)}"
             row.append(cell)
 
@@ -1804,19 +1818,20 @@ def history(
     # Summary line: overall drift from first to last shown snapshot.
     first_overall = snaps[0].overall_score()
     last_overall = snaps[-1].overall_score()
-    delta = last_overall - first_overall
-    direction = (
-        "[green]improved[/green]"
-        if delta > 0
-        else "[red]dropped[/red]"
-        if delta < 0
-        else "unchanged"
-    )
-    console.print(
-        f"\n  Overall score {direction} by [bold]{abs(delta):.3f}[/bold] "
-        f"across {len(snaps)} snapshots "
-        f"({snaps[0].name} → {snaps[-1].name})."
-    )
+    if not math.isnan(first_overall) and not math.isnan(last_overall):
+        delta = last_overall - first_overall
+        direction = (
+            "[green]improved[/green]"
+            if delta > 0
+            else "[red]dropped[/red]"
+            if delta < 0
+            else "unchanged"
+        )
+        console.print(
+            f"\n  Overall score {direction} by [bold]{abs(delta):.3f}[/bold] "
+            f"across {len(snaps)} snapshots "
+            f"({snaps[0].name} → {snaps[-1].name})."
+        )
     if baseline:
         console.print(f"[dim]  ★ = current baseline ({baseline})[/dim]")
 
