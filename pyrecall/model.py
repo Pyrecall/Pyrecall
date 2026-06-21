@@ -920,8 +920,8 @@ class Model:
         Must be called after at least one :meth:`snapshot` call.
 
         Args:
-            name: Optional name for the post-training snapshot. When ``None``
-                the snapshot is saved as ``<baseline>__after``. Providing a
+            name: Name for the post-training snapshot saved to disk. When
+                ``None`` it defaults to ``<baseline>__after``. Providing a
                 name lets you call ``check()`` multiple times without
                 overwriting the previous after-snapshot.
 
@@ -947,11 +947,9 @@ class Model:
 
         console.print("[info]Running post-training benchmarks…[/info]")
         after_scores = self._run_benchmarks()
-        after = SkillSnapshot(
-            name=name if name is not None else f"{self._baseline_snapshot_name}__after",
-            model_name=self.model_name,
-            scores=after_scores,
-        )
+        after_name = name if name is not None else f"{self._baseline_snapshot_name}__after"
+        after = SkillSnapshot(name=after_name, model_name=self.model_name, scores=after_scores)
+        self.rollback_manager.save(after, self.model, compression=self._snapshot_compression)
 
         report = self.detector.compare(before, after)
         report.print()

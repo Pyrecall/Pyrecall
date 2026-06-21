@@ -247,6 +247,18 @@ class TestModelCheck:
         assert r1.snapshot_after == "after_epoch_1"
         assert r2.snapshot_after == "after_epoch_2"
 
+    def test_check_saves_after_snapshot_to_disk(self, patched_model) -> None:
+        patched_model.snapshot(name="base")
+        patched_model.check()
+        names = patched_model.rollback_manager.list_snapshot_names()
+        assert "base__after" in names
+
+    def test_check_custom_name_saved_to_disk(self, patched_model) -> None:
+        patched_model.snapshot(name="base")
+        patched_model.check(name="my_after")
+        names = patched_model.rollback_manager.list_snapshot_names()
+        assert "my_after" in names
+
 
 class TestModelDiff:
     def test_diff_returns_report(self, patched_model) -> None:
