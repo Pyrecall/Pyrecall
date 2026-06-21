@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from .snapshot import SkillSnapshot
@@ -161,7 +161,7 @@ class NeptuneTracker:
     def __init__(self, project: str, **neptune_init_kwargs) -> None:
         self.project = project
         self._init_kwargs = neptune_init_kwargs
-        self._training_run = None  # lazy-opened on first log_step, closed on log_snapshot
+        self._training_run: Any = None  # lazy-opened on first log_step, closed on log_snapshot
 
     def log_snapshot(self, snapshot: SkillSnapshot) -> None:
         try:
