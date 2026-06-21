@@ -860,6 +860,12 @@ class Model:
             data_collator=collator,
             callbacks=callbacks,
         )
+        # Remove HuggingFace's default PrinterCallback — pyrecall uses its own
+        # Rich progress bar (or TrackerStepCallback) and the raw JSON log lines
+        # are confusing to users who aren't familiar with HF Trainer internals.
+        from transformers import PrinterCallback
+
+        trainer.remove_callback(PrinterCallback)
 
         # Find latest checkpoint when resuming
         resume_from = None
