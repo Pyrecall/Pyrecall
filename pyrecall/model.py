@@ -565,8 +565,7 @@ class Model:
         _VALID_FORMATS = ("auto", "text", "messages", "prompt_response")
         if format not in _VALID_FORMATS:
             raise PyrecallError(
-                f"Unknown format '{format}'. "
-                f"Use one of: {', '.join(_VALID_FORMATS)}."
+                f"Unknown format '{format}'. Use one of: {', '.join(_VALID_FORMATS)}."
             )
 
         # Resolve format for "auto" mode by inspecting column names.
@@ -616,7 +615,9 @@ class Model:
                     texts.append(text)
                 return {"text": texts}
 
-            dataset = dataset.map(_apply_chat_template, batched=True, remove_columns=dataset.column_names)
+            dataset = dataset.map(
+                _apply_chat_template, batched=True, remove_columns=dataset.column_names
+            )
             text_col = "text"
 
         elif resolved_format == "prompt_response":
@@ -633,7 +634,9 @@ class Model:
                 ]
                 return {"text": texts}
 
-            dataset = dataset.map(_flatten_prompt_response, batched=True, remove_columns=dataset.column_names)
+            dataset = dataset.map(
+                _flatten_prompt_response, batched=True, remove_columns=dataset.column_names
+            )
             text_col = "text"
 
         elif "text" in dataset.column_names:
