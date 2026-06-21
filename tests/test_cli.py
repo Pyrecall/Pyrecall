@@ -2566,9 +2566,7 @@ class TestInitFromConfig:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         monkeypatch.chdir(tmp_path)
-        result = runner.invoke(
-            app, ["init", "--from-config", str(tmp_path / "nonexistent.yaml")]
-        )
+        result = runner.invoke(app, ["init", "--from-config", str(tmp_path / "nonexistent.yaml")])
         assert result.exit_code != 0
 
 
@@ -2591,9 +2589,7 @@ class TestSnapshotTags:
         call_kwargs = mock_model.snapshot.call_args[1]
         assert call_kwargs["tags"] == {"commit": "abc123f"}
 
-    def test_multiple_tags_merged(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_multiple_tags_merged(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.chdir(tmp_path)
         _write_config(tmp_path)
         mock_model = MagicMock()
@@ -2678,9 +2674,7 @@ class TestCategoryThresholdValidation:
         assert result.exit_code != 0
         assert "threshold" in result.output.lower() or "invalid" in result.output.lower()
 
-    def test_threshold_zero_rejected(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_threshold_zero_rejected(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.chdir(tmp_path)
         _write_config(tmp_path)
         snap_before = _make_snapshot("before", {"coding": 0.8})
@@ -2814,9 +2808,7 @@ class TestPullCommand:
             patch("pyrecall.cli._build_rollback_manager", return_value=mgr),
             patch("pyrecall.hub.pull_snapshot", return_value=pulled_snap) as mock_pull,
         ):
-            result = runner.invoke(
-                app, ["pull", "before_v1", "--from-repo", "org/repo"]
-            )
+            result = runner.invoke(app, ["pull", "before_v1", "--from-repo", "org/repo"])
 
         assert result.exit_code == 0
         mock_pull.assert_called_once()
@@ -2858,9 +2850,7 @@ class TestPullCommand:
             patch("pyrecall.cli._build_rollback_manager", return_value=mgr),
             patch("pyrecall.hub.pull_snapshot", return_value=pulled_snap),
         ):
-            result = runner.invoke(
-                app, ["pull", "before_v1", "--from-repo", "org/repo"]
-            )
+            result = runner.invoke(app, ["pull", "before_v1", "--from-repo", "org/repo"])
 
         assert "before_v1" in result.output
 
@@ -2879,8 +2869,6 @@ class TestPullCommand:
                 side_effect=FileNotFoundError("not found on hub"),
             ),
         ):
-            result = runner.invoke(
-                app, ["pull", "missing_snap", "--from-repo", "org/repo"]
-            )
+            result = runner.invoke(app, ["pull", "missing_snap", "--from-repo", "org/repo"])
 
         assert result.exit_code == 1
