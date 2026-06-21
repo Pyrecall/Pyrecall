@@ -2501,9 +2501,11 @@ def pull(
             mgr.base_dir,
             include_weights=not no_weights,
         )
+        overall = snap.overall_score()
+        overall_str = "-" if math.isnan(overall) else f"{overall:.3f}"
         console.print(
             f"[success]✓ Snapshot '{name}' pulled from {repo_id}. "
-            f"Overall score: {snap.overall_score():.3f}[/success]"
+            f"Overall score: {overall_str}[/success]"
         )
     except ImportError as exc:
         console.print(f"[red]Error:[/red] {exc}")

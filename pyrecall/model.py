@@ -507,17 +507,17 @@ class Model:
         scores = self._run_benchmarks()
         snap = SkillSnapshot(name=name, model_name=self.model_name, scores=scores, tags=tags or {})
 
+        _overall = snap.overall_score()
+        _overall_str = "-" if math.isnan(_overall) else f"{_overall:.3f}"
         if not dry_run:
             self.rollback_manager.save(snap, self.model, compression=self._snapshot_compression)
             self._set_baseline(name)
             console.print(
-                f"[success]✓ Snapshot '{name}' saved. "
-                f"Overall score: {snap.overall_score():.3f}[/success]"
+                f"[success]✓ Snapshot '{name}' saved. Overall score: {_overall_str}[/success]"
             )
         else:
             console.print(
-                f"[info]Dry run complete. Overall score: {snap.overall_score():.3f} "
-                f"(not saved)[/info]"
+                f"[info]Dry run complete. Overall score: {_overall_str} (not saved)[/info]"
             )
 
         if tracker is not None:
@@ -1230,9 +1230,11 @@ class Model:
             self.rollback_manager.base_dir,
             include_weights=include_weights,
         )
+        _ov = snap.overall_score()
+        _ov_str = "-" if math.isnan(_ov) else f"{_ov:.3f}"
         console.print(
             f"[success]✓ Snapshot '{name}' pulled from {repo_id}. "
-            f"Overall score: {snap.overall_score():.3f}[/success]"
+            f"Overall score: {_ov_str}[/success]"
         )
         return snap
 
