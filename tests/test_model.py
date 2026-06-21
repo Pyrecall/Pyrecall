@@ -1032,3 +1032,152 @@ class TestReplayWeightsValidation:
             self._run_learn(
                 patched_model, data_file, replay_weights={"coding": -1.0, "safety": -2.0}
             )
+
+
+class TestLearnFormatDetection:
+    """Tests for learn() format detection and conversion (issue #15)."""
+
+    def _run_learn(self, patched_model, data_file, dataset_columns, dataset_rows, **learn_kwargs):
+        """Helper: mock dataset with given columns/rows and run learn()."""
+        mock_trainer = MagicMock()
+        mapped_dataset = MagicMock()
+        mapped_dataset.column_names = ["text"]
+        mapped_dataset.__len__.return_value = len(dataset_rows)
+        mapped_dataset.num_rows = len(dataset_rows)
+        mapped_dataset.map.return_value = mapped_dataset
+
+        mock_dataset = MagicMock()
+        mock_dataset.column_names = dataset_columns
+        mock_dataset.__len__.return_value = len(dataset_rows)
+        mock_dataset.num_rows = len(dataset_rows)
+
+        # Simulate dataset[col][0] for column sniffing.
+        def _getitem(key):
+            if isinstance(key, str):
+                col_idx = dataset_columns.index(key) if key in dataset_columns else 0
+                return [row[col_idx] if col_idx < len(row) else "" for row in dataset_rows]
+            return MagicMock()
+
+        mock_dataset.__getitem__ = MagicMock(side_effect=_getitem)
+        mock_dataset.map.return_value = mapped_dataset
+
+        with (
+            patch("pyrecall.model.load_dataset", return_value=mock_dataset),
+            patch("pyrecall.model.Trainer", return_value=mock_trainer),
+            patch("pyrecall.model.TrainingArguments"),
+            patch("pyrecall.model.DataCollatorForLanguageModeling"),
+        ):
+            data_file.write_text(json.dumps({}) + "\n")
+            patched_model.learn(str(data_file), epochs=1, **learn_kwargs)
+
+        return mock_dataset, mock_trainer
+
+    def test_auto_detects_text_column(self, patched_model, tmp_path: Path) -> None:
+        f = tmp_path / "data.jsonl"
+        mock_ds, mock_trainer = self._run_learn(
+            patched_model,
+            f,
+            dataset_columns=["text"],
+            dataset_rows=[["hello world"]],
+        )
+        mock_trainer.train.assert_called_once()
+        # map should NOT have been called for conversion (text path is direct)
+        assert mock_ds.map.call_count == 1  # only tokenisation map
+
+    def test_auto_detects_messages_column(self, patched_model, tmp_path: Path) -> None:
+        f = tmp_path / "data.jsonl"
+        messages = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}]
+        mock_ds, mock_trainer = self._run_learn(
+            patched_model,
+            f,
+            dataset_columns=["messages"],
+            dataset_rows=[[messages]],
+        )
+        mock_trainer.train.assert_called_once()
+        # map called once for chat template conversion + once for tokenisation
+        assert mock_ds.map.call_count >= 1
+
+    def test_auto_detects_prompt_response_columns(self, patched_model, tmp_path: Path) -> None:
+        f = tmp_path / "data.jsonl"
+        mock_ds, mock_trainer = self._run_learn(
+            patched_model,
+            f,
+            dataset_columns=["prompt", "response"],
+            dataset_rows=[["What is 2+2?", "4"]],
+        )
+        mock_trainer.train.assert_called_once()
+
+    def test_explicit_messages_format(self, patched_model, tmp_path: Path) -> None:
+        f = tmp_path / "data.jsonl"
+        messages = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}]
+        mock_ds, mock_trainer = self._run_learn(
+            patched_model,
+            f,
+            dataset_columns=["messages"],
+            dataset_rows=[[messages]],
+            format="messages",
+        )
+        mock_trainer.train.assert_called_once()
+
+    def test_explicit_prompt_response_format(self, patched_model, tmp_path: Path) -> None:
+        f = tmp_path / "data.jsonl"
+        mock_ds, mock_trainer = self._run_learn(
+            patched_model,
+            f,
+            dataset_columns=["prompt", "response"],
+            dataset_rows=[["What is 2+2?", "4"]],
+            format="prompt_response",
+        )
+        mock_trainer.train.assert_called_once()
+
+    def test_invalid_format_raises(self, patched_model, tmp_path: Path) -> None:
+        from pyrecall.model import PyrecallError
+
+        f = tmp_path / "data.jsonl"
+        with pytest.raises(PyrecallError, match="format"):
+            self._run_learn(
+                patched_model,
+                f,
+                dataset_columns=["text"],
+                dataset_rows=[["hi"]],
+                format="xml",
+            )
+
+    def test_messages_column_not_found_raises(self, patched_model, tmp_path: Path) -> None:
+        from pyrecall.model import PyrecallError
+
+        f = tmp_path / "data.jsonl"
+        with pytest.raises(PyrecallError, match="messages_column"):
+            self._run_learn(
+                patched_model,
+                f,
+                dataset_columns=["text"],
+                dataset_rows=[["hi"]],
+                format="messages",
+            )
+
+    def test_messages_column_wrong_type_raises(self, patched_model, tmp_path: Path) -> None:
+        from pyrecall.model import PyrecallError
+
+        f = tmp_path / "data.jsonl"
+        with pytest.raises(PyrecallError, match="lists of dicts"):
+            self._run_learn(
+                patched_model,
+                f,
+                dataset_columns=["messages"],
+                dataset_rows=[["not a list"]],
+                format="messages",
+            )
+
+    def test_custom_messages_column_name(self, patched_model, tmp_path: Path) -> None:
+        f = tmp_path / "data.jsonl"
+        messages = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}]
+        mock_ds, mock_trainer = self._run_learn(
+            patched_model,
+            f,
+            dataset_columns=["conversations"],
+            dataset_rows=[[messages]],
+            format="messages",
+            messages_column="conversations",
+        )
+        mock_trainer.train.assert_called_once()

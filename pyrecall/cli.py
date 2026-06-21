@@ -477,6 +477,20 @@ def learn(
             help="Enable gradient checkpointing to cut GPU memory ~40% at the cost of ~20% slower training.",
         ),
     ] = None,
+    format: Annotated[
+        str,
+        typer.Option(
+            "--format",
+            help="Training data format: 'auto' (default), 'text', 'messages', or 'prompt_response'.",
+        ),
+    ] = "auto",
+    messages_column: Annotated[
+        str,
+        typer.Option(
+            "--messages-column",
+            help="Column name holding chat messages when --format=messages (default: 'messages').",
+        ),
+    ] = "messages",
 ) -> None:
     """
     Fine-tune the model on a local dataset.
@@ -538,6 +552,8 @@ def learn(
             max_length=max_length,
             resume=resume,
             gradient_checkpointing=gradient_checkpointing,
+            format=format,
+            messages_column=messages_column,
         )
     except PyrecallError as exc:
         console.print(f"[red]Error:[/red] {exc}")

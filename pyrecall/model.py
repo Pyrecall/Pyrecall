@@ -469,6 +469,8 @@ class Model:
         replay_weights: dict[str, float] | ForgettingReport | None = None,
         stream: bool = False,
         tracker: SnapshotTracker | list[SnapshotTracker] | None = None,
+        format: str = "auto",
+        messages_column: str = "messages",
     ) -> None:
         """
         Fine-tune the model on *data_path* using LoRA.
@@ -502,6 +504,12 @@ class Model:
             tracker: An optional :class:`~pyrecall.trackers.SnapshotTracker` (or list)
                 that implements ``log_step(step, loss)`` to receive per-step training
                 loss.  Trackers that don't implement ``log_step`` are silently skipped.
+            format: Training data format — ``"auto"`` (default), ``"text"``,
+                ``"messages"``, or ``"prompt_response"``.  In ``"auto"`` mode the
+                format is inferred from the column names.
+            messages_column: Name of the column holding chat messages when
+                *format* is ``"messages"`` or when auto-detection picks up that
+                column.  Default ``"messages"``.
         """
         batch_size = batch_size if batch_size is not None else self.batch_size
         learning_rate = learning_rate if learning_rate is not None else self.learning_rate
@@ -553,7 +561,82 @@ class Model:
 
         if is_empty:
             raise PyrecallError(f"Training data '{data_path}' is empty.")
-        if "text" in dataset.column_names:
+
+        _VALID_FORMATS = ("auto", "text", "messages", "prompt_response")
+        if format not in _VALID_FORMATS:
+            raise PyrecallError(
+                f"Unknown format '{format}'. "
+                f"Use one of: {', '.join(_VALID_FORMATS)}."
+            )
+
+        # Resolve format for "auto" mode by inspecting column names.
+        resolved_format = format
+        if format == "auto":
+            if "text" in dataset.column_names:
+                resolved_format = "text"
+            elif messages_column in dataset.column_names:
+                resolved_format = "messages"
+            elif "prompt" in dataset.column_names and "response" in dataset.column_names:
+                resolved_format = "prompt_response"
+            else:
+                resolved_format = "text"  # fall through to existing column search
+
+        if resolved_format == "messages":
+            # Apply the tokenizer's chat template to convert messages → flat text.
+            col = messages_column
+            if col not in dataset.column_names:
+                raise PyrecallError(
+                    f"messages_column '{col}' not found in '{data_path}'. "
+                    f"Columns found: {dataset.column_names}."
+                )
+            first = dataset[col][0]
+            if not isinstance(first, list) or not all(isinstance(m, dict) for m in first):
+                raise PyrecallError(
+                    f"Column '{col}' must contain lists of dicts with 'role' and 'content' keys. "
+                    f"Got: {type(first).__name__}."
+                )
+
+            def _apply_chat_template(batch: dict) -> dict:
+                texts = []
+                for msgs in batch[col]:
+                    try:
+                        text = self.tokenizer.apply_chat_template(
+                            msgs,
+                            tokenize=False,
+                            add_generation_prompt=False,
+                        )
+                    except Exception:
+                        # Fallback for tokenizers without a chat template.
+                        parts = []
+                        for m in msgs:
+                            role = m.get("role", "user")
+                            content = m.get("content", "")
+                            parts.append(f"### {role.capitalize()}: {content}")
+                        text = "\n\n".join(parts)
+                    texts.append(text)
+                return {"text": texts}
+
+            dataset = dataset.map(_apply_chat_template, batched=True, remove_columns=dataset.column_names)
+            text_col = "text"
+
+        elif resolved_format == "prompt_response":
+            if "prompt" not in dataset.column_names or "response" not in dataset.column_names:
+                raise PyrecallError(
+                    f"format='prompt_response' requires 'prompt' and 'response' columns. "
+                    f"Columns found: {dataset.column_names}."
+                )
+
+            def _flatten_prompt_response(batch: dict) -> dict:
+                texts = [
+                    f"### Human: {p}\n\n### Assistant: {r}"
+                    for p, r in zip(batch["prompt"], batch["response"])
+                ]
+                return {"text": texts}
+
+            dataset = dataset.map(_flatten_prompt_response, batched=True, remove_columns=dataset.column_names)
+            text_col = "text"
+
+        elif "text" in dataset.column_names:
             text_col = "text"
         else:
             text_col = None
