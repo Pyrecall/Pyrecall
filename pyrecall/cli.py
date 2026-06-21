@@ -201,7 +201,6 @@ def _load_init_config(path: str) -> dict:
             with open(config_path, encoding="utf-8") as f:
                 try:
                     data = yaml.safe_load(f)
-                    return data
                 except yaml.YAMLError as exc:
                     raise typer.BadParameter(f"Invalid YAML config: {exc}") from exc
 
@@ -209,13 +208,14 @@ def _load_init_config(path: str) -> dict:
             with open(config_path, "rb") as f:
                 try:
                     data = tomllib.load(f)
-                    return data
                 except tomllib.TOMLDecodeError as exc:
                     raise typer.BadParameter(f"Invalid TOML config: {exc}") from exc
 
         else:
             raise typer.BadParameter(f"Unsupported config extension: {suffix}")
 
+    except typer.BadParameter:
+        raise
     except Exception as exc:
         raise typer.BadParameter(f"Failed to parse config file: {exc}") from exc
 

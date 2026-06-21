@@ -153,6 +153,16 @@ class TestInit:
         # Original config should be preserved
         assert config["model_name"] == "gpt2"
 
+    def test_from_config_non_dict_yaml_raises_clear_error(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        cfg = tmp_path / "cfg.yaml"
+        cfg.write_text("- item1\n- item2\n")  # a list, not a dict
+        result = runner.invoke(app, ["init", "--from-config", str(cfg)])
+        assert result.exit_code != 0
+        assert "mapping" in result.output.lower() or "error" in result.output.lower()
+
 
 # ── learn ─────────────────────────────────────────────────────────────────────
 

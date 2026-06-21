@@ -1109,10 +1109,12 @@ class Model:
                 "Install it with: pip install pyrecall[serve]"
             ) from exc
 
+        from . import __version__ as _pyrecall_version
+
         app = FastAPI(
             title="pyrecall",
             description=f"Serving {self.model_name}",
-            version="0.1.0",
+            version=_pyrecall_version,
         )
         app.add_middleware(
             CORSMiddleware,
