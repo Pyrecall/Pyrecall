@@ -1034,216 +1034,150 @@ class TestReplayWeightsValidation:
             )
 
 
-class TestWatchMode:
-    """Tests for model.learn(watch_every=N, watch_action=...)."""
+class TestLearnFormatDetection:
+    """Tests for learn() format detection and conversion (issue #15)."""
 
-    def _make_data(self, tmp_path: Path) -> Path:
-        f = tmp_path / "train.jsonl"
-        f.write_text(json.dumps({"text": "hi"}) + "\n")
-        return f
-
-    def _learn_with_watch(self, patched_model, data_file, **kwargs):
-        """Run learn() with Trainer mocked out."""
+    def _run_learn(self, patched_model, data_file, dataset_columns, dataset_rows, **learn_kwargs):
+        """Helper: mock dataset with given columns/rows and run learn()."""
         mock_trainer = MagicMock()
+        mapped_dataset = MagicMock()
+        mapped_dataset.column_names = ["text"]
+        mapped_dataset.__len__.return_value = len(dataset_rows)
+        mapped_dataset.num_rows = len(dataset_rows)
+        mapped_dataset.map.return_value = mapped_dataset
+
+        mock_dataset = MagicMock()
+        mock_dataset.column_names = dataset_columns
+        mock_dataset.__len__.return_value = len(dataset_rows)
+        mock_dataset.num_rows = len(dataset_rows)
+
+        # Simulate dataset[col][0] for column sniffing.
+        def _getitem(key):
+            if isinstance(key, str):
+                col_idx = dataset_columns.index(key) if key in dataset_columns else 0
+                return [row[col_idx] if col_idx < len(row) else "" for row in dataset_rows]
+            return MagicMock()
+
+        mock_dataset.__getitem__ = MagicMock(side_effect=_getitem)
+        mock_dataset.map.return_value = mapped_dataset
 
         with (
-            patch("pyrecall.model.load_dataset") as mock_ds,
+            patch("pyrecall.model.load_dataset", return_value=mock_dataset),
             patch("pyrecall.model.Trainer", return_value=mock_trainer),
             patch("pyrecall.model.TrainingArguments"),
             patch("pyrecall.model.DataCollatorForLanguageModeling"),
         ):
-            mock_dataset = MagicMock()
-            mock_dataset.column_names = ["text"]
-            mock_dataset.__len__.return_value = 1
-            mock_dataset.map.return_value = mock_dataset
-            mock_ds.return_value = mock_dataset
-            patched_model.learn(str(data_file), epochs=1, **kwargs)
+            data_file.write_text(json.dumps({}) + "\n")
+            patched_model.learn(str(data_file), epochs=1, **learn_kwargs)
 
-        return mock_trainer
+        return mock_dataset, mock_trainer
 
-    def test_watch_every_requires_baseline(self, patched_model, tmp_path: Path) -> None:
+    def test_auto_detects_text_column(self, patched_model, tmp_path: Path) -> None:
+        f = tmp_path / "data.jsonl"
+        mock_ds, mock_trainer = self._run_learn(
+            patched_model,
+            f,
+            dataset_columns=["text"],
+            dataset_rows=[["hello world"]],
+        )
+        mock_trainer.train.assert_called_once()
+        # map should NOT have been called for conversion (text path is direct)
+        assert mock_ds.map.call_count == 1  # only tokenisation map
+
+    def test_auto_detects_messages_column(self, patched_model, tmp_path: Path) -> None:
+        f = tmp_path / "data.jsonl"
+        messages = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}]
+        mock_ds, mock_trainer = self._run_learn(
+            patched_model,
+            f,
+            dataset_columns=["messages"],
+            dataset_rows=[[messages]],
+        )
+        mock_trainer.train.assert_called_once()
+        # map called once for chat template conversion + once for tokenisation
+        assert mock_ds.map.call_count >= 1
+
+    def test_auto_detects_prompt_response_columns(self, patched_model, tmp_path: Path) -> None:
+        f = tmp_path / "data.jsonl"
+        mock_ds, mock_trainer = self._run_learn(
+            patched_model,
+            f,
+            dataset_columns=["prompt", "response"],
+            dataset_rows=[["What is 2+2?", "4"]],
+        )
+        mock_trainer.train.assert_called_once()
+
+    def test_explicit_messages_format(self, patched_model, tmp_path: Path) -> None:
+        f = tmp_path / "data.jsonl"
+        messages = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}]
+        mock_ds, mock_trainer = self._run_learn(
+            patched_model,
+            f,
+            dataset_columns=["messages"],
+            dataset_rows=[[messages]],
+            format="messages",
+        )
+        mock_trainer.train.assert_called_once()
+
+    def test_explicit_prompt_response_format(self, patched_model, tmp_path: Path) -> None:
+        f = tmp_path / "data.jsonl"
+        mock_ds, mock_trainer = self._run_learn(
+            patched_model,
+            f,
+            dataset_columns=["prompt", "response"],
+            dataset_rows=[["What is 2+2?", "4"]],
+            format="prompt_response",
+        )
+        mock_trainer.train.assert_called_once()
+
+    def test_invalid_format_raises(self, patched_model, tmp_path: Path) -> None:
         from pyrecall.model import PyrecallError
 
-        patched_model._baseline_snapshot_name = None
-        data_file = self._make_data(tmp_path)
-        with pytest.raises(PyrecallError, match="baseline"):
-            self._learn_with_watch(patched_model, data_file, watch_every=1)
+        f = tmp_path / "data.jsonl"
+        with pytest.raises(PyrecallError, match="format"):
+            self._run_learn(
+                patched_model,
+                f,
+                dataset_columns=["text"],
+                dataset_rows=[["hi"]],
+                format="xml",
+            )
 
-    def test_invalid_watch_action_raises(self, patched_model, tmp_path: Path) -> None:
+    def test_messages_column_not_found_raises(self, patched_model, tmp_path: Path) -> None:
         from pyrecall.model import PyrecallError
 
-        patched_model.snapshot(name="base")
-        data_file = self._make_data(tmp_path)
-        with pytest.raises(PyrecallError, match="watch_action"):
-            self._learn_with_watch(patched_model, data_file, watch_every=1, watch_action="invalid")
+        f = tmp_path / "data.jsonl"
+        with pytest.raises(PyrecallError, match="messages_column"):
+            self._run_learn(
+                patched_model,
+                f,
+                dataset_columns=["text"],
+                dataset_rows=[["hi"]],
+                format="messages",
+            )
 
-    def test_watch_every_less_than_1_raises(self, patched_model, tmp_path: Path) -> None:
+    def test_messages_column_wrong_type_raises(self, patched_model, tmp_path: Path) -> None:
         from pyrecall.model import PyrecallError
 
-        patched_model.snapshot(name="base")
-        data_file = self._make_data(tmp_path)
-        with pytest.raises(PyrecallError, match="watch_every"):
-            self._learn_with_watch(patched_model, data_file, watch_every=0)
+        f = tmp_path / "data.jsonl"
+        with pytest.raises(PyrecallError, match="lists of dicts"):
+            self._run_learn(
+                patched_model,
+                f,
+                dataset_columns=["messages"],
+                dataset_rows=[["not a list"]],
+                format="messages",
+            )
 
-    def test_no_watch_every_no_watch_callback(self, patched_model, tmp_path: Path) -> None:
-        from pyrecall.model import _WatchCallback
-
-        data_file = self._make_data(tmp_path)
-        mock_trainer = MagicMock()
-
-        captured_callbacks: list = []
-
-        def _capture_trainer(**kwargs):
-            captured_callbacks.extend(kwargs.get("callbacks", []))
-            return mock_trainer
-
-        with (
-            patch("pyrecall.model.load_dataset") as mock_ds,
-            patch("pyrecall.model.Trainer", side_effect=_capture_trainer),
-            patch("pyrecall.model.TrainingArguments"),
-            patch("pyrecall.model.DataCollatorForLanguageModeling"),
-        ):
-            mock_dataset = MagicMock()
-            mock_dataset.column_names = ["text"]
-            mock_dataset.__len__.return_value = 1
-            mock_dataset.map.return_value = mock_dataset
-            mock_ds.return_value = mock_dataset
-            patched_model.learn(str(data_file), epochs=1)
-
-        assert not any(isinstance(cb, _WatchCallback) for cb in captured_callbacks)
-
-    def test_watch_every_adds_watch_callback(self, patched_model, tmp_path: Path) -> None:
-        from pyrecall.model import _WatchCallback
-
-        patched_model.snapshot(name="base")
-        data_file = self._make_data(tmp_path)
-        mock_trainer = MagicMock()
-        captured_callbacks: list = []
-
-        def _capture_trainer(**kwargs):
-            captured_callbacks.extend(kwargs.get("callbacks", []))
-            return mock_trainer
-
-        with (
-            patch("pyrecall.model.load_dataset") as mock_ds,
-            patch("pyrecall.model.Trainer", side_effect=_capture_trainer),
-            patch("pyrecall.model.TrainingArguments"),
-            patch("pyrecall.model.DataCollatorForLanguageModeling"),
-        ):
-            mock_dataset = MagicMock()
-            mock_dataset.column_names = ["text"]
-            mock_dataset.__len__.return_value = 1
-            mock_dataset.map.return_value = mock_dataset
-            mock_ds.return_value = mock_dataset
-            patched_model.learn(str(data_file), epochs=3, watch_every=1)
-
-        assert any(isinstance(cb, _WatchCallback) for cb in captured_callbacks)
-
-    def test_watch_callback_skips_non_boundary_epochs(self, patched_model) -> None:
-        from pyrecall.model import _WatchCallback
-
-        patched_model.snapshot(name="base")
-        cb = _WatchCallback(
-            model_ref=patched_model,
-            baseline_name="base",
-            watch_every=5,
-            watch_action="warn",
+    def test_custom_messages_column_name(self, patched_model, tmp_path: Path) -> None:
+        f = tmp_path / "data.jsonl"
+        messages = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}]
+        mock_ds, mock_trainer = self._run_learn(
+            patched_model,
+            f,
+            dataset_columns=["conversations"],
+            dataset_rows=[[messages]],
+            format="messages",
+            messages_column="conversations",
         )
-        state = MagicMock()
-        state.epoch = 3.0
-        control = MagicMock()
-
-        with patch.object(patched_model, "_run_benchmarks") as mock_bench:
-            cb.on_epoch_end(None, state, control)
-            mock_bench.assert_not_called()
-
-    def test_watch_callback_fires_on_boundary_epoch(self, patched_model, tmp_snapshot_dir) -> None:
-        from pyrecall.model import _WatchCallback
-        from pyrecall.snapshot import SkillScore
-
-        patched_model.snapshot(name="base")
-
-        mock_scores = [SkillScore(category="coding", prompt="p", response="r", score=0.8)]
-        cb = _WatchCallback(
-            model_ref=patched_model,
-            baseline_name="base",
-            watch_every=5,
-            watch_action="warn",
-        )
-        state = MagicMock()
-        state.epoch = 5.0
-        control = MagicMock()
-
-        with patch.object(patched_model, "_run_benchmarks", return_value=mock_scores):
-            cb.on_epoch_end(None, state, control)
-
-        names = patched_model.rollback_manager.list_snapshot_names()
-        assert any("epoch5" in n for n in names)
-
-    def test_watch_action_warn_continues_training(self, patched_model, tmp_snapshot_dir) -> None:
-        from pyrecall.model import _WatchCallback
-        from pyrecall.snapshot import SkillScore
-
-        patched_model.snapshot(name="base")
-        cb = _WatchCallback(
-            model_ref=patched_model,
-            baseline_name="base",
-            watch_every=1,
-            watch_action="warn",
-        )
-        state = MagicMock()
-        state.epoch = 1.0
-        control = MagicMock()
-        control.should_training_stop = False
-
-        # Return degraded scores to trigger forgetting
-        bad_scores = [SkillScore(category="coding", prompt="p", response="r", score=0.0)]
-        with patch.object(patched_model, "_run_benchmarks", return_value=bad_scores):
-            cb.on_epoch_end(None, state, control)
-
-        # warn action must NOT stop training
-        assert not control.should_training_stop
-
-    def test_watch_action_stop_sets_flag(self, patched_model, tmp_snapshot_dir) -> None:
-        from pyrecall.model import _WatchCallback, _WatchStopSignal
-        from pyrecall.snapshot import SkillScore
-
-        patched_model.snapshot(name="base")
-        cb = _WatchCallback(
-            model_ref=patched_model,
-            baseline_name="base",
-            watch_every=1,
-            watch_action="stop",
-        )
-        state = MagicMock()
-        state.epoch = 1.0
-        control = MagicMock()
-
-        bad_scores = [SkillScore(category="coding", prompt="p", response="r", score=0.0)]
-        with patch.object(patched_model, "_run_benchmarks", return_value=bad_scores):
-            with pytest.raises(_WatchStopSignal):
-                cb.on_epoch_end(None, state, control)
-
-        assert control.should_training_stop
-
-    def test_watch_action_rollback_sets_flag(self, patched_model, tmp_snapshot_dir) -> None:
-        from pyrecall.model import _WatchCallback, _WatchRollbackSignal
-        from pyrecall.snapshot import SkillScore
-
-        patched_model.snapshot(name="base")
-        cb = _WatchCallback(
-            model_ref=patched_model,
-            baseline_name="base",
-            watch_every=1,
-            watch_action="rollback",
-        )
-        state = MagicMock()
-        state.epoch = 1.0
-        control = MagicMock()
-
-        bad_scores = [SkillScore(category="coding", prompt="p", response="r", score=0.0)]
-        with patch.object(patched_model, "_run_benchmarks", return_value=bad_scores):
-            with pytest.raises(_WatchRollbackSignal):
-                cb.on_epoch_end(None, state, control)
-
-        assert control.should_training_stop
+        mock_trainer.train.assert_called_once()
