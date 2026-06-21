@@ -840,6 +840,17 @@ class TestMarkdownAndHTMLEscaping:
         assert "<script>" not in html
         assert "&lt;script&gt;" in html
 
+    def test_html_tag_in_snapshot_name_escaped_in_html(self) -> None:
+        report = ForgettingReport(
+            snapshot_before='<img src=x onerror="alert(1)">',
+            snapshot_after="after",
+            threshold=0.1,
+            comparisons=[CategoryComparison(category="coding", score_before=0.8, score_after=0.7)],
+        )
+        html = report.to_html()
+        assert 'onerror="alert(1)"' not in html
+        assert "&lt;img" in html
+
 
 class TestScoringMethodMismatchWarning:
     """#133: warning should use the dominant scoring method, not raw per-score sets."""

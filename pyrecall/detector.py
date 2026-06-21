@@ -378,6 +378,8 @@ class ForgettingReport:
             )
 
         ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+        snap_before_safe = _html.escape(self.snapshot_before)
+        snap_after_safe = _html.escape(self.snapshot_after)
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -405,8 +407,8 @@ class ForgettingReport:
 <h1>pyrecall — Forgetting Report</h1>
 <p class="meta">
   Generated {ts} &nbsp;|&nbsp;
-  <strong>Before:</strong> {self.snapshot_before} &nbsp;→&nbsp;
-  <strong>After:</strong> {self.snapshot_after} &nbsp;|&nbsp;
+  <strong>Before:</strong> {snap_before_safe} &nbsp;→&nbsp;
+  <strong>After:</strong> {snap_after_safe} &nbsp;|&nbsp;
   Threshold: {self.threshold * 100:.0f}%
 </p>
 <span class="badge">{status_text}</span>
