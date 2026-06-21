@@ -151,12 +151,18 @@ def _parse_category_thresholds(raw: list[str]) -> dict[str, float]:
             )
         cat, _, val = item.partition("=")
         try:
-            result[cat.strip()] = float(val.strip())
+            v = float(val.strip())
         except ValueError:
             raise typer.BadParameter(
                 f"Threshold value must be a number, got '{val}'",
                 param_hint="--category-threshold",
             )
+        if not 0.0 < v <= 1.0:
+            raise typer.BadParameter(
+                f"Threshold value must be between 0 and 1, got '{v}'",
+                param_hint="--category-threshold",
+            )
+        result[cat.strip()] = v
     return result
 
 
