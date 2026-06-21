@@ -380,6 +380,23 @@ def init(
 
     config.update({k: v for k, v in config_values.items() if v is not None})
 
+    # Re-validate after config-file override so bad values can't bypass CLI checks.
+    config_errors: list[str] = []
+    if not 0.0 < config.get("forgetting_threshold", threshold) <= 1.0:
+        config_errors.append(
+            f"forgetting_threshold must be > 0 and <= 1, got {config.get('forgetting_threshold')}"
+        )
+    if config.get("strategy") not in ("lora", "qlora"):
+        config_errors.append(f"strategy must be 'lora' or 'qlora', got '{config.get('strategy')}'")
+    if config.get("scoring_method") not in ("log_likelihood", "cosine"):
+        config_errors.append(
+            f"scoring_method must be 'log_likelihood' or 'cosine', got '{config.get('scoring_method')}'"
+        )
+    if config_errors:
+        for msg in config_errors:
+            console.print(f"[red]Error (from config file):[/red] {msg}")
+        raise typer.Exit(1)
+
     _write_config(config)
 
     model = model or config_values.get("model")
