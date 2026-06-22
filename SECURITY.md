@@ -17,7 +17,7 @@ Only the two most recent minor releases receive security fixes. Users on older v
 Instead, report vulnerabilities privately via one of the following:
 
 - **GitHub private vulnerability reporting** (preferred): [github.com/Pyrecall/Pyrecall/security/advisories/new](https://github.com/Pyrecall/Pyrecall/security/advisories/new)
-- **Email**: [atharvranjan8@gmail.com](mailto:siddharth.lakshminarayanan@gmail.com) — use the subject line `[pyrecall] Security Vulnerability`
+- **Email**: pyrecall@gmail.com — use the subject line `[pyrecall] Security Vulnerability`
 
 ### What to include
 
