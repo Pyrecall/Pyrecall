@@ -64,5 +64,8 @@ jobs:
       - name: Install Typer Checker Tools
         run: pip install mypy types-tqdm
 
+      - name: MyPy Version
+        run: mypy --version
+
       - name: Type check (mypy)
         run: mypy pyrecall --ignore-missing-imports --no-strict-optional
