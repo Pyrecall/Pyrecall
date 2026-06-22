@@ -46,7 +46,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version: "3.11"
 
       - name: Cache pip
         uses: actions/cache@v4
@@ -63,6 +63,9 @@ jobs:
           pip install -e ".[dev]"
       - name: Install Typer Checker Tools
         run: pip install mypy types-tqdm
+
+      - name: MyPy Version
+        run: mypy --version
 
       - name: Type check (mypy)
         run: mypy pyrecall --ignore-missing-imports --no-strict-optional
