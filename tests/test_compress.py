@@ -1,4 +1,4 @@
-"""Tests for pyrecall/compress.py."""
+"""Python Tests for pyrecall/compress.py."""
 
 from __future__ import annotations
 
