@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import math
+import threading
 import warnings
 from collections.abc import Callable
 from pathlib import Path
@@ -27,6 +28,7 @@ from transformers import (
     AutoTokenizer,
     BitsAndBytesConfig,
     DataCollatorForLanguageModeling,
+    TextIteratorStreamer,
     Trainer,
     TrainerCallback,
     TrainingArguments,
@@ -1078,11 +1080,47 @@ class Model:
         new_tokens = output_ids[0][inputs["input_ids"].shape[1] :]
         return self.tokenizer.decode(new_tokens, skip_special_tokens=True)  # type: ignore[return-value]
 
+    def generate_stream(
+        self,
+        prompt: str,
+        max_new_tokens: int = 200,
+    ):
+        inputs = self.tokenizer(
+            prompt,
+            return_tensor="pt",
+            truncation=True,
+            max_length=self.max_length,
+        ).to(self.device)
+
+        streamer = TextIteratorStreamer(
+            self.tokenizer,
+            skip_prompt=True,
+            skip_special_tokens=True,
+        )
+
+        thread = threading.Thread(
+            target=self.model.generate,
+            kwargs={
+                **inputs,
+                "max_new_tokens": max_new_tokens,
+                "do_sample": False,
+                "pad_token_id": self.tokenizer.eos_token_id,
+                "streamer": streamer,
+            },
+        )
+
+        thread.start()
+
+        yield from streamer
+
+        thread.join()
+
     def serve(
         self,
         port: int = 8000,
         live_learning: bool = False,
         live_batch_size: int = 50,
+        streaming: bool = True,
     ) -> None:
         """
         Start a FastAPI inference server.
@@ -1103,9 +1141,12 @@ class Model:
                 Only used when *live_learning* is True.
         """
         try:
+            import json
+
             import uvicorn
             from fastapi import FastAPI
             from fastapi.middleware.cors import CORSMiddleware
+            from fastapi.responses import StreamingResponse
             from pydantic import BaseModel as _Base
         except ImportError as exc:
             raise PyrecallError(
@@ -1145,13 +1186,45 @@ class Model:
             response: str
             model: str
 
-        @app.post("/generate", response_model=GenerateResponse)
-        async def _generate(req: GenerateRequest) -> GenerateResponse:
-            text = self.generate(req.prompt, req.max_new_tokens)
-            if learner:
-                learner.record(req.prompt, text)
-            return GenerateResponse(response=text, model=self.model_name)
+        @app.post("/generate/stream")
+        async def _generate_stream(req: GenerateRequest):
 
+            def event_stream():
+                full_text = ""
+
+                for token in self.generate_stream(
+                    req.prompt,
+                    req.max_new_tokens,
+                ):
+                    full_text += token
+
+                    payload = {
+                        "token": token,
+                        "model": self.model_name,
+                        "done": False,
+                    }
+
+                    yield f"data: {json.dumps(payload)}\n\n"
+
+                final_payload = {
+                    "token": "",
+                    "model": self.model_name,
+                    "done": True,
+                }
+
+                yield f"data: {json.dumps(final_payload)}\n\n"
+
+                if learner:
+                    learner.record(req.prompt, full_text)
+
+            return StreamingResponse(
+                event_stream(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                },
+            )
         @app.get("/health")
         async def _health() -> dict[str, Any]:
             info: dict[str, Any] = {
