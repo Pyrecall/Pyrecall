@@ -22,43 +22,42 @@ def _make_mock_tokenizer() -> MagicMock:
 
     import torch
 
-    def _make_mock_tokenizer():
-        def tokenize(text, *args, **kwargs):
-            # batch size = number of inputs
-            if isinstance(text, list):
-                batch_size = len(text)
-            else:
-                batch_size = 1
+    def tokenize(text, *args, **kwargs):
+        # batch size = number of inputs
+        if isinstance(text, list):
+            batch_size = len(text)
+        else:
+            batch_size = 1
 
-            out = MagicMock()
+        out = MagicMock()
 
-            seq_len = 8  # keep fixed length is fine
+        seq_len = 8  # keep fixed length is fine
 
-            out.input_ids = torch.zeros((batch_size, seq_len), dtype=torch.long)
-            out.attention_mask = torch.ones((batch_size, seq_len), dtype=torch.long)
+        out.input_ids = torch.zeros((batch_size, seq_len), dtype=torch.long)
+        out.attention_mask = torch.ones((batch_size, seq_len), dtype=torch.long)
 
-            out.to.return_value = out
+        out.to.return_value = out
 
-            # IMPORTANT: safe indexing
-            out.__getitem__.side_effect = lambda key: getattr(out, key)
+        # IMPORTANT: safe indexing
+        out.__getitem__.side_effect = lambda key: getattr(out, key)
 
-            return out
+        return out
 
-        mock = MagicMock()
-        mock.__call__.side_effect = tokenize
-        return mock
+    mock = MagicMock()
+    mock.__call__.side_effect = tokenize
+    return mock
 
-        token_out.to.return_value = token_out
+    token_out.to.return_value = token_out
 
-        token_out.__getitem__.side_effect = lambda key: {
-            "input_ids": token_out.input_ids,
-            "attention_mask": token_out.attention_mask,
-        }[key]
+    token_out.__getitem__.side_effect = lambda key: {
+        "input_ids": token_out.input_ids,
+        "attention_mask": token_out.attention_mask,
+    }[key]
 
-        tok.return_value = token_out
-        tok.decode.return_value = "Paris is the capital of France."
+    tok.return_value = token_out
+    tok.decode.return_value = "Paris is the capital of France."
 
-        return tok
+    return tok
 
 
 def _make_mock_base_model() -> MagicMock:
