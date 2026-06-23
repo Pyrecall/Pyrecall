@@ -40,28 +40,34 @@ def _make_mock_base_model() -> MagicMock:
 
 
 def _make_mock_peft_model() -> MagicMock:
-    peft = MagicMock()
-    peft.parameters.return_value = [
-        torch.nn.Parameter(torch.randn(10, 10)),
-        torch.nn.Parameter(torch.randn(5, 5)),
-    ]
-    for p in peft.parameters():
-        p.requires_grad = True
+    def _make_mock_peft_model() -> MagicMock:
+        peft = MagicMock()
 
-    hidden = torch.randn(1, 8, 32)
-    outputs = MagicMock()
-    outputs.hidden_states = [hidden] * 4
-    outputs.loss = torch.tensor(1.0)
-    outputs.logits = torch.randn(1, 8, 100)
-    peft.return_value = outputs
+        peft.parameters.return_value = [
+            torch.nn.Parameter(torch.randn(10, 10)),
+            torch.nn.Parameter(torch.randn(5, 5)),
+        ]
 
-    peft.generate.return_value = torch.zeros(1, 10, dtype=torch.long)
+        for p in peft.parameters():
+            p.requires_grad = True
 
-    peft.eval.return_value = peft
-    peft.train.return_value = peft
-    peft.to.return_value = peft
-    peft.save_pretrained = MagicMock()
-    return peft
+        hidden = torch.randn(1, 8, 32)
+
+        outputs = MagicMock()
+        outputs.hidden_states = [hidden] * 4
+        outputs.loss = torch.tensor(1.0)
+        outputs.logits = torch.randn(1, 8, 100)
+
+        peft.return_value = outputs
+
+        peft.generate.return_value = torch.zeros(1, 10, dtype=torch.long)
+
+        peft.eval.return_value = peft
+        peft.train.return_value = peft
+        peft.to.return_value = peft
+        peft.save_pretrained = MagicMock()
+
+        return peft
 
 
 @pytest.fixture()
