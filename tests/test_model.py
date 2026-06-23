@@ -20,7 +20,6 @@ def _make_mock_tokenizer() -> MagicMock:
 
     token_out = MagicMock()
 
-    from unittest.mock import MagicMock
     import torch
 
     def _make_mock_tokenizer():
