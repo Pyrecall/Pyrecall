@@ -13,34 +13,25 @@ import torch
 
 
 def _make_mock_tokenizer() -> MagicMock:
-    import torch
-    from unittest.mock import MagicMock
-
     tok = MagicMock()
-
-    tok.pad_token = "<pad>"
-    tok.pad_token_id = 0
+    tok.pad_token = None
     tok.eos_token = "<eos>"
     tok.eos_token_id = 0
 
-    def tokenize(text, *args, **kwargs):
-        batch_size = len(text) if isinstance(text, list) else 1
-        seq_len = 8
+    token_out = MagicMock()
+    token_out.input_ids = torch.zeros((1, 8), dtype=torch.long)
+    token_out.attention_mask = torch.ones((1, 8), dtype=torch.long)
 
-        out = MagicMock()
-        out.input_ids = torch.zeros((batch_size, seq_len), dtype=torch.long)
-        out.attention_mask = torch.ones((batch_size, seq_len), dtype=torch.long)
+    token_out.to.return_value = token_out
+    token_out.__getitem__.side_effect = lambda key: {
+        "input_ids": token_out.input_ids,
+        "attention_mask": token_out.attention_mask,
+    }[key]
 
-        out.to.return_value = out
-        out.__getitem__.side_effect = lambda key: getattr(out, key)
-
-        return out
-
-    tok.side_effect = tokenize
+    tok.return_value = token_out
     tok.decode.return_value = "Paris is the capital of France."
 
     return tok
-
 
 def _make_mock_base_model() -> MagicMock:
     base = MagicMock()
