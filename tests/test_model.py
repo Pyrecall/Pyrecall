@@ -46,34 +46,33 @@ def _make_mock_base_model() -> MagicMock:
 
 
 def _make_mock_peft_model() -> MagicMock:
-    def _make_mock_peft_model() -> MagicMock:
-        peft = MagicMock()
+    peft = MagicMock()
 
-        peft.parameters.return_value = [
-            torch.nn.Parameter(torch.randn(10, 10)),
-            torch.nn.Parameter(torch.randn(5, 5)),
-        ]
+    peft.parameters.return_value = [
+        torch.nn.Parameter(torch.randn(10, 10)),
+        torch.nn.Parameter(torch.randn(5, 5)),
+    ]
 
-        for p in peft.parameters():
-            p.requires_grad = True
+    for p in peft.parameters():
+        p.requires_grad = True
 
-        hidden = torch.randn(1, 8, 32)
+    hidden = torch.randn(1, 8, 32)
 
-        outputs = MagicMock()
-        outputs.hidden_states = [hidden] * 4
-        outputs.loss = torch.tensor(1.0)
-        outputs.logits = torch.randn(1, 8, 100)
+    outputs = MagicMock()
+    outputs.hidden_states = [hidden] * 4
+    outputs.loss = torch.tensor(1.0)
+    outputs.logits = torch.randn(1, 8, 100)
 
-        peft.return_value = outputs
+    peft.return_value = outputs
 
-        peft.generate.return_value = torch.zeros(1, 10, dtype=torch.long)
+    peft.generate.return_value = torch.zeros(1, 10, dtype=torch.long)
 
-        peft.eval.return_value = peft
-        peft.train.return_value = peft
-        peft.to.return_value = peft
-        peft.save_pretrained = MagicMock()
+    peft.eval.return_value = peft
+    peft.train.return_value = peft
+    peft.to.return_value = peft
+    peft.save_pretrained = MagicMock()
 
-        return peft
+    return peft
 
 
 @pytest.fixture()
@@ -82,13 +81,13 @@ def tmp_snapshot_dir(tmp_path: Path) -> Path:
     d.mkdir()
     return d
 
-
 @pytest.fixture()
 def patched_model(tmp_snapshot_dir: Path):
-    """Model instance with all HuggingFace and PEFT calls mocked."""
     mock_tokenizer = _make_mock_tokenizer()
     mock_base = _make_mock_base_model()
     mock_peft = _make_mock_peft_model()
+
+    mock_peft.to = MagicMock(return_value=mock_peft)
 
     with (
         patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tokenizer),
@@ -99,10 +98,12 @@ def patched_model(tmp_snapshot_dir: Path):
     ):
         from pyrecall.model import Model
 
-        m = Model("test/model", snapshot_dir=tmp_snapshot_dir)
+        m = Model.__new__(Model)
         m.model = mock_peft
-        yield m
+        m.tokenizer = mock_tokenizer
+        m.device = "cpu"
 
+        yield m
 
 # ── tests ──────────────────────────────────────────────────────────────────────
 
