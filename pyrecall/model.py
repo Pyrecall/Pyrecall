@@ -1225,6 +1225,7 @@ class Model:
                     "Connection": "keep-alive",
                 },
             )
+
         @app.get("/health")
         async def _health() -> dict[str, Any]:
             info: dict[str, Any] = {
