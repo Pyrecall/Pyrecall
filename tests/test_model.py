@@ -14,7 +14,7 @@ import torch
 
 def _make_mock_tokenizer() -> MagicMock:
     tok = MagicMock()
-    tok.pad_token = None
+    tok.pad_token = "<pad>"
     tok.eos_token = "<eos>"
     tok.eos_token_id = 0
 
