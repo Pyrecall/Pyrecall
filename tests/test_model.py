@@ -81,6 +81,7 @@ def tmp_snapshot_dir(tmp_path: Path) -> Path:
     d.mkdir()
     return d
 
+
 @pytest.fixture()
 def patched_model(tmp_snapshot_dir: Path):
     mock_tokenizer = _make_mock_tokenizer()
@@ -98,12 +99,13 @@ def patched_model(tmp_snapshot_dir: Path):
     ):
         from pyrecall.model import Model
 
-        m = Model.__new__(Model)
+        m = Model("test/model", snapshot_dir=tmp_snapshot_dir)
         m.model = mock_peft
         m.tokenizer = mock_tokenizer
         m.device = "cpu"
 
         yield m
+
 
 # ── tests ──────────────────────────────────────────────────────────────────────
 
@@ -113,6 +115,9 @@ class TestModelInit:
         mock_tok = _make_mock_tokenizer()
         mock_base = _make_mock_base_model()
         mock_peft = _make_mock_peft_model()
+
+        mock_peft.to = MagicMock(return_value=mock_peft)
+        mock_peft.config = MagicMock()
 
         with (
             patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
