@@ -50,17 +50,32 @@ def _make_mock_peft_model() -> MagicMock:
         torch.nn.Parameter(torch.randn(5, 5)),
     ]
 
-    for p in peft.parameters():
-        p.requires_grad = True
+    def forward(*args, **kwargs):
+        input_ids = kwargs.get("input_ids")
 
-    hidden = torch.randn(1, 8, 32)
+        if input_ids is None and args:
+            input_ids = args[0]
 
-    outputs = MagicMock()
-    outputs.hidden_states = [hidden] * 4
-    outputs.loss = torch.tensor(1.0)
-    outputs.logits = torch.randn(1, 8, 100)
+        batch_size, seq_len = input_ids.shape
 
-    peft.return_value = outputs
+        outputs = MagicMock()
+
+        outputs.hidden_states = [
+            torch.randn(batch_size, seq_len, 32)
+            for _ in range(4)
+        ]
+
+        outputs.loss = torch.tensor(1.0)
+
+        outputs.logits = torch.randn(
+            batch_size,
+            seq_len,
+            100,
+        )
+
+        return outputs
+
+    peft.side_effect = forward
 
     peft.generate.return_value = torch.zeros(1, 10, dtype=torch.long)
 

@@ -1087,7 +1087,7 @@ class Model:
     ):
         inputs = self.tokenizer(
             prompt,
-            return_tensor="pt",
+            return_tensors="pt",
             truncation=True,
             max_length=self.max_length,
         ).to(self.device)
