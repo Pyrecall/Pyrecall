@@ -17,16 +17,22 @@ def _make_mock_tokenizer() -> MagicMock:
     tok.pad_token = None
     tok.eos_token = "<eos>"
     tok.eos_token_id = 0
-    # Simulate tokenizer call returning tensors
+
     token_out = MagicMock()
-    token_out.__getitem__ = lambda self, key: MagicMock(
-        shape=torch.Size([1, 8]), to=lambda d: token_out
-    )
-    token_out.to = lambda d: token_out
-    token_out.input_ids = torch.zeros(1, 8, dtype=torch.long)
-    token_out.attention_mask = torch.ones(1, 8, dtype=torch.long)
+
+    token_out.input_ids = torch.zeros((1, 8), dtype=torch.long)
+    token_out.attention_mask = torch.ones((1, 8), dtype=torch.long)
+
+    token_out.to.return_value = token_out
+
+    token_out.__getitem__.side_effect = lambda key: {
+        "input_ids": token_out.input_ids,
+        "attention_mask": token_out.attention_mask,
+    }[key]
+
     tok.return_value = token_out
     tok.decode.return_value = "Paris is the capital of France."
+
     return tok
 
 
