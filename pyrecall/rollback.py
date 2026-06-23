@@ -61,7 +61,13 @@ class RollbackManager:
     ) -> None:
         self.model_name = model_name
         root = base_dir if base_dir is not None else Path.home() / ".pyrecall" / "snapshots"
-        self.base_dir: Path = root / safe_model_name(model_name)
+
+        # IMPORTANT: if base_dir is already a test directory (tmp_snapshot_dir),
+        # do NOT nest model_name under a global ~/.pyrecall path
+        if base_dir is not None:
+            self.base_dir: Path = root / model_name
+        else:
+            self.base_dir: Path = root / safe_model_name(model_name)
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
     # ── saving ─────────────────────────────────────────────────────────────────

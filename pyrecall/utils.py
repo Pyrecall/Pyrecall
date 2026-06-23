@@ -300,7 +300,7 @@ def compute_log_likelihood_batch(
                 "(prompt may exceed max_length=%d). Returning NaN.",
                 max_length,
             )
-            scores.append(float("nan"))
+            scores.append(0.0)
         else:
             mean_nll = nll_sum.item() / n.item()
             scores.append(1.0 if mean_nll <= 0.0 else math.exp(-mean_nll))

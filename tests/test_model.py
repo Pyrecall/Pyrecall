@@ -33,6 +33,7 @@ def _make_mock_tokenizer() -> MagicMock:
 
     return tok
 
+
 def _make_mock_base_model() -> MagicMock:
     base = MagicMock()
     base.parameters.return_value = [torch.nn.Parameter(torch.randn(10, 10))]
@@ -60,10 +61,7 @@ def _make_mock_peft_model() -> MagicMock:
 
         outputs = MagicMock()
 
-        outputs.hidden_states = [
-            torch.randn(batch_size, seq_len, 32)
-            for _ in range(4)
-        ]
+        outputs.hidden_states = [torch.randn(batch_size, seq_len, 32) for _ in range(4)]
 
         outputs.loss = torch.tensor(1.0)
 
