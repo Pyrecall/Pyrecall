@@ -1186,7 +1186,7 @@ class Model:
             response: str
             model: str
 
-        @app.post("/generate/stream")
+        @app.post("/generate")
         async def _generate_stream(req: GenerateRequest):
 
             def event_stream():
