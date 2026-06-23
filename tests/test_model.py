@@ -158,8 +158,9 @@ class TestModelSnapshot:
     def test_snapshot_saves_json(self, patched_model, tmp_snapshot_dir: Path) -> None:
         patched_model.snapshot(name="test_snap")
         from pyrecall.utils import safe_model_name
+
         snap_file = (
-        tmp_snapshot_dir
+            tmp_snapshot_dir
             / safe_model_name(patched_model.model_name)
             / "test_snap"
             / "snapshot.json"
