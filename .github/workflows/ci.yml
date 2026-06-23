@@ -47,6 +47,7 @@ jobs:
         run: |
           pip install -e ".[dev]"
           pip install pytest-cov
+          pip install pyrecall[quantization]
 
       - name: Run tests with coverage
         run: |
