@@ -20,20 +20,46 @@ def _make_mock_tokenizer() -> MagicMock:
 
     token_out = MagicMock()
 
-    token_out.input_ids = torch.zeros((1, 8), dtype=torch.long)
-    token_out.attention_mask = torch.ones((1, 8), dtype=torch.long)
+    from unittest.mock import MagicMock
+    import torch
 
-    token_out.to.return_value = token_out
+    def _make_mock_tokenizer():
+        def tokenize(text, *args, **kwargs):
+            # batch size = number of inputs
+            if isinstance(text, list):
+                batch_size = len(text)
+            else:
+                batch_size = 1
 
-    token_out.__getitem__.side_effect = lambda key: {
-        "input_ids": token_out.input_ids,
-        "attention_mask": token_out.attention_mask,
-    }[key]
+            out = MagicMock()
 
-    tok.return_value = token_out
-    tok.decode.return_value = "Paris is the capital of France."
+            seq_len = 8  # keep fixed length is fine
 
-    return tok
+            out.input_ids = torch.zeros((batch_size, seq_len), dtype=torch.long)
+            out.attention_mask = torch.ones((batch_size, seq_len), dtype=torch.long)
+
+            out.to.return_value = out
+
+            # IMPORTANT: safe indexing
+            out.__getitem__.side_effect = lambda key: getattr(out, key)
+
+            return out
+
+        mock = MagicMock()
+        mock.__call__.side_effect = tokenize
+        return mock
+
+        token_out.to.return_value = token_out
+
+        token_out.__getitem__.side_effect = lambda key: {
+            "input_ids": token_out.input_ids,
+            "attention_mask": token_out.attention_mask,
+        }[key]
+
+        tok.return_value = token_out
+        tok.decode.return_value = "Paris is the capital of France."
+
+        return tok
 
 
 def _make_mock_base_model() -> MagicMock:
