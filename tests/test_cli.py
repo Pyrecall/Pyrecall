@@ -2038,6 +2038,119 @@ class TestStatus:
         assert "-" in result.output
 
 
+# ── status --output ───────────────────────────────────────────────────────────
+
+
+class TestStatusOutput:
+    def test_output_json_creates_file(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        mgr = _make_mock_manager(snapshots=[_make_snapshot("v1", {"coding": 0.8})])
+        out = tmp_path / "status.json"
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["status", "--output", str(out)])
+
+        assert result.exit_code == 0
+        assert out.exists()
+        data = json.loads(out.read_text())
+        assert data["model_name"] == "test/model"
+        assert len(data["snapshots"]) == 1
+        assert data["snapshots"][0]["name"] == "v1"
+
+    def test_output_csv_creates_file(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snaps = [_make_snapshot("v1", {"coding": 0.8}), _make_snapshot("v2", {"coding": 0.75})]
+        mgr = _make_mock_manager(snapshots=snaps)
+        out = tmp_path / "status.csv"
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["status", "--output", str(out)])
+
+        assert result.exit_code == 0
+        assert out.exists()
+        lines = out.read_text().splitlines()
+        assert lines[0].startswith("name,created_at,overall")
+        assert "coding" in lines[0]
+        assert len(lines) == 3  # header + 2 rows
+
+    def test_output_html_creates_file(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        mgr = _make_mock_manager(snapshots=[_make_snapshot("v1", {"coding": 0.8})])
+        out = tmp_path / "status.html"
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["status", "--output", str(out)])
+
+        assert result.exit_code == 0
+        assert out.exists()
+        content = out.read_text()
+        assert "<!DOCTYPE html>" in content
+        assert "v1" in content
+        assert "pyrecall" in content
+
+    def test_output_json_matches_json_flag(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        mgr = _make_mock_manager(snapshots=[_make_snapshot("v1", {"coding": 0.8})])
+        out = tmp_path / "status.json"
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["status", "--output", str(out)])
+
+        data = json.loads(out.read_text())
+        assert "model_name" in data
+        assert "snapshots" in data
+        assert data["snapshots"][0]["name"] == "v1"
+
+    def test_output_csv_has_all_fields(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        import csv as _csv
+
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap = _make_snapshot("v1", {"coding": 0.8, "reasoning": 0.7})
+        snap.hub_repo = "my-org/my-model"
+        snap.tags = {"commit": "abc123"}
+        mgr = _make_mock_manager(snapshots=[snap])
+        out = tmp_path / "status.csv"
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["status", "--output", str(out)])
+
+        assert result.exit_code == 0
+        rows = list(_csv.DictReader(out.read_text().splitlines()))
+        assert rows[0]["name"] == "v1"
+        assert rows[0]["hub_repo"] == "my-org/my-model"
+        assert "commit=abc123" in rows[0]["tags"]
+
+    def test_output_unknown_extension_fails(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        mgr = _make_mock_manager(snapshots=[_make_snapshot("v1")])
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["status", "--output", str(tmp_path / "status.txt")])
+
+        assert result.exit_code == 1
+        assert "Unknown format" in result.output
+
+    def test_output_empty_snapshots_creates_file(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        mgr = _make_mock_manager(snapshots=[])
+        out = tmp_path / "status.json"
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["status", "--output", str(out)])
+
+        assert result.exit_code == 0
+        assert out.exists()
+        data = json.loads(out.read_text())
+        assert data["snapshots"] == []
+
+
 # ── history ───────────────────────────────────────────────────────────────────
 
 

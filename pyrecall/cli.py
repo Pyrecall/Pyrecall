@@ -1357,6 +1357,219 @@ def _human_size(n: int) -> str:
     return f"{n} B"
 
 
+def _write_status_output(
+    snapshots: list,
+    model_name: str | None,
+    baseline: str | None,
+    path: str,
+) -> None:
+    """Write status output to a file in JSON, CSV, or HTML format.
+
+    Format is inferred from the file extension (.json, .csv, .html).
+    """
+    from pathlib import Path as _Path
+
+    out = _Path(path)
+    fmt = out.suffix.lstrip(".").lower()
+
+    if fmt in ("htm", "html"):
+        content = _status_to_html(snapshots, model_name, baseline)
+    elif fmt == "csv":
+        content = _status_to_csv(snapshots, baseline)
+    elif fmt in ("json", "jsonl"):
+        content = _status_to_json(snapshots, model_name, baseline)
+    else:
+        raise ValueError(
+            f"Unknown format '{fmt}'. Use 'html', 'csv', or 'json' "
+            "(or give the file a recognised extension)."
+        )
+    out.write_text(content, encoding="utf-8")
+    console.print(f"[green]✓ Status saved to[/green] [bold]{path}[/bold]")
+
+
+def _status_to_json(
+    snapshots: list,
+    model_name: str | None,
+    baseline: str | None,
+) -> str:
+    """Return status data as JSON string."""
+
+    def _nan_safe(v: float) -> float | None:
+        return None if math.isnan(v) else v
+
+    out = {
+        "model_name": model_name,
+        "baseline_snapshot": baseline,
+        "snapshots": [
+            {
+                "name": snap.name,
+                "created_at": snap.created_at.isoformat(),
+                "overall": _nan_safe(snap.overall_score()),
+                "scores": {k: _nan_safe(v) for k, v in snap.category_scores().items()},
+                "adapter_ok": bool(snap.adapter_path and snap.adapter_path.exists()),
+                "is_baseline": snap.name == baseline,
+                "hub_repo": snap.hub_repo,
+                "tags": snap.tags,
+            }
+            for snap in snapshots
+        ],
+    }
+    return json.dumps(out, indent=2)
+
+
+def _status_to_csv(snapshots: list, baseline: str | None) -> str:
+    """Return status data as CSV string."""
+    from io import StringIO
+
+    # Collect all category names in a stable order.
+    all_categories: list[str] = []
+    for snap in snapshots:
+        for cat in snap.category_scores():
+            if cat not in all_categories:
+                all_categories.append(cat)
+
+    fieldnames = ["name", "created_at", "overall"] + all_categories + ["adapter_ok", "hub_repo", "tags"]
+    output = StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+
+    for snap in snapshots:
+        cat_scores = snap.category_scores()
+        overall = snap.overall_score()
+        row: dict = {
+            "name": snap.name,
+            "created_at": snap.created_at.isoformat(),
+            "overall": "" if math.isnan(overall) else round(overall, 4),
+            "adapter_ok": "true" if (snap.adapter_path and snap.adapter_path.exists()) else "false",
+            "hub_repo": snap.hub_repo or "",
+            "tags": ", ".join(f"{k}={v}" for k, v in snap.tags.items()) if snap.tags else "",
+        }
+        for cat in all_categories:
+            v = cat_scores.get(cat)
+            row[cat] = "" if v is None or math.isnan(v) else round(v, 4)
+        writer.writerow(row)
+
+    return output.getvalue()
+
+
+def _status_to_html(snapshots: list, model_name: str | None, baseline: str | None) -> str:
+    """Return status data as an HTML table."""
+    import html as _html
+
+    if not snapshots:
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>pyrecall — Status</title>
+<style>
+  body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:#ffffff;color:#24292f;max-width:860px;margin:40px auto;padding:0 24px}}
+  h1{{font-size:1.5rem;margin-bottom:4px}}
+  .meta{{color:#57606a;font-size:.875rem;margin-bottom:24px}}
+</style>
+</head>
+<body>
+<h1>pyrecall — Status</h1>
+<p class="meta">Model: {model_name or "unknown"}</p>
+<p>No snapshots found.</p>
+</body>
+</html>"""
+
+    # Collect all category names in a stable order.
+    all_categories: list[str] = []
+    for snap in snapshots:
+        for cat in snap.category_scores():
+            if cat not in all_categories:
+                all_categories.append(cat)
+
+    # Build table rows.
+    table_rows: list[str] = []
+    for snap in snapshots:
+        cat_scores = snap.category_scores()
+        is_baseline = snap.name == baseline
+        name_cell = f"<strong>{_html.escape(snap.name)}</strong>"
+        if is_baseline:
+            name_cell = f'<span style="color:#2da44e;font-weight:600;">{name_cell} ★</span>'
+        if snap.hub_repo:
+            name_cell += ' <span style="color:#0969da;font-size:.875rem;">[hub]</span>'
+
+        overall = snap.overall_score()
+        overall_str = "n/a" if math.isnan(overall) else f"{overall:.3f}"
+
+        cells = [
+            f"<td>{name_cell}</td>",
+            f"<td>{snap.created_at.strftime('%Y-%m-%d %H:%M')}</td>",
+            f"<td style='text-align:right;'>{overall_str}</td>",
+        ]
+        for cat in all_categories:
+            v = cat_scores.get(cat)
+            cell_val = "n/a" if v is None or math.isnan(v) else f"{v:.3f}"
+            cells.append(f"<td style='text-align:right;'>{cell_val}</td>")
+        cells.append(
+            f"<td style='text-align:center;'>{'✓' if (snap.adapter_path and snap.adapter_path.exists()) else '✗'}</td>"
+        )
+        cells.append(f"<td>{_html.escape(snap.hub_repo) if snap.hub_repo else ''}</td>")
+        tags_str = ", ".join(f"{k}={v}" for k, v in snap.tags.items()) if snap.tags else ""
+        cells.append(f"<td>{_html.escape(tags_str)}</td>")
+        table_rows.append(f"<tr>{''.join(cells)}</tr>")
+
+    # Build header cells.
+    header_cells = [
+        "<th>Name</th>",
+        "<th>Created</th>",
+        "<th style='text-align:right;'>Overall</th>",
+    ]
+    for cat in all_categories:
+        header_cells.append(f"<th style='text-align:right;'>{cat.replace('_', ' ').title()}</th>")
+    header_cells.append("<th style='text-align:center;'>Adapter</th>")
+    header_cells.append("<th>Hub Repo</th>")
+    header_cells.append("<th>Tags</th>")
+
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>pyrecall — Status</title>
+<style>
+  body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:#ffffff;color:#24292f;max-width:100%;margin:40px auto;padding:0 24px}}
+  h1{{font-size:1.5rem;margin-bottom:4px}}
+  .meta{{color:#57606a;font-size:.875rem;margin-bottom:24px}}
+  table{{width:100%;border-collapse:collapse;margin-top:20px;font-size:.875rem}}
+  th{{background:#f6f8fa;text-align:left;padding:8px 12px;border:1px solid #d0d7de;
+    font-weight:600}}
+  td{{padding:7px 12px;border:1px solid #d0d7de}}
+  tr:hover td{{background:#f6f8fa}}
+  footer{{margin-top:36px;font-size:.75rem;color:#57606a}}
+</style>
+</head>
+<body>
+<h1>pyrecall — Status</h1>
+<p class="meta">
+  Model: {model_name or "unknown"} &nbsp;|&nbsp;
+  Generated: {ts} &nbsp;|&nbsp;
+  Baseline: {baseline or "none"}
+</p>
+<table>
+<thead>
+<tr>
+  {''.join(header_cells)}
+</tr>
+</thead>
+<tbody>
+{''.join(table_rows)}
+</tbody>
+</table>
+<footer>
+  Generated by <a href="https://github.com/Pyrecall/Pyrecall">pyrecall</a>
+</footer>
+</body>
+</html>"""
+
+
 @app.command()
 def prune(
     snapshot_name: Annotated[
@@ -1523,15 +1736,40 @@ def status(
         bool,
         typer.Option("--json", help="Output results as JSON instead of a rich table."),
     ] = False,
+    output: Annotated[
+        str | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Save the report to a file. Format inferred from extension: .csv, .html, or .json.",
+        ),
+    ] = None,
 ) -> None:
-    """Show all saved snapshots and their per-category skill scores."""
+    """
+    Show all saved snapshots and their per-category skill scores.
+
+    Use --output to save the report to a file:
+
+        pyrecall status --output status.csv
+        pyrecall status --output status.json
+        pyrecall status --output status.html
+    """
     config = _read_config()
     mgr = _build_rollback_manager(config)
     all_snaps = mgr.list_snapshots()
 
     if not all_snaps:
-        if json_output:
-            typer.echo(json.dumps({"model_name": config.get("model_name"), "snapshots": []}))
+        if json_output or output:
+            # For output file, still write empty result
+            if output:
+                _write_status_output(
+                    [],
+                    config.get("model_name"),
+                    config.get("baseline_snapshot"),
+                    output,
+                )
+            else:
+                typer.echo(json.dumps({"model_name": config.get("model_name"), "snapshots": []}))
         else:
             console.print(
                 "[yellow]No snapshots found.[/yellow] "
@@ -1540,6 +1778,16 @@ def status(
         return
 
     baseline = config.get("baseline_snapshot")
+
+    # If --output is specified, write to file and return
+    if output:
+        _write_status_output(
+            all_snaps,
+            config.get("model_name"),
+            baseline,
+            output,
+        )
+        return
 
     if json_output:
 
