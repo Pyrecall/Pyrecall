@@ -2042,7 +2042,9 @@ class TestStatus:
 
 
 class TestStatusOutput:
-    def test_output_json_creates_file(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_output_json_creates_file(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         monkeypatch.chdir(tmp_path)
         _write_config(tmp_path)
         mgr = _make_mock_manager(snapshots=[_make_snapshot("v1", {"coding": 0.8})])
@@ -2070,12 +2072,16 @@ class TestStatusOutput:
 
         assert result.exit_code == 0
         assert out.exists()
-        lines = out.read_text().splitlines()
+        content = out.read_text()
+        # Filter out empty lines
+        lines = [line for line in content.splitlines() if line.strip()]
         assert lines[0].startswith("name,created_at,overall")
         assert "coding" in lines[0]
         assert len(lines) == 3  # header + 2 rows
 
-    def test_output_html_creates_file(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_output_html_creates_file(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         monkeypatch.chdir(tmp_path)
         _write_config(tmp_path)
         mgr = _make_mock_manager(snapshots=[_make_snapshot("v1", {"coding": 0.8})])
@@ -2091,21 +2097,25 @@ class TestStatusOutput:
         assert "v1" in content
         assert "pyrecall" in content
 
-    def test_output_json_matches_json_flag(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_output_json_matches_json_flag(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         monkeypatch.chdir(tmp_path)
         _write_config(tmp_path)
         mgr = _make_mock_manager(snapshots=[_make_snapshot("v1", {"coding": 0.8})])
         out = tmp_path / "status.json"
 
         with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
-            result = runner.invoke(app, ["status", "--output", str(out)])
+            runner.invoke(app, ["status", "--output", str(out)])
 
         data = json.loads(out.read_text())
         assert "model_name" in data
         assert "snapshots" in data
         assert data["snapshots"][0]["name"] == "v1"
 
-    def test_output_csv_has_all_fields(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_output_csv_has_all_fields(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         import csv as _csv
 
         monkeypatch.chdir(tmp_path)
@@ -2125,7 +2135,9 @@ class TestStatusOutput:
         assert rows[0]["hub_repo"] == "my-org/my-model"
         assert "commit=abc123" in rows[0]["tags"]
 
-    def test_output_unknown_extension_fails(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_output_unknown_extension_fails(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         monkeypatch.chdir(tmp_path)
         _write_config(tmp_path)
         mgr = _make_mock_manager(snapshots=[_make_snapshot("v1")])
@@ -2136,7 +2148,9 @@ class TestStatusOutput:
         assert result.exit_code == 1
         assert "Unknown format" in result.output
 
-    def test_output_empty_snapshots_creates_file(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_output_empty_snapshots_creates_file(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         monkeypatch.chdir(tmp_path)
         _write_config(tmp_path)
         mgr = _make_mock_manager(snapshots=[])

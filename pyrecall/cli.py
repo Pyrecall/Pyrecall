@@ -1428,7 +1428,9 @@ def _status_to_csv(snapshots: list, baseline: str | None) -> str:
             if cat not in all_categories:
                 all_categories.append(cat)
 
-    fieldnames = ["name", "created_at", "overall"] + all_categories + ["adapter_ok", "hub_repo", "tags"]
+    fieldnames = (
+        ["name", "created_at", "overall"] + all_categories + ["adapter_ok", "hub_repo", "tags"]
+    )
     output = StringIO()
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
@@ -1556,11 +1558,11 @@ def _status_to_html(snapshots: list, model_name: str | None, baseline: str | Non
 <table>
 <thead>
 <tr>
-  {''.join(header_cells)}
+  {"".join(header_cells)}
 </tr>
 </thead>
 <tbody>
-{''.join(table_rows)}
+{"".join(table_rows)}
 </tbody>
 </table>
 <footer>
@@ -1781,12 +1783,16 @@ def status(
 
     # If --output is specified, write to file and return
     if output:
-        _write_status_output(
-            all_snaps,
-            config.get("model_name"),
-            baseline,
-            output,
-        )
+        try:
+            _write_status_output(
+                all_snaps,
+                config.get("model_name"),
+                baseline,
+                output,
+            )
+        except ValueError as exc:
+            console.print(f"[red]Error:[/red] {exc}")
+            raise typer.Exit(1)
         return
 
     if json_output:
