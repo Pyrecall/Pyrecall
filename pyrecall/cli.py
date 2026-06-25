@@ -1759,26 +1759,6 @@ def status(
     config = _read_config()
     mgr = _build_rollback_manager(config)
     all_snaps = mgr.list_snapshots()
-
-    if not all_snaps:
-        if json_output or output:
-            # For output file, still write empty result
-            if output:
-                _write_status_output(
-                    [],
-                    config.get("model_name"),
-                    config.get("baseline_snapshot"),
-                    output,
-                )
-            else:
-                typer.echo(json.dumps({"model_name": config.get("model_name"), "snapshots": []}))
-        else:
-            console.print(
-                "[yellow]No snapshots found.[/yellow] "
-                "Run [bold]pyrecall snapshot <name>[/bold] to create one."
-            )
-        return
-
     baseline = config.get("baseline_snapshot")
 
     # If --output is specified, write to file and return
@@ -1818,6 +1798,13 @@ def status(
             ],
         }
         typer.echo(json.dumps(out, indent=2))
+        return
+
+    if not all_snaps:
+        console.print(
+            "[yellow]No snapshots found.[/yellow] "
+            "Run [bold]pyrecall snapshot <name>[/bold] to create one."
+        )
         return
 
     # Collect all category names from any snapshot for column headers.
