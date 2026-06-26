@@ -2119,7 +2119,7 @@ class TestStatusOutput:
         import csv as _csv
 
         monkeypatch.chdir(tmp_path)
-        _write_config(tmp_path)
+        _write_config(tmp_path, baseline="v1")
         snap = _make_snapshot("v1", {"coding": 0.8, "reasoning": 0.7})
         snap.hub_repo = "my-org/my-model"
         snap.tags = {"commit": "abc123"}
@@ -2134,6 +2134,7 @@ class TestStatusOutput:
         assert rows[0]["name"] == "v1"
         assert rows[0]["hub_repo"] == "my-org/my-model"
         assert "commit=abc123" in rows[0]["tags"]
+        assert rows[0]["is_baseline"] == "true"
 
     def test_output_unknown_extension_fails(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

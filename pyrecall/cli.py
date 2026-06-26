@@ -1376,14 +1376,17 @@ def _write_status_output(
         content = _status_to_html(snapshots, model_name, baseline)
     elif fmt == "csv":
         content = _status_to_csv(snapshots, baseline)
-    elif fmt in ("json", "jsonl"):
+    elif fmt == "json":
         content = _status_to_json(snapshots, model_name, baseline)
     else:
         raise ValueError(
             f"Unknown format '{fmt}'. Use 'html', 'csv', or 'json' "
             "(or give the file a recognised extension)."
         )
-    out.write_text(content, encoding="utf-8")
+    try:
+        out.write_text(content, encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"Could not write to '{path}': {exc}") from exc
     console.print(f"[green]✓ Status saved to[/green] [bold]{path}[/bold]")
 
 
@@ -1429,7 +1432,9 @@ def _status_to_csv(snapshots: list, baseline: str | None) -> str:
                 all_categories.append(cat)
 
     fieldnames = (
-        ["name", "created_at", "overall"] + all_categories + ["adapter_ok", "hub_repo", "tags"]
+        ["name", "created_at", "overall", "is_baseline"]
+        + all_categories
+        + ["adapter_ok", "hub_repo", "tags"]
     )
     output = StringIO()
     writer = csv.DictWriter(output, fieldnames=fieldnames)
@@ -1442,6 +1447,7 @@ def _status_to_csv(snapshots: list, baseline: str | None) -> str:
             "name": snap.name,
             "created_at": snap.created_at.isoformat(),
             "overall": "" if math.isnan(overall) else round(overall, 4),
+            "is_baseline": "true" if snap.name == baseline else "false",
             "adapter_ok": "true" if (snap.adapter_path and snap.adapter_path.exists()) else "false",
             "hub_repo": snap.hub_repo or "",
             "tags": ", ".join(f"{k}={v}" for k, v in snap.tags.items()) if snap.tags else "",
@@ -1523,7 +1529,9 @@ def _status_to_html(snapshots: list, model_name: str | None, baseline: str | Non
         "<th style='text-align:right;'>Overall</th>",
     ]
     for cat in all_categories:
-        header_cells.append(f"<th style='text-align:right;'>{cat.replace('_', ' ').title()}</th>")
+        header_cells.append(
+            f"<th style='text-align:right;'>{_html.escape(cat.replace('_', ' ').title())}</th>"
+        )
     header_cells.append("<th style='text-align:center;'>Adapter</th>")
     header_cells.append("<th>Hub Repo</th>")
     header_cells.append("<th>Tags</th>")
