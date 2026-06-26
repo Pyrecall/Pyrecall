@@ -42,6 +42,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+qlora = [
+    "bitsandbytes>=0.43.0",
+]
 serve = [
     "fastapi>=0.104.0",
     "uvicorn[standard]>=0.24.0",
