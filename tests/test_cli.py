@@ -920,6 +920,103 @@ class TestCheckJson:
         assert result.exit_code == 2
 
 
+# ── check --save-report ───────────────────────────────────────────────────────
+
+
+class TestCheckSaveReport:
+    def test_save_report_json_creates_file(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap_a = _make_snapshot("before", {"coding": 0.8})
+        snap_b = _make_snapshot("after", {"coding": 0.79})
+        mgr = _make_mock_manager(snapshots=[snap_a, snap_b])
+        out = tmp_path / "report.json"
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["check", "--save-report", str(out)])
+
+        assert result.exit_code == 0
+        assert out.exists()
+        data = json.loads(out.read_text())
+        assert "is_healthy" in data
+        assert "comparisons" in data
+
+    def test_save_report_html_creates_file(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap_a = _make_snapshot("before", {"coding": 0.8})
+        snap_b = _make_snapshot("after", {"coding": 0.79})
+        mgr = _make_mock_manager(snapshots=[snap_a, snap_b])
+        out = tmp_path / "report.html"
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["check", "--save-report", str(out)])
+
+        assert result.exit_code == 0
+        assert out.exists()
+        content = out.read_text()
+        assert "<!DOCTYPE html>" in content
+        assert "pyrecall" in content
+
+    def test_save_report_md_creates_file(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap_a = _make_snapshot("before", {"coding": 0.8})
+        snap_b = _make_snapshot("after", {"coding": 0.79})
+        mgr = _make_mock_manager(snapshots=[snap_a, snap_b])
+        out = tmp_path / "report.md"
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["check", "--save-report", str(out)])
+
+        assert result.exit_code == 0
+        assert out.exists()
+        content = out.read_text()
+        assert "##" in content  # Markdown heading
+
+    def test_save_report_same_as_output(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """--save-report should produce identical output to --output."""
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap_a = _make_snapshot("before", {"coding": 0.8})
+        snap_b = _make_snapshot("after", {"coding": 0.79})
+        mgr = _make_mock_manager(snapshots=[snap_a, snap_b])
+        out1 = tmp_path / "report1.json"
+        out2 = tmp_path / "report2.json"
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            runner.invoke(app, ["check", "--output", str(out1)])
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            runner.invoke(app, ["check", "--save-report", str(out2)])
+
+        assert out1.read_text() == out2.read_text()
+
+    def test_save_report_unknown_extension_fails(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        snap_a = _make_snapshot("before", {"coding": 0.8})
+        snap_b = _make_snapshot("after", {"coding": 0.79})
+        mgr = _make_mock_manager(snapshots=[snap_a, snap_b])
+        out = tmp_path / "report.txt"
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["check", "--save-report", str(out)])
+
+        assert result.exit_code == 1
+        assert "Unknown format" in result.output
+
+
 # ── check --watch ─────────────────────────────────────────────────────────────
 
 

@@ -814,6 +814,13 @@ def check(
             help="Save the report to a file. Format inferred from extension: .html, .md, or .json.",
         ),
     ] = None,
+    save_report: Annotated[
+        str | None,
+        typer.Option(
+            "--save-report",
+            help="Alias for --output. Save the report to a file. Format inferred from extension: .html, .md, or .json.",
+        ),
+    ] = None,
     watch: Annotated[
         bool,
         typer.Option(
@@ -936,13 +943,15 @@ def check(
         else:
             report.print(verbose=verbose)
 
-        if output:
+        # Use save_report as an alias for output if output is not provided
+        effective_output = output or save_report
+        if effective_output:
             try:
-                report.save(output)
+                report.save(effective_output)
                 if ci:
-                    typer.echo(f"Report saved to {output}")
+                    typer.echo(f"Report saved to {effective_output}")
                 else:
-                    console.print(f"[dim]Report saved to {output}[/dim]")
+                    console.print(f"[dim]Report saved to {effective_output}[/dim]")
             except ValueError as exc:
                 if ci:
                     typer.echo(f"Error: {exc}")
@@ -1032,6 +1041,26 @@ def check(
                         continue
 
                     report = detector.compare(snap_b, snap_a)
+                    # Use save_report as an alias for output if output is not provided
+                    effective_output = output or save_report
+                    if effective_output:
+                        try:
+                            report.save(effective_output)
+                            if ci:
+                                typer.echo(f"Report saved to {effective_output}")
+                            else:
+                                console.print(
+                                    f"[dim][{ts}][/dim] Report saved to {effective_output}"
+                                )
+                        except ValueError as exc:
+                            if ci:
+                                typer.echo(f"Error: {exc}")
+                            else:
+                                console.print(f"[dim][{ts}][/dim] [red]Error: {exc}[/red]")
+                            last_exit_code = 1
+                            time.sleep(interval)
+                            continue
+
                     if report.degraded_skills:
                         cats = ", ".join(
                             f"{c} ({next((x.severity for x in report.comparisons if x.category == c), 'UNKNOWN')})"
