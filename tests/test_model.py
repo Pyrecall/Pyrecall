@@ -180,7 +180,7 @@ class TestModelSnapshot:
     def test_snapshot_has_correct_score_count(self, patched_model) -> None:
         from pyrecall.benchmarks.default import DEFAULT_BENCHMARKS
 
-        snap = patched_model.snapshot(name="count_test")
+        snap = patched_model.snapshot(name="count_test", benchmark_mode="full")
         assert len(snap.scores) == len(DEFAULT_BENCHMARKS)
 
     def test_snapshot_scores_normalised(self, patched_model) -> None:
