@@ -1,0 +1,15 @@
+  #176_--save-report_feature[m
+  #179_init_--from-config[m
+  #181-CI-mode[m
+  12-bug-pyrecall-learn-crashes-with-keyerror-when-training-file-has-no-text-column-and-first-column-is-unnamed[m
+  13-bug-pyrecall-rollback-cli-does-not-persist-the-new-baseline-subsequent-check-still-diffs-against-the-old-snapshot[m
+  157-frontend-version-fix[m
+  Pyrecall-#110---__after-snapshot-issue[m
+  Sid294-patch-2[m
+  bitsandbytes-dependency[m
+* [32mmain[m
+  patch-mypy[m
+  save-report-fix[m
+  server[m
+  streaming-support[m
+  v0.12.0-release[m

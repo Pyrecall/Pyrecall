@@ -164,6 +164,7 @@ class ForgettingReport:
     category_thresholds: dict[str, float] = field(default_factory=dict)
     comparisons: list[CategoryComparison] = field(default_factory=list)
     prompt_comparisons: list[PromptComparison] = field(default_factory=list)
+    benchmark_mode: str = "full"  # "fast" | "standard" | "full"
 
     def _threshold_for(self, category: str) -> float:
         """Return the effective threshold for *category*, falling back to the global default."""
@@ -206,6 +207,7 @@ class ForgettingReport:
             "snapshot_before": self.snapshot_before,
             "snapshot_after": self.snapshot_after,
             "threshold": self.threshold,
+            "benchmark_mode": self.benchmark_mode,
             "degraded_skills": self.degraded_skills,
             "comparisons": [
                 {
@@ -698,4 +700,5 @@ class ForgettingDetector:
             category_thresholds=self.category_thresholds,
             comparisons=comparisons,
             prompt_comparisons=prompt_comparisons,
+            benchmark_mode=after.benchmark_mode,
         )
