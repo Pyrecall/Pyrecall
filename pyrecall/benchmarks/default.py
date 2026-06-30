@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from .modes import BenchmarkMode
+
 CATEGORIES: list[str] = [
     "reasoning",
     "instruction_following",
@@ -2220,3 +2222,44 @@ DEFAULT_BENCHMARKS: list[Benchmark] = [
         reference_answer=("An adult human body contains approximately 206 bones."),
     ),
 ]
+
+
+def get_benchmarks_for_mode(mode: str | BenchmarkMode) -> list[Benchmark]:
+    """Return benchmarks filtered by the specified mode.
+
+    Args:
+        mode: One of "fast", "standard", "full", or a BenchmarkMode enum value.
+
+    Returns:
+        A list of Benchmark objects appropriate for the mode.
+        - fast: ~30 prompts (3-4 per category)
+        - standard: ~100 prompts (10-12 per category)
+        - full: all 180 prompts (20 per category)
+    """
+    from .modes import BenchmarkMode
+
+    if isinstance(mode, str):
+        mode = BenchmarkMode(mode.lower())
+
+    if mode == BenchmarkMode.FULL:
+        return DEFAULT_BENCHMARKS
+
+    # For fast and standard, select a subset per category
+    # We want to maintain category balance while reducing total count
+    per_category = {
+        BenchmarkMode.FAST: 3,
+        BenchmarkMode.STANDARD: 10,
+    }[mode]
+
+    # Group benchmarks by category
+    by_category: dict[str, list[Benchmark]] = {}
+    for bench in DEFAULT_BENCHMARKS:
+        by_category.setdefault(bench.category, []).append(bench)
+
+    # Take the first N from each category
+    result: list[Benchmark] = []
+    for cat in CATEGORIES:
+        if cat in by_category:
+            result.extend(by_category[cat][:per_category])
+
+    return result

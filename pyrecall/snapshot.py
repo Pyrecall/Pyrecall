@@ -57,6 +57,7 @@ class SkillSnapshot:
     adapter_compression: str = "none"
     hub_repo: str | None = None  # set when snapshot was pulled from HF Hub
     tags: dict[str, str] = field(default_factory=dict)
+    benchmark_mode: str = "full"  # "fast" | "standard" | "full"
 
     def __post_init__(self) -> None:
         if not isinstance(self.created_at, datetime):
@@ -120,6 +121,7 @@ class SkillSnapshot:
                 "adapter_compression": self.adapter_compression,
                 "hub_repo": self.hub_repo,
                 "tags": self.tags,
+                "benchmark_mode": self.benchmark_mode,
             }
         else:
             if not passphrase:
@@ -145,6 +147,7 @@ class SkillSnapshot:
                 "adapter_compression": self.adapter_compression,
                 "hub_repo": encryptor.encrypt(self.hub_repo) if self.hub_repo else None,
                 "tags": encryptor.encrypt(json.dumps(self.tags)) if self.tags else {},
+                "benchmark_mode": encryptor.encrypt(self.benchmark_mode),
             }
         (directory / "snapshot.json").write_text(json.dumps(data, indent=2))
 
@@ -210,6 +213,7 @@ class SkillSnapshot:
                     if isinstance(data.get("tags"), str)
                     else {}
                 ),
+                benchmark_mode=encryptor.decrypt(data["benchmark_mode"]),
                 encrypted=True,
             )
         return cls(
@@ -221,4 +225,5 @@ class SkillSnapshot:
             adapter_compression=data.get("adapter_compression", "none"),
             hub_repo=data.get("hub_repo"),
             tags=data.get("tags", {}),
+            benchmark_mode=data.get("benchmark_mode", "full"),
         )

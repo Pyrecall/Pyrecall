@@ -374,6 +374,7 @@ def init(
         "replay_buffer_size": replay_buffer_size,
         "replay_mix_ratio": replay_mix_ratio,
         "scoring_method": scoring_method,
+        "benchmark_mode": "standard",
         "created_at": datetime.now().isoformat(),
         "baseline_snapshot": None,
     }
@@ -528,6 +529,13 @@ def learn(
             help="Column name holding chat messages when --format=messages (default: 'messages').",
         ),
     ] = "messages",
+    mode: Annotated[
+        str,
+        typer.Option(
+            "--mode",
+            help="Benchmark mode for snapshots: 'fast' (20-40 prompts), 'standard' (80-120 prompts), or 'full' (180+ prompts).",
+        ),
+    ] = "standard",
 ) -> None:
     """
     Fine-tune the model on a local dataset.
@@ -544,6 +552,11 @@ def learn(
     Pass --no-update-baseline to keep your existing baseline unchanged even
     when --snapshot-before or --snapshot-after are used.  This is useful in
     CI where you want a stable reference point regardless of training outcome.
+
+    Use --mode to control benchmark size for snapshots:
+        --mode fast      Quick validation during development (20-40 prompts)
+        --mode standard  Balanced evaluation for regular workflows (80-120 prompts)
+        --mode full      Comprehensive benchmark before deployment (180+ prompts)
     """
     if not Path(data).exists():
         console.print(f"[red]Error:[/red] Training data file not found: '{data}'")
@@ -567,12 +580,13 @@ def learn(
         replay_mix_ratio=config.get("replay_mix_ratio", 0.3),
         scoring_method=config.get("scoring_method", "log_likelihood"),
         category_thresholds=config.get("category_thresholds", {}),
+        benchmark_mode=config.get("benchmark_mode", "standard"),
     )
 
     tracker = _build_trackers(log_wandb, log_mlflow, log_neptune, neptune_project)
 
     if snapshot_before:
-        model_obj.snapshot(name=snapshot_before, tracker=tracker)
+        model_obj.snapshot(name=snapshot_before, tracker=tracker, benchmark_mode=mode)
         if not no_update_baseline:
             config["baseline_snapshot"] = snapshot_before
             _write_config(config)
@@ -600,7 +614,7 @@ def learn(
         raise typer.Exit(1) from exc
 
     if snapshot_after:
-        model_obj.snapshot(name=snapshot_after, tracker=tracker)
+        model_obj.snapshot(name=snapshot_after, tracker=tracker, benchmark_mode=mode)
         if not no_update_baseline:
             config["baseline_snapshot"] = snapshot_after
             _write_config(config)
@@ -687,9 +701,16 @@ def snapshot(
             help="Number of benchmark prompts scored per forward pass (default 8). Set to 1 for sequential.",
         ),
     ] = 8,
+    mode: Annotated[
+        str,
+        typer.Option(
+            "--mode",
+            help="Benchmark mode: 'fast' (20-40 prompts), 'standard' (80-120 prompts), or 'full' (180+ prompts).",
+        ),
+    ] = "standard",
 ) -> None:
     """
-    Load the model, run all benchmarks, and save a named capability snapshot.
+    Load the model, run benchmarks, and save a named capability snapshot.
 
     This is a slow operation — it runs benchmark prompts through the model
     and saves the LoRA adapter weights to disk.  Plan for several minutes on CPU.
@@ -704,6 +725,11 @@ def snapshot(
     Use --compression gzip to reduce adapter storage by 40-60% (no extra deps).
     Use --compression zstd for faster compression with similar ratios (pip install zstandard).
     Use --push to immediately upload the snapshot to Hugging Face Hub after saving.
+
+    Use --mode to control benchmark size:
+        --mode fast      Quick validation during development (20-40 prompts)
+        --mode standard  Balanced evaluation for regular workflows (80-120 prompts)
+        --mode full      Comprehensive benchmark before deployment (180+ prompts)
     """
     from pyrecall.compress import SUPPORTED_CODECS
 
@@ -734,9 +760,12 @@ def snapshot(
         snapshot_compression=compression,
         category_thresholds=config.get("category_thresholds", {}),
         benchmark_batch_size=benchmark_batch_size,
+        benchmark_mode=config.get("benchmark_mode", "standard"),
     )
     tracker = _build_trackers(log_wandb, log_mlflow, log_neptune, neptune_project)
-    model_obj.snapshot(name=name, tracker=tracker, dry_run=dry_run, tags=_parse_tags(tag))
+    model_obj.snapshot(
+        name=name, tracker=tracker, dry_run=dry_run, tags=_parse_tags(tag), benchmark_mode=mode
+    )
 
     if push_to and not dry_run:
         from pyrecall.hub import push_snapshot

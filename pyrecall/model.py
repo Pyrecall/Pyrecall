@@ -35,7 +35,6 @@ from transformers import (
 )
 
 from .benchmarks.custom import CustomBenchmarkManager
-from .benchmarks.default import DEFAULT_BENCHMARKS
 from .detector import ForgettingDetector, ForgettingReport
 from .replay import ReplayBuffer
 from .rollback import RollbackManager
@@ -204,8 +203,13 @@ class _WatchCallback(TrainerCallback):
         snap_name = f"{self._baseline_name}__epoch{epoch}"
         console.print(f"[info]Watch checkpoint at epoch {epoch} — running benchmarks…[/info]")
 
-        scores = self._model_ref._run_benchmarks()
-        snap = SkillSnapshot(name=snap_name, model_name=self._model_ref.model_name, scores=scores)
+        scores = self._model_ref._run_benchmarks(mode=self._model_ref._benchmark_mode)
+        snap = SkillSnapshot(
+            name=snap_name,
+            model_name=self._model_ref.model_name,
+            scores=scores,
+            benchmark_mode=self._model_ref._benchmark_mode,
+        )
         self._model_ref.rollback_manager.save(
             snap,
             self._model_ref.model,
@@ -289,6 +293,7 @@ class Model:
         snapshot_compression: str = "none",
         gradient_checkpointing: bool = False,
         benchmark_batch_size: int = 8,
+        benchmark_mode: str = "standard",
     ) -> None:
         """
         Load *model_name* from HuggingFace Hub (or local cache) and wrap it with LoRA.
@@ -366,6 +371,7 @@ class Model:
         self._snapshot_compression = snapshot_compression
         self._gradient_checkpointing = gradient_checkpointing
         self._benchmark_batch_size = benchmark_batch_size
+        self._benchmark_mode = benchmark_mode
         # Replay buffer lives under ~/.pyrecall/replay/ by default.
         # When snapshot_dir is overridden (e.g. in tests), put replay alongside it
         # so tests stay isolated, but keep it separate from the snapshots tree.
@@ -480,11 +486,12 @@ class Model:
         tracker: SnapshotTracker | list[SnapshotTracker] | None = None,
         dry_run: bool = False,
         tags: dict[str, str] | None = None,
+        benchmark_mode: str = "standard",
     ) -> SkillSnapshot:
         """
         Benchmark the model and save a named capability snapshot.
 
-        Runs all 64 default benchmarks, scores each response, saves the scores
+        Runs benchmarks according to the specified mode, scores each response, saves the scores
         *and* the current LoRA adapter weights to disk so the model can be
         rolled back to this exact state later.
 
@@ -496,6 +503,7 @@ class Model:
             dry_run: When ``True``, run benchmarks and return scores but do **not**
                 save adapter weights or update the baseline.
             tags: Arbitrary key/value metadata to attach to the snapshot.
+            benchmark_mode: Benchmark mode - "fast", "standard", or "full".
 
         Returns:
             The :class:`~pyrecall.snapshot.SkillSnapshot` that was saved (or scored
@@ -506,8 +514,14 @@ class Model:
         else:
             console.print(f"[info]Taking snapshot '{name}'…[/info]")
 
-        scores = self._run_benchmarks()
-        snap = SkillSnapshot(name=name, model_name=self.model_name, scores=scores, tags=tags or {})
+        scores = self._run_benchmarks(mode=benchmark_mode)
+        snap = SkillSnapshot(
+            name=name,
+            model_name=self.model_name,
+            scores=scores,
+            tags=tags or {},
+            benchmark_mode=benchmark_mode,
+        )
 
         _overall = snap.overall_score()
         _overall_str = "-" if math.isnan(_overall) else f"{_overall:.3f}"
@@ -920,7 +934,7 @@ class Model:
 
         console.print(f"[success]✓ Fine-tuning complete ({epochs} epoch(s)).[/success]")
 
-    def check(self, name: str | None = None) -> ForgettingReport:
+    def check(self, name: str | None = None, benchmark_mode: str = "standard") -> ForgettingReport:
         """
         Detect forgetting by benchmarking the current model and comparing to
         the most recent snapshot.
@@ -932,6 +946,7 @@ class Model:
                 ``None`` it defaults to ``<baseline>__after``. Providing a
                 name lets you call ``check()`` multiple times without
                 overwriting the previous after-snapshot.
+            benchmark_mode: Benchmark mode - "fast", "standard", or "full".
 
         Returns:
             A :class:`~pyrecall.detector.ForgettingReport` with per-category scores
@@ -954,9 +969,14 @@ class Model:
             ) from exc
 
         console.print("[info]Running post-training benchmarks…[/info]")
-        after_scores = self._run_benchmarks()
+        after_scores = self._run_benchmarks(mode=benchmark_mode)
         after_name = name if name is not None else f"{self._baseline_snapshot_name}__after"
-        after = SkillSnapshot(name=after_name, model_name=self.model_name, scores=after_scores)
+        after = SkillSnapshot(
+            name=after_name,
+            model_name=self.model_name,
+            scores=after_scores,
+            benchmark_mode=benchmark_mode,
+        )
         self.rollback_manager.save(after, self.model, compression=self._snapshot_compression)
 
         report = self.detector.compare(before, after)
@@ -1326,9 +1346,15 @@ class Model:
         except OSError as exc:
             logger.warning("Could not persist baseline to %s: %s", self._baseline_file, exc)
 
-    def _run_benchmarks(self) -> list[SkillScore]:
-        """Run default + custom benchmarks and return SkillScore objects."""
-        all_benchmarks = DEFAULT_BENCHMARKS + self.custom_benchmarks.load_all()
+    def _run_benchmarks(self, mode: str = "standard") -> list[SkillScore]:
+        """Run default + custom benchmarks and return SkillScore objects.
+
+        Args:
+            mode: Benchmark mode - "fast", "standard", or "full".
+        """
+        from .benchmarks import get_benchmarks_for_mode
+
+        all_benchmarks = get_benchmarks_for_mode(mode) + self.custom_benchmarks.load_all()
         scores: list[SkillScore] = []
 
         with Progress(
