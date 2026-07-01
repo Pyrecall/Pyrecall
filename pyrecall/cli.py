@@ -426,6 +426,12 @@ def learn(
         int,
         typer.Option("--epochs", "-e", help="Number of full passes over the training data"),
     ] = 3,
+    strategy: Annotated[
+        str | None,
+        typer.Option(
+            "--strategy", "-s", help="Override fine-tuning strategy from config: 'lora' or 'qlora'"
+        ),
+    ] = None,
     batch_size: Annotated[
         int | None,
         typer.Option(
@@ -551,11 +557,15 @@ def learn(
 
     config = _read_config()
 
+    if strategy is not None and strategy not in ("lora", "qlora"):
+        console.print(f"[red]Error:[/red] --strategy must be 'lora' or 'qlora', got '{strategy}'")
+        raise typer.Exit(1)
+
     from pyrecall.model import Model, PyrecallError
 
     model_obj = Model(
         config["model_name"],
-        strategy=config.get("strategy", "lora"),
+        strategy=strategy or config.get("strategy", "lora"),
         lora_r=config.get("lora_r", 16),
         lora_alpha=config.get("lora_alpha", 32),
         lora_dropout=config.get("lora_dropout", 0.1),

@@ -237,6 +237,49 @@ class TestLearn:
 
         assert mock_model.learn.call_args[1]["epochs"] == 7
 
+    def test_strategy_override_passed_to_model(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        self._config(tmp_path)
+        data = tmp_path / "train.jsonl"
+        data.write_text('{"text": "hi"}\n')
+        mock_model = MagicMock()
+
+        with patch("pyrecall.model.Model", return_value=mock_model) as mock_cls:
+            runner.invoke(app, ["learn", str(data), "--strategy", "qlora"])
+
+        # Strategy should be passed to Model constructor, not learn()
+        assert mock_cls.call_args[1]["strategy"] == "qlora"
+
+    def test_strategy_uses_config_when_not_provided(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        self._config(tmp_path, strategy="qlora")
+        data = tmp_path / "train.jsonl"
+        data.write_text('{"text": "hi"}\n')
+        mock_model = MagicMock()
+
+        with patch("pyrecall.model.Model", return_value=mock_model) as mock_cls:
+            runner.invoke(app, ["learn", str(data)])
+
+        # Strategy should come from config
+        assert mock_cls.call_args[1]["strategy"] == "qlora"
+
+    def test_strategy_invalid_value_exits_with_error(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        self._config(tmp_path)
+        data = tmp_path / "train.jsonl"
+        data.write_text('{"text": "hi"}\n')
+
+        result = runner.invoke(app, ["learn", str(data), "--strategy", "invalid"])
+
+        assert result.exit_code == 1
+        assert "invalid" in result.output
+
     def test_resume_flag_passed_through(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
