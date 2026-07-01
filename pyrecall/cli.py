@@ -557,27 +557,35 @@ def learn(
 
     config = _read_config()
 
-    if strategy is not None and strategy not in ("lora", "qlora"):
-        console.print(f"[red]Error:[/red] --strategy must be 'lora' or 'qlora', got '{strategy}'")
+    # Validate the effective strategy (CLI override or config value)
+    effective_strategy = strategy or config.get("strategy", "lora")
+    if effective_strategy not in ("lora", "qlora"):
+        console.print(
+            f"[red]Error:[/red] strategy must be 'lora' or 'qlora', got '{effective_strategy}'"
+        )
         raise typer.Exit(1)
 
     from pyrecall.model import Model, PyrecallError
 
-    model_obj = Model(
-        config["model_name"],
-        strategy=strategy or config.get("strategy", "lora"),
-        lora_r=config.get("lora_r", 16),
-        lora_alpha=config.get("lora_alpha", 32),
-        lora_dropout=config.get("lora_dropout", 0.1),
-        learning_rate=config.get("learning_rate", 2e-4),
-        batch_size=config.get("batch_size", 4),
-        max_length=config.get("max_length", 512),
-        forgetting_threshold=config.get("forgetting_threshold", 0.10),
-        replay_buffer_size=config.get("replay_buffer_size", 500),
-        replay_mix_ratio=config.get("replay_mix_ratio", 0.3),
-        scoring_method=config.get("scoring_method", "log_likelihood"),
-        category_thresholds=config.get("category_thresholds", {}),
-    )
+    try:
+        model_obj = Model(
+            config["model_name"],
+            strategy=effective_strategy,
+            lora_r=config.get("lora_r", 16),
+            lora_alpha=config.get("lora_alpha", 32),
+            lora_dropout=config.get("lora_dropout", 0.1),
+            learning_rate=config.get("learning_rate", 2e-4),
+            batch_size=config.get("batch_size", 4),
+            max_length=config.get("max_length", 512),
+            forgetting_threshold=config.get("forgetting_threshold", 0.10),
+            replay_buffer_size=config.get("replay_buffer_size", 500),
+            replay_mix_ratio=config.get("replay_mix_ratio", 0.3),
+            scoring_method=config.get("scoring_method", "log_likelihood"),
+            category_thresholds=config.get("category_thresholds", {}),
+        )
+    except PyrecallError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(1) from exc
 
     tracker = _build_trackers(log_wandb, log_mlflow, log_neptune, neptune_project)
 
