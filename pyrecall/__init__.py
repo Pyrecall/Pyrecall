@@ -1,19 +1,19 @@
-"""
-pyrecall — Keep your models balanced.
 
-Continuous fine-tuning with automatic forgetting detection and skill rollback.
+#Pyrecall — Keep your models balanced.
 
-Quick start::
+#Continuous fine-tuning with automatic forgetting detection and skill rollback.
 
-    from pyrecall import Model
+#Quick start::
 
-    model = Model("meta-llama/Llama-3.2-1B", strategy="lora")
-    model.snapshot(name="before_v1")
-    model.learn("data.jsonl", epochs=3)
-    report = model.check()
-    if not report.is_healthy:
-        model.rollback(to="before_v1")
-"""
+    #from pyrecall import Model
+
+    #model = Model("meta-llama/Llama-3.2-1B", strategy="lora")
+    #model.snapshot(name="before_v1")
+    #model.learn("data.jsonl", epochs=3)
+    #report = model.check()
+    #if not report.is_healthy:
+        #model.rollback(to="before_v1")
+
 
 from importlib.metadata import PackageNotFoundError, version
 
