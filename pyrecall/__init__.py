@@ -1,9 +1,9 @@
 """
-pyrecall — Keep your models balanced.
+Pyrecall — Keep your models balanced.
 
 Continuous fine-tuning with automatic forgetting detection and skill rollback.
 
-Quick start::
+Quick start:
 
     from pyrecall import Model
 
