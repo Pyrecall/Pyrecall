@@ -687,6 +687,26 @@ def snapshot(
             help="Number of benchmark prompts scored per forward pass (default 8). Set to 1 for sequential.",
         ),
     ] = 8,
+    watch: Annotated[
+        bool,
+        typer.Option(
+            "--watch",
+            "-w",
+            help=(
+                "Continuously run benchmarks at a specified interval during training. "
+                "Detects checkpoint changes and compares to baseline. "
+                "Exits with code 2 if forgetting detected, 0 otherwise. "
+                "Stop with Ctrl-C."
+            ),
+        ),
+    ] = False,
+    interval: Annotated[
+        int,
+        typer.Option(
+            "--interval",
+            help="Seconds between polls when using --watch (default: 60).",
+        ),
+    ] = 60,
 ) -> None:
     """
     Load the model, run all benchmarks, and save a named capability snapshot.
@@ -704,6 +724,10 @@ def snapshot(
     Use --compression gzip to reduce adapter storage by 40-60% (no extra deps).
     Use --compression zstd for faster compression with similar ratios (pip install zstandard).
     Use --push to immediately upload the snapshot to Hugging Face Hub after saving.
+
+    Use --watch to continuously monitor for checkpoint changes during training.
+    The command will take an initial snapshot, then poll for checkpoint updates
+    at the specified interval and run benchmarks on the updated model.
     """
     from pyrecall.compress import SUPPORTED_CODECS
 
@@ -712,6 +736,10 @@ def snapshot(
             f"[red]Error:[/red] Unknown compression '{compression}'. "
             f"Choose from: {sorted(SUPPORTED_CODECS)}"
         )
+        raise typer.Exit(1)
+
+    if watch and interval < 1:
+        console.print("[red]Error:[/red] --interval must be at least 1 second.")
         raise typer.Exit(1)
 
     config = _read_config()
@@ -736,33 +764,126 @@ def snapshot(
         benchmark_batch_size=benchmark_batch_size,
     )
     tracker = _build_trackers(log_wandb, log_mlflow, log_neptune, neptune_project)
+
+    if not watch:
+        # Single snapshot mode
+        model_obj.snapshot(name=name, tracker=tracker, dry_run=dry_run, tags=_parse_tags(tag))
+
+        if push_to and not dry_run:
+            from pyrecall.hub import push_snapshot
+            from pyrecall.rollback import RollbackManager
+
+            mgr = RollbackManager(model_name=config["model_name"])
+            snap = mgr.load_snapshot(name)
+            snap_dir = mgr.base_dir / name
+            try:
+                url = push_snapshot(
+                    snap_dir, snap, push_to, include_weights=not no_weights, private=push_private
+                )
+                console.print(f"[success]✓ Pushed to {push_to}[/success]")
+                console.print(f"[dim]  {url}[/dim]")
+            except Exception as exc:
+                console.print(f"[red]Error:[/red] Could not push to Hub: {exc}")
+                raise typer.Exit(1)
+
+        if dry_run:
+            pass  # dry-run never persists weights, so there is nothing to set as baseline
+        elif not no_update_baseline:
+            config["baseline_snapshot"] = name
+            _write_config(config)
+            console.print(f"[dim]  Baseline updated to '{name}' in {_CONFIG_FILE}.[/dim]")
+        else:
+            console.print(f"[dim]  Snapshot '{name}' taken (baseline unchanged).[/dim]")
+        return
+
+    # ── watch mode ─────────────────────────────────────────────────────────────
+    from pyrecall.rollback import RollbackManager
+    from pyrecall.snapshot import SkillSnapshot
+    from pyrecall.utils import safe_model_name
+
+    run_dir = Path.home() / ".pyrecall" / "runs" / safe_model_name(config["model_name"])
+    mgr = RollbackManager(model_name=config["model_name"])
+
+    # Take initial snapshot
     model_obj.snapshot(name=name, tracker=tracker, dry_run=dry_run, tags=_parse_tags(tag))
-
-    if push_to and not dry_run:
-        from pyrecall.hub import push_snapshot
-        from pyrecall.rollback import RollbackManager
-
-        mgr = RollbackManager(model_name=config["model_name"])
-        snap = mgr.load_snapshot(name)
-        snap_dir = mgr.base_dir / name
-        try:
-            url = push_snapshot(
-                snap_dir, snap, push_to, include_weights=not no_weights, private=push_private
-            )
-            console.print(f"[success]✓ Pushed to {push_to}[/success]")
-            console.print(f"[dim]  {url}[/dim]")
-        except Exception as exc:
-            console.print(f"[red]Error:[/red] Could not push to Hub: {exc}")
-            raise typer.Exit(1)
-
-    if dry_run:
-        pass  # dry-run never persists weights, so there is nothing to set as baseline
-    elif not no_update_baseline:
+    if not dry_run and not no_update_baseline:
         config["baseline_snapshot"] = name
         _write_config(config)
-        console.print(f"[dim]  Baseline updated to '{name}' in {_CONFIG_FILE}.[/dim]")
-    else:
-        console.print(f"[dim]  Snapshot '{name}' taken (baseline unchanged).[/dim]")
+        console.print(f"[dim]  Baseline set to '{name}' in {_CONFIG_FILE}.[/dim]")
+
+    # Load baseline for comparison
+    try:
+        baseline_snap = mgr.load_snapshot(name)
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]Error:[/red] Could not load baseline snapshot: {exc}")
+        raise typer.Exit(1)
+
+    from pyrecall.detector import ForgettingDetector
+
+    effective_threshold = config.get("forgetting_threshold", 0.10)
+    effective_cat_thresholds = config.get("category_thresholds", {})
+    detector = ForgettingDetector(
+        threshold=effective_threshold, category_thresholds=effective_cat_thresholds
+    )
+
+    last_mtime: float | None = None
+    last_exit_code = 0
+
+    console.print(f"\n[info]Watching for checkpoint changes in {run_dir}…[/info]")
+    console.print("[dim]  Press Ctrl-C to stop.[/dim]")
+
+    try:
+        while True:
+            # Check for checkpoint changes
+            try:
+                current_mtime = max(
+                    (p.stat().st_mtime for p in run_dir.rglob("trainer_state.json")),
+                    default=0.0,
+                )
+            except OSError:
+                current_mtime = 0.0
+
+            if current_mtime != last_mtime:
+                last_mtime = current_mtime
+                ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                if current_mtime == 0.0:
+                    console.print(f"[dim][{ts}][/dim] Waiting for checkpoint…")
+                else:
+                    console.print(f"[dim][{ts}][/dim] Checkpoint updated — running benchmarks…")
+
+                    # Run benchmark on current model state
+                    scores = model_obj._run_benchmarks()
+                    watch_snap = SkillSnapshot(
+                        name=f"{name}__watch_{int(current_mtime)}",
+                        model_name=config["model_name"],
+                        scores=scores,
+                    )
+
+                    # Compare to baseline
+                    report = detector.compare(baseline_snap, watch_snap)
+
+                    if report.degraded_skills:
+                        cats = ", ".join(
+                            f"{c} ({next((x.severity for x in report.comparisons if x.category == c), 'UNKNOWN')})"
+                            for c in report.degraded_skills
+                        )
+                        console.print(
+                            f"[dim][{ts}][/dim] [red]✗ DEGRADED[/red] — {name} → {watch_snap.name} | {cats}"
+                        )
+                        last_exit_code = 2
+                    else:
+                        console.print(
+                            f"[dim][{ts}][/dim] [green]✓ healthy[/green] — {name} → {watch_snap.name}"
+                        )
+                        last_exit_code = 0
+
+            time.sleep(interval)
+
+    except KeyboardInterrupt:
+        console.print("\n[dim]Watch stopped.[/dim]")
+
+    raise typer.Exit(last_exit_code)
 
 
 @app.command()

@@ -1207,8 +1207,9 @@
           <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall snapshot before_v1</span></div>
           <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall snapshot before_v1 --dry-run</span><span class="comment"> &nbsp;# score only, no weights saved</span></div>
           <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall snapshot before_v1 --compression gzip</span><span class="comment"> &nbsp;# compress adapter (~50% smaller)</span></div>
-          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall snapshot before_v1 --tag commit=abc123f --tag dataset=v2</span></div>
-          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall snapshot before_v1 --push my-org/my-model-snapshots</span></div>
+        <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall snapshot before_v1 --tag commit=abc123f --tag dataset=v2</span></div>
+        <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall snapshot before_v1 --push my-org/my-model-snapshots</span></div>
+        <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall snapshot before_v1 --watch --interval 60</span><span class="comment"> &nbsp;# monitor during training</span></div>
         </div>
         <div class="table-wrap">
           <table>
@@ -1221,6 +1222,8 @@
               <tr><td>--no-weights</td><td>false</td><td>When <code>--push</code> is set, upload scores only — skip the adapter weights.</td></tr>
               <tr><td>--private</td><td>false</td><td>When <code>--push</code> is set, create the Hub repo as private.</td></tr>
               <tr><td>--no-update-baseline</td><td>false</td><td>Save the snapshot without overwriting <code>baseline_snapshot</code> in <code>.pyrecall.json</code>.</td></tr>
+              <tr><td>--watch</td><td>false</td><td>Continuously monitor for checkpoint changes during training. Takes an initial snapshot, then polls every N seconds for <code>trainer_state.json</code> updates. Exits with code 2 if forgetting is detected, 0 otherwise.</td></tr>
+              <tr><td>--interval</td><td>60</td><td>Poll interval in seconds when <code>--watch</code> is enabled. Must be at least 1 second.</td></tr>
             </tbody>
           </table>
         </div>
