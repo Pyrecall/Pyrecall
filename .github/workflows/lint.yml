@@ -59,7 +59,7 @@ jobs:
       - name: Install CPU-only PyTorch and project
         run: |
           pip install --upgrade pip
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install torch --index-url https://download.pytorch.org/whl/cpu --only-binary :all:
           pip install -e ".[dev]"
       - name: Install Typer Checker Tools
         run: pip install mypy types-tqdm
