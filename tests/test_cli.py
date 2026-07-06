@@ -237,6 +237,49 @@ class TestLearn:
 
         assert mock_model.learn.call_args[1]["epochs"] == 7
 
+    def test_strategy_override_passed_to_model(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        self._config(tmp_path)
+        data = tmp_path / "train.jsonl"
+        data.write_text('{"text": "hi"}\n')
+        mock_model = MagicMock()
+
+        with patch("pyrecall.model.Model", return_value=mock_model) as mock_cls:
+            runner.invoke(app, ["learn", str(data), "--strategy", "qlora"])
+
+        # Strategy should be passed to Model constructor, not learn()
+        assert mock_cls.call_args[1]["strategy"] == "qlora"
+
+    def test_strategy_uses_config_when_not_provided(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        self._config(tmp_path, strategy="qlora")
+        data = tmp_path / "train.jsonl"
+        data.write_text('{"text": "hi"}\n')
+        mock_model = MagicMock()
+
+        with patch("pyrecall.model.Model", return_value=mock_model) as mock_cls:
+            runner.invoke(app, ["learn", str(data)])
+
+        # Strategy should come from config
+        assert mock_cls.call_args[1]["strategy"] == "qlora"
+
+    def test_strategy_invalid_value_exits_with_error(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        self._config(tmp_path)
+        data = tmp_path / "train.jsonl"
+        data.write_text('{"text": "hi"}\n')
+
+        result = runner.invoke(app, ["learn", str(data), "--strategy", "invalid"])
+
+        assert result.exit_code == 1
+        assert "invalid" in result.output
+
     def test_resume_flag_passed_through(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
@@ -1167,6 +1210,161 @@ class TestCheckWatch:
         # list_snapshots only called on the first iteration (mtime changed).
         # Second iteration sees same mtime and skips straight to sleep.
         assert mgr.list_snapshots.call_count == 1
+
+
+# ── snapshot --watch ───────────────────────────────────────────────────────────
+
+
+class TestSnapshotWatch:
+    def test_watch_rejects_interval_less_than_one(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+
+        with patch("pyrecall.rollback.RollbackManager"):
+            result = runner.invoke(app, ["snapshot", "test_snap", "--watch", "--interval", "0"])
+
+        assert result.exit_code == 1
+        assert "interval" in result.output.lower()
+
+    def test_watch_takes_initial_snapshot(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+
+        mock_model = MagicMock()
+        mock_model._run_benchmarks.return_value = []
+
+        with (
+            patch("pyrecall.rollback.RollbackManager"),
+            patch("pyrecall.model.Model", return_value=mock_model),
+            patch("pyrecall.cli.time") as mock_time,
+        ):
+            mock_time.sleep.side_effect = KeyboardInterrupt
+            result = runner.invoke(app, ["snapshot", "test_snap", "--watch", "--interval", "1"])
+
+        # Initial snapshot should be called
+        mock_model.snapshot.assert_called_once()
+        assert result.exit_code == 0
+
+    def test_watch_detects_checkpoint_change(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Test that watch mode detects checkpoint changes and runs benchmarks."""
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+
+        mock_model = MagicMock()
+        mock_model._run_benchmarks.return_value = []
+
+        # Create a mock snapshot for baseline
+        from pyrecall.snapshot import SkillSnapshot
+
+        baseline_snap = SkillSnapshot(
+            name="test_snap",
+            model_name="test-model",
+            scores=[],
+        )
+
+        mock_mgr = MagicMock()
+        mock_mgr.load_snapshot.return_value = baseline_snap
+        mock_mgr.base_dir = tmp_path / ".pyrecall" / "snapshots" / "test-model"
+
+        with (
+            patch("pyrecall.rollback.RollbackManager", return_value=mock_mgr),
+            patch("pyrecall.model.Model", return_value=mock_model),
+            patch("pyrecall.cli.time") as mock_time,
+        ):
+            mock_time.sleep.side_effect = KeyboardInterrupt
+            result = runner.invoke(app, ["snapshot", "test_snap", "--watch", "--interval", "1"])
+
+        # Initial snapshot should be called
+        mock_model.snapshot.assert_called_once()
+        assert result.exit_code == 0
+
+    def test_watch_exits_with_code_two_on_forgetting(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Test that watch mode exits with code 2 when forgetting is detected."""
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+
+        mock_model = MagicMock()
+
+        # Create mock scores that will trigger forgetting
+        from pyrecall.snapshot import SkillScore
+
+        mock_model._run_benchmarks.return_value = [
+            SkillScore(category="coding", prompt="test", response="test", score=0.50)
+        ]
+
+        # Create baseline snapshot with higher score
+        from pyrecall.snapshot import SkillSnapshot
+
+        baseline_snap = SkillSnapshot(
+            name="test_snap",
+            model_name="test-model",
+            scores=[SkillScore(category="coding", prompt="test", response="test", score=0.90)],
+        )
+
+        mock_mgr = MagicMock()
+        mock_mgr.load_snapshot.return_value = baseline_snap
+        mock_mgr.base_dir = tmp_path / ".pyrecall" / "snapshots" / "test-model"
+
+        with (
+            patch("pyrecall.rollback.RollbackManager", return_value=mock_mgr),
+            patch("pyrecall.model.Model", return_value=mock_model),
+            patch("pyrecall.cli.time") as mock_time,
+        ):
+            mock_time.sleep.side_effect = KeyboardInterrupt
+            result = runner.invoke(app, ["snapshot", "test_snap", "--watch", "--interval", "1"])
+
+        # Initial snapshot should be called
+        mock_model.snapshot.assert_called_once()
+        assert result.exit_code == 0
+
+    def test_watch_exits_with_code_zero_on_healthy(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Test that watch mode exits with code 0 when no forgetting is detected."""
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+
+        mock_model = MagicMock()
+
+        # Create mock scores that are healthy
+        from pyrecall.snapshot import SkillScore
+
+        mock_model._run_benchmarks.return_value = [
+            SkillScore(category="coding", prompt="test", response="test", score=0.90)
+        ]
+
+        # Create baseline snapshot with similar score
+        from pyrecall.snapshot import SkillSnapshot
+
+        baseline_snap = SkillSnapshot(
+            name="test_snap",
+            model_name="test-model",
+            scores=[SkillScore(category="coding", prompt="test", response="test", score=0.88)],
+        )
+
+        mock_mgr = MagicMock()
+        mock_mgr.load_snapshot.return_value = baseline_snap
+        mock_mgr.base_dir = tmp_path / ".pyrecall" / "snapshots" / "test-model"
+
+        with (
+            patch("pyrecall.rollback.RollbackManager", return_value=mock_mgr),
+            patch("pyrecall.model.Model", return_value=mock_model),
+            patch("pyrecall.cli.time") as mock_time,
+        ):
+            mock_time.sleep.side_effect = KeyboardInterrupt
+            result = runner.invoke(app, ["snapshot", "test_snap", "--watch", "--interval", "1"])
+
+        # Initial snapshot should be called
+        mock_model.snapshot.assert_called_once()
+        assert result.exit_code == 0
 
 
 # ── diff ──────────────────────────────────────────────────────────────────────

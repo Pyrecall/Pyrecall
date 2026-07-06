@@ -6,10 +6,13 @@
   157-frontend-version-fix[m
   Pyrecall-#110---__after-snapshot-issue[m
   Sid294-patch-2[m
+  benchmark-modes[m
   bitsandbytes-dependency[m
-* [32mmain[m
+  main[m
   patch-mypy[m
   save-report-fix[m
   server[m
+  strategy-issue[m
   streaming-support[m
   v0.12.0-release[m
+* [32mwatch-issue[m
