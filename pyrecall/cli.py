@@ -718,6 +718,13 @@ def snapshot(
             help="Number of benchmark prompts scored per forward pass (default 8). Set to 1 for sequential.",
         ),
     ] = 8,
+    mode: Annotated[
+        str,
+        typer.Option(
+            "--mode",
+            help="Benchmark mode for this snapshot: 'fast' (20-40 prompts), 'standard' (80-120 prompts), or 'full' (180+ prompts).",
+        ),
+    ] = "standard",
     watch: Annotated[
         bool,
         typer.Option(
@@ -799,7 +806,13 @@ def snapshot(
 
     if not watch:
         # Single snapshot mode
-        model_obj.snapshot(name=name, tracker=tracker, dry_run=dry_run, tags=_parse_tags(tag))
+        model_obj.snapshot(
+            name=name,
+            tracker=tracker,
+            dry_run=dry_run,
+            tags=_parse_tags(tag),
+            benchmark_mode=mode,
+        )
 
         if push_to and not dry_run:
             from pyrecall.hub import push_snapshot
@@ -837,7 +850,13 @@ def snapshot(
     mgr = RollbackManager(model_name=config["model_name"])
 
     # Take initial snapshot
-    model_obj.snapshot(name=name, tracker=tracker, dry_run=dry_run, tags=_parse_tags(tag))
+    model_obj.snapshot(
+        name=name,
+        tracker=tracker,
+        dry_run=dry_run,
+        tags=_parse_tags(tag),
+        benchmark_mode=mode,
+    )
     if not dry_run and not no_update_baseline:
         config["baseline_snapshot"] = name
         _write_config(config)

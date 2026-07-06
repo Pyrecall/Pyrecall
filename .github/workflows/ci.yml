@@ -38,10 +38,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-${{ matrix.python-version }}-
 
-      - name: Install CPU-only PyTorch
-        run: |
-          pip install --upgrade pip
-          pip install torch --index-url https://download.pytorch.org/whl/cpu --only-binary :all:
+       - name: Install CPU-only PyTorch
+         run: |
+           pip install --upgrade pip
+           pip install torch --index-url https://download.pytorch.org/whl/cpu
 
       - name: Install project and dev dependencies
         run: |
