@@ -226,11 +226,12 @@ class ReplayBuffer:
             if not isinstance(meta["max_size"], int):
                 raise ValueError("Replay buffer 'max_size' must be an integer.")
 
-            if not isinstance(meta["seen_hashes"], list):
-                raise ValueError("Replay buffer 'seen_hashes' must be a list.")
-
             self._total_seen = meta["total_seen"]
-            self._seen_hashes = set(meta["seen_hashes"])
+
+            if "seen_hashes" in meta:
+                self._seen_hashes = set(meta["seen_hashes"])
+            else:
+                self._seen_hashes = set()
             self._buffer = []
             skipped = 0
             for line in lines[1:]:
