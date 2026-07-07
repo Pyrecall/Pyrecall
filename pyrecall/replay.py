@@ -211,10 +211,12 @@ class ReplayBuffer:
                 return
             meta = json.loads(lines[0])
 
-            required = {"total_seen", "max_size", "seen_hashes"}
+            required = {"total_seen", "max_size"}
             missing = required - meta.keys()
             if missing:
-                raise ValueError(f"Replay buffer metadata missing field(s): {', '.join(sorted(missing))}")
+                raise ValueError(
+                    f"Replay buffer metadata missing field(s): {', '.join(sorted(missing))}"
+                )
 
             if not isinstance(meta["total_seen"], int):
                 raise ValueError("Replay buffer 'total_seen' must be an integer.")
