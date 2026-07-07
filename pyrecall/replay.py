@@ -184,8 +184,11 @@ class ReplayBuffer:
         content = "\n".join(lines) + "\n"
         tmp_fd, tmp_path = tempfile.mkstemp(dir=self._path.parent, prefix=".buffer_tmp_")
         try:
-            with os.fdopen(tmp_fd, "w") as fh:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as fh:
                 fh.write(content)
+                fh.flush()
+                os.fsync(fh.fileno())
+
             os.replace(tmp_path, self._path)
         except Exception:
             try:
@@ -193,6 +196,11 @@ class ReplayBuffer:
             except OSError:
                 pass
             raise
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except FileNotFoundError:
+                pass
 
     def _load(self) -> None:
         if not self._path.exists():
@@ -202,8 +210,28 @@ class ReplayBuffer:
             if not lines:
                 return
             meta = json.loads(lines[0])
-            self._total_seen = meta.get("total_seen", 0)
-            self._seen_hashes = set(meta.get("seen_hashes", []))
+
+            required = {"total_seen", "max_size"}
+            if "seen_hashes" in meta and not isinstance(meta["seen_hashes"], list):
+                raise ValueError("Replay buffer 'seen_hashes' must be a list.")
+            missing = required - meta.keys()
+            if missing:
+                raise ValueError(
+                    f"Replay buffer metadata missing field(s): {', '.join(sorted(missing))}"
+                )
+
+            if not isinstance(meta["total_seen"], int):
+                raise ValueError("Replay buffer 'total_seen' must be an integer.")
+
+            if not isinstance(meta["max_size"], int):
+                raise ValueError("Replay buffer 'max_size' must be an integer.")
+
+            self._total_seen = meta["total_seen"]
+
+            if "seen_hashes" in meta:
+                self._seen_hashes = set(meta["seen_hashes"])
+            else:
+                self._seen_hashes = set()
             self._buffer = []
             skipped = 0
             for line in lines[1:]:
