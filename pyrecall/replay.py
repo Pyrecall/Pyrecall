@@ -212,6 +212,8 @@ class ReplayBuffer:
             meta = json.loads(lines[0])
 
             required = {"total_seen", "max_size"}
+            if "seen_hashes" in meta and not isinstance(meta["seen_hashes"], list):
+                raise ValueError("Replay buffer 'seen_hashes' must be a list.")
             missing = required - meta.keys()
             if missing:
                 raise ValueError(
