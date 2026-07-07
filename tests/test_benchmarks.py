@@ -458,3 +458,62 @@ class TestBenchmarkValidateCli:
         data = json.loads(result.output)
         assert data["valid"] is False
         assert len(data["errors"]) > 0
+
+
+# ── Benchmark Modes ────────────────────────────────────────────────────────────
+
+
+class TestBenchmarkMode:
+    def test_fast_mode_returns_30_prompts(self) -> None:
+        from pyrecall.benchmarks import get_benchmarks_for_mode
+
+        benchmarks = get_benchmarks_for_mode("fast")
+        assert (
+            len(benchmarks) == 27
+        )  # 3 per category × 9 categories (long_context has 20, so 3+3+3+3+3+3+3+3+3=27)
+
+    def test_standard_mode_returns_100_prompts(self) -> None:
+        from pyrecall.benchmarks import get_benchmarks_for_mode
+
+        benchmarks = get_benchmarks_for_mode("standard")
+        assert len(benchmarks) == 90  # 10 per category × 9 categories
+
+    def test_full_mode_returns_all_prompts(self) -> None:
+        from pyrecall.benchmarks import get_benchmarks_for_mode
+
+        benchmarks = get_benchmarks_for_mode("full")
+        assert len(benchmarks) == 180  # 20 per category × 9 categories
+
+    def test_mode_enum_prompt_count(self) -> None:
+        from pyrecall.benchmarks import BenchmarkMode
+
+        assert BenchmarkMode.FAST.prompt_count == 30
+        assert BenchmarkMode.STANDARD.prompt_count == 100
+        assert BenchmarkMode.FULL.prompt_count == 180
+
+    def test_mode_enum_description(self) -> None:
+        from pyrecall.benchmarks import BenchmarkMode
+
+        assert "Quick validation" in BenchmarkMode.FAST.description
+        assert "Balanced evaluation" in BenchmarkMode.STANDARD.description
+        assert "Comprehensive" in BenchmarkMode.FULL.description
+
+    def test_mode_preserves_category_balance(self) -> None:
+        from pyrecall.benchmarks import get_benchmarks_for_mode
+
+        fast = get_benchmarks_for_mode("fast")
+        standard = get_benchmarks_for_mode("standard")
+        full = get_benchmarks_for_mode("full")
+
+        # All modes should have the same categories
+        fast_cats = {b.category for b in fast}
+        standard_cats = {b.category for b in standard}
+        full_cats = {b.category for b in full}
+
+        assert fast_cats == standard_cats == full_cats
+
+    def test_mode_accepts_enum(self) -> None:
+        from pyrecall.benchmarks import BenchmarkMode, get_benchmarks_for_mode
+
+        benchmarks = get_benchmarks_for_mode(BenchmarkMode.FAST)
+        assert len(benchmarks) == 27

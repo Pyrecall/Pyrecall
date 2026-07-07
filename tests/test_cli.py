@@ -307,7 +307,9 @@ class TestLearn:
         with patch("pyrecall.model.Model", return_value=mock_model):
             runner.invoke(app, ["learn", str(data), "--snapshot-after", "post_train"])
 
-        mock_model.snapshot.assert_called_once_with(name="post_train", tracker=None)
+        mock_model.snapshot.assert_called_once_with(
+            name="post_train", tracker=None, benchmark_mode="standard"
+        )
 
     def test_snapshot_after_updates_baseline_in_config(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -535,7 +537,9 @@ class TestLearn:
             )
 
         mock_model.learn.assert_called_once()
-        mock_model.snapshot.assert_called_once_with(name="after_v1", tracker=None)
+        mock_model.snapshot.assert_called_once_with(
+            name="after_v1", tracker=None, benchmark_mode="standard"
+        )
 
     def test_watch_every_passed_through(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -619,7 +623,9 @@ class TestSnapshot:
         with patch("pyrecall.model.Model", return_value=mock_model):
             runner.invoke(app, ["snapshot", "v1"])
 
-        mock_model.snapshot.assert_called_once_with(name="v1", tracker=None, dry_run=False, tags={})
+        mock_model.snapshot.assert_called_once_with(
+            name="v1", tracker=None, dry_run=False, tags={}, benchmark_mode="standard"
+        )
 
     def test_updates_baseline_snapshot_in_config(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -693,7 +699,7 @@ class TestSnapshot:
             runner.invoke(app, ["snapshot", "new_snap", "--no-update-baseline"])
 
         mock_model.snapshot.assert_called_once_with(
-            name="new_snap", tracker=None, dry_run=False, tags={}
+            name="new_snap", tracker=None, dry_run=False, tags={}, benchmark_mode="standard"
         )
 
     def test_default_updates_baseline(
@@ -3295,3 +3301,65 @@ class TestPullCommand:
             result = runner.invoke(app, ["pull", "missing_snap", "--from-repo", "org/repo"])
 
         assert result.exit_code == 1
+
+
+# ── Benchmark Mode CLI Tests ────────────────────────────────────────────────────
+
+
+class TestBenchmarkModeCli:
+    def test_snapshot_accepts_mode_flag(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        mgr = _make_mock_manager([])
+        mgr.base_dir = tmp_path / "snapshots"
+
+        with (
+            patch("pyrecall.cli._build_rollback_manager", return_value=mgr),
+            patch("pyrecall.model.Model") as mock_model,
+        ):
+            mock_model.return_value.snapshot.return_value = _make_snapshot("test_snap")
+            result = runner.invoke(app, ["snapshot", "test_snap", "--mode", "fast"])
+
+        assert result.exit_code == 0
+        # Verify the mode was passed to the snapshot method
+        call_kwargs = mock_model.return_value.snapshot.call_args[1]
+        assert call_kwargs["benchmark_mode"] == "fast"
+
+    def test_learn_accepts_mode_flag(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        mgr = _make_mock_manager([])
+        mgr.base_dir = tmp_path / "snapshots"
+
+        # Create a dummy training file
+        train_file = tmp_path / "train.jsonl"
+        train_file.write_text('{"text": "hello world"}\n')
+
+        with (
+            patch("pyrecall.cli._build_rollback_manager", return_value=mgr),
+            patch("pyrecall.model.Model") as mock_model,
+        ):
+            mock_model.return_value.learn.return_value = None
+            mock_model.return_value.snapshot.return_value = _make_snapshot("before_v1")
+            result = runner.invoke(
+                app,
+                ["learn", str(train_file), "--snapshot-before", "before_v1", "--mode", "fast"],
+            )
+
+        assert result.exit_code == 0
+        # Verify the mode was passed to the snapshot method
+        call_kwargs = mock_model.return_value.snapshot.call_args[1]
+        assert call_kwargs["benchmark_mode"] == "fast"
+
+    def test_init_includes_benchmark_mode_in_config(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        result = runner.invoke(app, ["init", "--model", "test-model"])
+        assert result.exit_code == 0
+
+        config = json.loads((tmp_path / ".pyrecall.json").read_text())
+        assert "benchmark_mode" in config
+        assert config["benchmark_mode"] == "standard"
