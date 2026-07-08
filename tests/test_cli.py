@@ -92,7 +92,7 @@ class TestInit:
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
         config = json.loads((tmp_path / _CONFIG_FILE).read_text())
-        assert config["model_name"] == "meta-llama/Llama-3.2-1B"
+        assert config["model_name"] == "Qwen/Qwen2.5-1.5b-Instruct"
 
     def test_custom_model_written(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.chdir(tmp_path)

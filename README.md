@@ -25,7 +25,7 @@ pip install pyrecall   # Python 3.11–3.14 · CUDA, MPS, and CPU
 ```python
 from pyrecall import Model
 
-model = Model("meta-llama/Llama-3.2-1B")
+model = Model("Qwen/Qwen2.5-1.5b-Instruct")
 model.snapshot("before")
 model.learn("data.jsonl", epochs=3)
 
@@ -34,13 +34,19 @@ if not model.check().is_healthy:
 ```
 
 ```bash
-pyrecall init --model meta-llama/Llama-3.2-1B
+pyrecall init
 pyrecall snapshot before_v1                        # baseline before training
 pyrecall learn train.jsonl --snapshot-after after_v1  # train + snapshot in one step
 pyrecall check                                     # compares last two snapshots
-pyrecall check --watch                             # model continuously monitors for new snapshots
 # exit 0 → ship   exit 2 → pyrecall rollback before_v1
 ```
+
+## To continuously monitor for new snapshots
+
+```bash
+pyrecall check --watch
+```
+
 
 ---
 
