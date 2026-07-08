@@ -36,7 +36,7 @@ app = typer.Typer(
     help=(
         "pyrecall — continuous fine-tuning with automatic forgetting detection.\n\n"
         "Quickstart:\n\n"
-        "  pyrecall init --model meta-llama/Llama-3.2-1B\n\n"
+        "  pyrecall init\n\n"
         "  # take a snapshot before training\n"
         "  pyrecall snapshot before_v1\n\n"
         "  # fine-tune on new data\n"
@@ -246,7 +246,7 @@ def init(
     model: Annotated[
         str,
         typer.Option("--model", "-m", help="HuggingFace model identifier"),
-    ] = "meta-llama/Llama-3.2-1B",
+    ] = "Qwen/Qwen2.5-1.5b-Instruct",
     strategy: Annotated[
         str,
         typer.Option("--strategy", "-s", help="Fine-tuning strategy: 'lora' or 'qlora'"),
@@ -311,7 +311,7 @@ def init(
     errors: list[str] = []
     if not model or " " in model or model.startswith("/"):
         errors.append(
-            f"--model must be a HuggingFace model ID (e.g. 'meta-llama/Llama-3.2-1B'), got '{model}'"
+            f"--model must be a HuggingFace model ID (e.g. 'Qwen/Qwen2.5-1.5b-Instruct'), got '{model}'"
         )
     if strategy not in ("lora", "qlora"):
         errors.append(f"--strategy must be 'lora' or 'qlora', got '{strategy}'")
