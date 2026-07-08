@@ -55,7 +55,8 @@ class LiveLearner:
         self.batch_size = batch_size
         self.db_path: Path = db_path or Path.home() / ".pyrecall" / "live_data.db"
         self.min_response_length = min_response_length
-        self._training_lock = threading.Lock()
+        # Use the model's lock to prevent concurrent training + inference
+        # The model lock is an RLock, so we can check if it's already held
         self._training_thread: threading.Thread | None = None
         self._init_db()
 
@@ -140,23 +141,19 @@ class LiveLearner:
             self._training_thread.join(timeout=timeout)
 
     def _maybe_trigger_training(self) -> None:
+        # Check if training is already in progress (model lock is held)
+        # We use a non-blocking acquire to check - if it fails, training is happening
         if self._training_thread is not None and self._training_thread.is_alive():
             return
-        if self._training_lock.acquire(blocking=False):
-            try:
-                self._training_thread = threading.Thread(
-                    target=self._trigger_training_locked, daemon=True
-                )
-                self._training_thread.start()
-            except Exception:
-                self._training_lock.release()
-                raise
-
-    def _trigger_training_locked(self) -> None:
-        try:
-            self._trigger_training()
-        finally:
-            self._training_lock.release()
+        # Try to acquire the model's lock to check if training is in progress
+        # This is safe because we're not actually doing training here, just checking
+        if not self.model._model_lock.acquire(blocking=False):
+            # Lock is held by another thread (training in progress), skip
+            return
+        self.model._model_lock.release()
+        # Now spawn the training thread - it will acquire the lock in _trigger_training
+        self._training_thread = threading.Thread(target=self._trigger_training, daemon=True)
+        self._training_thread.start()
 
     def _trigger_training(self) -> None:
         """Export the current pending batch to JSONL and call model.learn()."""

@@ -38,6 +38,7 @@ pyrecall init --model meta-llama/Llama-3.2-1B
 pyrecall snapshot before_v1                        # baseline before training
 pyrecall learn train.jsonl --snapshot-after after_v1  # train + snapshot in one step
 pyrecall check                                     # compares last two snapshots
+pyrecall check --watch                             # model continuously monitors for new snapshots
 # exit 0 → ship   exit 2 → pyrecall rollback before_v1
 ```
 

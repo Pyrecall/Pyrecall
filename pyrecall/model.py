@@ -461,6 +461,8 @@ class Model:
         if not bnb_config:
             self.model = self.model.to(self.device)
         self.model.eval()
+        # Thread-safety lock: protects model weights from concurrent read/write
+        self._model_lock = threading.RLock()
         self.detector = ForgettingDetector(
             threshold=forgetting_threshold,
             category_thresholds=category_thresholds,
@@ -897,33 +899,34 @@ class Model:
                 console.print("[warning]No checkpoint found — starting from scratch.[/warning]")
 
         streaming_cb = next((cb for cb in callbacks if isinstance(cb, _StreamingCallback)), None)
-        self.model.train()
-        try:
-            trainer.train(resume_from_checkpoint=resume_from)
-        except _WatchStopSignal as exc:
-            if streaming_cb is not None:
-                streaming_cb._progress.stop()
+        with self._model_lock:
+            self.model.train()
+            try:
+                trainer.train(resume_from_checkpoint=resume_from)
+            except _WatchStopSignal as exc:
+                if streaming_cb is not None:
+                    streaming_cb._progress.stop()
+                self.model.eval()
+                console.print("[warning]Training stopped by watch — forgetting detected.[/warning]")
+                _fire_callbacks(self._on_forgetting, exc.report)
+                return
+            except _WatchRollbackSignal as exc:
+                if streaming_cb is not None:
+                    streaming_cb._progress.stop()
+                self.model.eval()
+                console.print(
+                    "[warning]Training stopped — rolling back to baseline snapshot.[/warning]"
+                )
+                _fire_callbacks(self._on_forgetting, exc.report)
+                baseline = self._baseline_snapshot_name
+                if baseline:
+                    self.rollback(to=baseline)
+                return
+            except Exception:
+                if streaming_cb is not None:
+                    streaming_cb._progress.stop()
+                raise
             self.model.eval()
-            console.print("[warning]Training stopped by watch — forgetting detected.[/warning]")
-            _fire_callbacks(self._on_forgetting, exc.report)
-            return
-        except _WatchRollbackSignal as exc:
-            if streaming_cb is not None:
-                streaming_cb._progress.stop()
-            self.model.eval()
-            console.print(
-                "[warning]Training stopped — rolling back to baseline snapshot.[/warning]"
-            )
-            _fire_callbacks(self._on_forgetting, exc.report)
-            baseline = self._baseline_snapshot_name
-            if baseline:
-                self.rollback(to=baseline)
-            return
-        except Exception:
-            if streaming_cb is not None:
-                streaming_cb._progress.stop()
-            raise
-        self.model.eval()
 
         if self.replay_buffer is not None and new_texts:
             self.replay_buffer.add(new_texts, categories=new_categories)
@@ -1082,58 +1085,60 @@ class Model:
         Returns:
             The generated text (only the new tokens, not the prompt itself).
         """
-        inputs = self.tokenizer(
-            prompt,
-            return_tensors="pt",
-            truncation=True,
-            max_length=self.max_length,
-        ).to(self.device)
+        with self._model_lock:
+            inputs = self.tokenizer(
+                prompt,
+                return_tensors="pt",
+                truncation=True,
+                max_length=self.max_length,
+            ).to(self.device)
 
-        with torch.no_grad():
-            output_ids = self.model.generate(
-                **inputs,
-                max_new_tokens=max_new_tokens,
-                do_sample=False,
-                pad_token_id=self.tokenizer.eos_token_id,
-            )
+            with torch.no_grad():
+                output_ids = self.model.generate(
+                    **inputs,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    pad_token_id=self.tokenizer.eos_token_id,
+                )
 
-        new_tokens = output_ids[0][inputs["input_ids"].shape[1] :]
-        return self.tokenizer.decode(new_tokens, skip_special_tokens=True)  # type: ignore[return-value]
+            new_tokens = output_ids[0][inputs["input_ids"].shape[1] :]
+            return self.tokenizer.decode(new_tokens, skip_special_tokens=True)  # type: ignore[return-value]
 
     def generate_stream(
         self,
         prompt: str,
         max_new_tokens: int = 200,
     ):
-        inputs = self.tokenizer(
-            prompt,
-            return_tensors="pt",
-            truncation=True,
-            max_length=self.max_length,
-        ).to(self.device)
+        with self._model_lock:
+            inputs = self.tokenizer(
+                prompt,
+                return_tensors="pt",
+                truncation=True,
+                max_length=self.max_length,
+            ).to(self.device)
 
-        streamer = TextIteratorStreamer(
-            self.tokenizer,
-            skip_prompt=True,
-            skip_special_tokens=True,
-        )
+            streamer = TextIteratorStreamer(
+                self.tokenizer,
+                skip_prompt=True,
+                skip_special_tokens=True,
+            )
 
-        thread = threading.Thread(
-            target=self.model.generate,
-            kwargs={
-                **inputs,
-                "max_new_tokens": max_new_tokens,
-                "do_sample": False,
-                "pad_token_id": self.tokenizer.eos_token_id,
-                "streamer": streamer,
-            },
-        )
+            thread = threading.Thread(
+                target=self.model.generate,
+                kwargs={
+                    **inputs,
+                    "max_new_tokens": max_new_tokens,
+                    "do_sample": False,
+                    "pad_token_id": self.tokenizer.eos_token_id,
+                    "streamer": streamer,
+                },
+            )
 
-        thread.start()
+            thread.start()
 
-        yield from streamer
+            yield from streamer
 
-        thread.join()
+            thread.join()
 
     def serve(
         self,
