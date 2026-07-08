@@ -34,7 +34,7 @@ if not model.check().is_healthy:
 ```
 
 ```bash
-pyrecall init
+pyrecall init                                      # default model used is Qwen/Qwen2.5-1.5B-Instruct
 pyrecall snapshot before_v1                        # baseline before training
 pyrecall learn train.jsonl --snapshot-after after_v1  # train + snapshot in one step
 pyrecall check                                     # compares last two snapshots
