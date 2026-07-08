@@ -736,3 +736,58 @@ class TestStreamingResponse:
 
             assert mock_generate.called
             assert mock_generate.call_args.kwargs["max_new_tokens"] == 123
+
+
+# ── thread-safety tests ──────────────────────────────────────────────────────
+
+
+class TestModelThreadSafety:
+    def test_model_has_lock_attribute(self, patched_model) -> None:
+        """Model should have a _model_lock attribute for thread-safety."""
+        assert hasattr(patched_model, "_model_lock")
+
+    def test_generate_acquires_model_lock(self, patched_model) -> None:
+        """generate() should acquire the model lock for thread-safe inference."""
+        with patch.object(patched_model, "_model_lock") as mock_lock:
+            patched_model.generate("Hello")
+            mock_lock.__enter__.assert_called_once()
+            mock_lock.__exit__.assert_called_once()
+
+    def test_generate_stream_acquires_model_lock(self, patched_model):
+        """generate_stream() should acquire the model lock for thread-safe inference."""
+        with (
+            patch("pyrecall.model.TextIteratorStreamer") as mock_streamer,
+            patch.object(patched_model, "_model_lock") as mock_lock,
+        ):
+            mock_streamer.return_value = iter(["Hello"])
+
+            list(patched_model.generate_stream("Hi"))
+
+            mock_lock.__enter__.assert_called_once()
+            mock_lock.__exit__.assert_called_once()
+
+    def test_learn_acquires_model_lock(self, patched_model, tmp_path: Path) -> None:
+        """learn() should acquire the model lock for thread-safe training."""
+        data_file = tmp_path / "train.jsonl"
+        data_file.write_text(json.dumps({"text": "hi"}) + "\n")
+
+        mock_trainer = MagicMock()
+        with (
+            patch("pyrecall.model.load_dataset") as mock_ds,
+            patch("pyrecall.model.Trainer", return_value=mock_trainer),
+            patch("pyrecall.model.TrainingArguments"),
+            patch("pyrecall.model.DataCollatorForLanguageModeling"),
+            patch.object(patched_model, "_model_lock") as mock_lock,
+        ):
+            mock_dataset = MagicMock()
+            mock_dataset.column_names = ["text"]
+            mock_dataset.num_rows = 1
+            mock_dataset.__len__.return_value = 1
+            mock_dataset.__getitem__.return_value = ["hello world"]
+            mock_dataset.map.return_value = mock_dataset
+            mock_ds.return_value = mock_dataset
+
+            patched_model.learn(str(data_file), epochs=1)
+
+            mock_lock.__enter__.assert_called_once()
+            mock_lock.__exit__.assert_called_once()

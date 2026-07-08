@@ -21,6 +21,10 @@ def _make_learner(
 ) -> tuple[LiveLearner, MagicMock]:
     """Return a LiveLearner backed by a temp DB and a mocked Model."""
     model = MagicMock()
+    # Add a mock RLock for thread-safety testing
+    model._model_lock = MagicMock()
+    model._model_lock.acquire.return_value = True
+    model._model_lock.release.return_value = None
     db_path = tmp_path / "live_data.db"
     learner = LiveLearner(
         model=model,
@@ -427,7 +431,7 @@ class TestEdgeCases:
 
     def test_lock_released_when_thread_start_fails(self, tmp_path: Path) -> None:
         # If Thread.start() raises (e.g. during interpreter shutdown), the
-        # training lock must be released so subsequent record() calls can
+        # model lock must be released so subsequent record() calls can
         # still trigger training.
         learner, model = _make_learner(tmp_path, batch_size=2)
         learner.record("p1", "response long enough here")
@@ -440,5 +444,52 @@ class TestEdgeCases:
             with pytest.raises(RuntimeError, match="cannot start thread"):
                 learner.record("p2", "response long enough here")
 
-        # Lock must be free — a subsequent batch should be trainable.
-        assert not learner._training_lock.locked()
+        # Model lock must be free — a subsequent batch should be trainable.
+        # The mock lock's acquire was called, so we verify it was released
+        model._model_lock.release.assert_called()
+
+
+# ── thread-safety tests ──────────────────────────────────────────────────────
+
+
+class TestThreadSafety:
+    def test_training_skipped_when_model_lock_held(self, tmp_path: Path) -> None:
+        """Training should not start if model lock is already held (inference in progress)."""
+        learner, model = _make_learner(tmp_path, batch_size=2)
+        # Simulate the lock being held (e.g., by an ongoing inference)
+        model._model_lock.acquire.return_value = False
+        learner.record("p1", "response one long enough text")
+        learner.record("p2", "response two long enough text")
+        # Training should not be triggered because lock is held
+        model.learn.assert_not_called()
+
+    def test_training_proceeds_when_model_lock_free(self, tmp_path: Path) -> None:
+        """Training should start when model lock is available."""
+        learner, model = _make_learner(tmp_path, batch_size=2)
+        # Lock is available
+        model._model_lock.acquire.return_value = True
+        learner.record("p1", "response one long enough text")
+        learner.record("p2", "response two long enough text")
+        # Training should be triggered - need to wait for thread
+        learner._join()
+        model.learn.assert_called_once()
+
+    def test_concurrent_training_prevented(self, tmp_path: Path) -> None:
+        """Only one training thread should run at a time."""
+        learner, model = _make_learner(tmp_path, batch_size=2)
+        # Simulate an active training thread
+        learner._training_thread = MagicMock()
+        learner._training_thread.is_alive.return_value = True
+
+        learner.record("p1", "response one long enough text")
+        learner.record("p2", "response two long enough text")
+        # Training should not be triggered because thread is alive
+        model.learn.assert_not_called()
+
+    def test_lock_acquire_called_in_maybe_trigger_training(self, tmp_path: Path) -> None:
+        """_maybe_trigger_training should check the model lock before spawning thread."""
+        learner, model = _make_learner(tmp_path, batch_size=2)
+        learner.record("p1", "response one long enough text")
+        learner.record("p2", "response two long enough text")
+        # The lock acquire should have been called
+        model._model_lock.acquire.assert_called()
