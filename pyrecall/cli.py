@@ -415,6 +415,157 @@ def init(
     console.print("  [bold]pyrecall status[/bold]               — view all snapshots")
 
 
+AVBL_MODELS = {
+    "llama": {
+        "description": "Meta's Llama series - powerful open models, widely used for fine-tuning",
+        "gated": True,
+        "examples": [
+            "meta-llama/Llama-3.2-1B",
+            "meta-llama/Llama-3.2-3B",
+            "meta-llama/Llama-3.1-8B",
+            "meta-llama/Llama-2-7B",
+            "meta-llama/Llama-2-13B",
+            "meta-llama/Llama-2-70B",
+        ],
+    },
+    "mistral": {
+        "description": "Mistral AI's Mistral and Mixtral models - efficient and performant",
+        "gated": True,
+        "examples": [
+            "mistralai/Mistral-7B-v0.1",
+            "mistralai/Mistral-7B-v0.2",
+            "mistralai/Mixtral-8x7B-v0.1",
+            "mistralai/Mixtral-8x22B-v0.1",
+        ],
+    },
+    "qwen": {
+        "description": "Alibaba's Qwen series - strong multilingual capabilities",
+        "gated": True,
+        "examples": [
+            "Qwen/Qwen2.5-0.5B-Instruct",
+            "Qwen/Qwen2.5-1.5B-Instruct",
+            "Qwen/Qwen2.5-7B-Instruct",
+            "Qwen/Qwen2.5-72B-Instruct",
+        ],
+    },
+    "gemma": {
+        "description": "Google's Gemma models - lightweight and efficient",
+        "gated": True,
+        "examples": [
+            "google/gemma-2b",
+            "google/gemma-2b-it",
+            "google/gemma-7b",
+            "google/gemma-7b-it",
+        ],
+    },
+    "phi": {
+        "description": "Microsoft's Phi series - small but capable models",
+        "gated": False,
+        "examples": [
+            "microsoft/phi-2",
+            "microsoft/phi-3-mini-4k-instruct",
+            "microsoft/phi-3-small-8k-instruct",
+            "microsoft/phi-3-medium-4k-instruct",
+        ],
+    },
+    "gpt2": {
+        "description": "OpenAI's GPT-2 - classic open-source model, small sizes",
+        "gated": False,
+        "examples": [
+            "gpt2",
+            "gpt2-medium",
+            "gpt2-large",
+            "gpt2-xl",
+        ],
+    },
+    "gpt-neo": {
+        "description": "EleutherAI's GPT-Neo series - open alternative to GPT-3",
+        "gated": False,
+        "examples": [
+            "EleutherAI/gpt-neo-125M",
+            "EleutherAI/gpt-neo-1.3B",
+            "EleutherAI/gpt-neo-2.7B",
+        ],
+    },
+    "gpt-j": {
+        "description": "EleutherAI's GPT-J 6B - open 6B parameter model",
+        "gated": False,
+        "examples": [
+            "EleutherAI/gptj-500M-v4",
+        ],
+    },
+    "opt": {
+        "description": "Meta's OPT series - decoder-only transformers",
+        "gated": False,
+        "examples": [
+            "facebook/opt-125m",
+            "facebook/opt-350m",
+            "facebook/opt-1.3b",
+            "facebook/opt-2.7b",
+            "facebook/opt-6.7b",
+            "facebook/opt-13b",
+        ],
+    },
+    "falcon": {
+        "description": "TII's Falcon models - trained on RefinedWeb dataset",
+        "gated": False,
+        "examples": [
+            "tii/falcon-7b",
+            "tii/falcon-7b-instruct",
+            "tii/falcon-40b",
+            "tii/falcon-180b",
+        ],
+    },
+    "mpt": {
+        "description": "MosaicML's MPT models - commercially permissive",
+        "gated": False,
+        "examples": [
+            "mosaicml/mpt-7b",
+            "mosaicml/mpt-7b-instruct",
+            "mosaicml/mpt-7b-8k-8bit",
+            "mosaicml/mpt-30b",
+        ],
+    },
+    "bloom": {
+        "description": "BigScience's BLOOM - multilingual model",
+        "gated": False,
+        "examples": [
+            "bigscience/bloom-560m",
+            "bigscience/bloom-1.1b",
+            "bigscience/bloom-1.7b",
+            "bigscience/bloom-3b",
+            "bigscience/bloom-7.1b",
+            "bigscience/bloom",
+        ],
+    },
+}
+
+
+@app.command()
+def models():
+    """List all models that are currently supported by Pyrecall"""
+    table = Table(title="Supported models")
+    table.add_column("Model", style="cyan")
+    table.add_column("Gated", style="yellow")
+    table.add_column("Description", style="green")
+    for model, info in AVBL_MODELS.items():
+        if info["gated"]:
+            gated = "Yes"
+        else:
+            gated = "No"
+        table.add_row(model, gated, info["description"])
+
+    console.print(table)
+
+    console.print("\n[bold]Examples: [/bold]\n")
+
+    for model, info in AVBL_MODELS.items():
+        console.print(f"[cyan]{model}[/cyan]")
+        for models in info["examples"]:
+            console.print(f"  • {models}")
+        console.print()
+
+
 @app.command()
 def learn(
     data: Annotated[
