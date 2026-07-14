@@ -179,7 +179,10 @@ class LiveLearner:
                     fh.write(json.dumps(entry) + "\n")
                 tmp_path = Path(fh.name)
 
-            self.model.learn(str(tmp_path), epochs=1)
+            # Acquire the model's lock so concurrent generate()/learn() calls
+            # from other threads wait until this training run finishes.
+            with self.model._model_lock:
+                self.model.learn(str(tmp_path), epochs=1)
 
             row_ids = [(row["id"],) for row in rows]
             with self._connect() as conn:
