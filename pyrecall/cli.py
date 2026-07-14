@@ -388,9 +388,7 @@ def init(
         "created_at": datetime.now().isoformat(),
         "baseline_snapshot": None,
         "target_modules": (
-            [m.strip() for m in target_modules.split(",") if m.strip()]
-            if target_modules
-            else None
+            [m.strip() for m in target_modules.split(",") if m.strip()] if target_modules else None
         ),
     }
 
