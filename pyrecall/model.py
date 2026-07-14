@@ -415,7 +415,7 @@ class Model:
             except ImportError as exc:
                 raise PyrecallError(
                     "4-bit/8-bit quantization requires bitsandbytes. "
-                    "Install it with: pip install pyrecall[quantization]"
+                    "Install it with: pip install pyrecall[qlora] (or pyrecall[quantization])"
                 ) from exc
             bnb_config = BitsAndBytesConfig(
                 load_in_4bit=load_in_4bit,

@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+from .utils import get_logger
+
 if TYPE_CHECKING:
     from .snapshot import SkillSnapshot
+
+logger = get_logger(__name__)
 
 
 @runtime_checkable
@@ -175,8 +179,8 @@ class NeptuneTracker:
         if self._training_run is not None:
             try:
                 self._training_run.stop()
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Neptune: failed to stop prior training run: %s", exc)
             self._training_run = None
 
         run = neptune.init_run(
