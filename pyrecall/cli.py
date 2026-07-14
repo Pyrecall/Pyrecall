@@ -1417,6 +1417,57 @@ def check(
 
 
 @app.command()
+def serve(
+    port: Annotated[
+        int,
+        typer.Option("--port", "-p", help="TCP port to bind"),
+    ] = 8000,
+    host: Annotated[
+        str,
+        typer.Option("--host", help="Host to bind"),
+    ] = "0.0.0.0",
+    live_learning: Annotated[
+        bool,
+        typer.Option("--live-learning", help="Enable live learning for auto fine-tuning"),
+    ] = False,
+    live_batch_size: Annotated[
+        int,
+        typer.Option("--live-batch-size", help="Interactions before triggering fine-tune"),
+    ] = 50,
+) -> None:
+    """Start a FastAPI inference server for the model."""
+    config = _read_config()
+
+    from pyrecall.model import Model, PyrecallError
+
+    try:
+        model_obj = Model(
+            config["model_name"],
+            strategy=config.get("strategy", "lora"),
+            lora_r=config.get("lora_r", 16),
+            lora_alpha=config.get("lora_alpha", 32),
+            lora_dropout=config.get("lora_dropout", 0.1),
+            learning_rate=config.get("learning_rate", 2e-4),
+            batch_size=config.get("batch_size", 4),
+            max_length=config.get("max_length", 512),
+            forgetting_threshold=config.get("forgetting_threshold", 0.10),
+            replay_buffer_size=config.get("replay_buffer_size", 500),
+            replay_mix_ratio=config.get("replay_mix_ratio", 0.3),
+            scoring_method=config.get("scoring_method", "log_likelihood"),
+            category_thresholds=config.get("category_thresholds", {}),
+        )
+    except PyrecallError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    model_obj.serve(
+        port=port,
+        live_learning=live_learning,
+        live_batch_size=live_batch_size,
+    )
+
+
+@app.command()
 def diff(
     snap1: Annotated[str, typer.Argument(help="Name of the 'before' snapshot")],
     snap2: Annotated[str, typer.Argument(help="Name of the 'after' snapshot")],
