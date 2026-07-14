@@ -306,6 +306,16 @@ def init(
             help="Benchmark scoring method: 'log_likelihood' (recommended) or 'cosine' (legacy)",
         ),
     ] = "log_likelihood",
+    target_modules: Annotated[
+        str | None,
+        typer.Option(
+            "--target-modules",
+            help=(
+                "Comma-separated module names to attach LoRA adapters to, "
+                "e.g. q_proj,v_proj,k_proj,o_proj. Overrides architecture auto-detection."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Initialise pyrecall in the current project directory."""
     errors: list[str] = []
@@ -377,6 +387,9 @@ def init(
         "benchmark_mode": "standard",
         "created_at": datetime.now().isoformat(),
         "baseline_snapshot": None,
+        "target_modules": (
+            [m.strip() for m in target_modules.split(",") if m.strip()] if target_modules else None
+        ),
     }
 
     config.update({k: v for k, v in config_values.items() if v is not None})
@@ -746,6 +759,7 @@ def learn(
             replay_mix_ratio=config.get("replay_mix_ratio", 0.3),
             scoring_method=config.get("scoring_method", "log_likelihood"),
             category_thresholds=config.get("category_thresholds", {}),
+            target_modules=config.get("target_modules"),
         )
     except PyrecallError as exc:
         console.print(f"[red]Error:[/red] {exc}")
@@ -952,6 +966,7 @@ def snapshot(
         category_thresholds=config.get("category_thresholds", {}),
         benchmark_batch_size=benchmark_batch_size,
         benchmark_mode=config.get("benchmark_mode", "standard"),
+        target_modules=config.get("target_modules"),
     )
     tracker = _build_trackers(log_wandb, log_mlflow, log_neptune, neptune_project)
 
