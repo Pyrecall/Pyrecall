@@ -294,6 +294,7 @@ class Model:
         gradient_checkpointing: bool = False,
         benchmark_batch_size: int = 8,
         benchmark_mode: str = "standard",
+        target_modules: list[str] | None = None,
     ) -> None:
         """
         Load *model_name* from HuggingFace Hub (or local cache) and wrap it with LoRA.
@@ -335,6 +336,10 @@ class Model:
                 pass during :meth:`snapshot` and :meth:`check`.  Default 8 gives a
                 4–8× speedup over the sequential path.  Set to 1 to restore the
                 old sequential behaviour.
+            target_modules: Explicit list of module names to attach LoRA adapters to,
+                e.g. ``["q_proj", "v_proj", "gate_proj"]``. Overrides pyrecall's
+                architecture-based auto-detection. Use this for architectures not
+                covered by auto-detection, or to restrict adaptation to specific layers.
         """
         if strategy not in ("lora", "qlora"):
             raise PyrecallError(
@@ -448,15 +453,16 @@ class Model:
         if bnb_config:
             base = prepare_model_for_kbit_training(base)
 
-        target_modules = self._lora_targets(model_name)
+        resolved_target_modules = target_modules or self._lora_targets(model_name)
         lora_cfg = LoraConfig(
             task_type=TaskType.CAUSAL_LM,
             r=lora_r,
             lora_alpha=lora_alpha,
             lora_dropout=lora_dropout,
-            target_modules=target_modules,
+            target_modules=resolved_target_modules,
             bias="none",
         )
+        self.target_modules = resolved_target_modules
         self.model: Any = get_peft_model(base, lora_cfg)
         if not bnb_config:
             self.model = self.model.to(self.device)
@@ -798,7 +804,6 @@ class Model:
                 batch[text_col],
                 truncation=True,
                 max_length=max_length,
-                padding="max_length",
             )
 
         tokenized = dataset.map(_tokenize, batched=True, remove_columns=dataset.column_names)
