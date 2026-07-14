@@ -924,8 +924,12 @@ def snapshot(
     Pass --dry-run to score without saving adapter weights. Faster and uses no
     extra disk space — useful for a quick sanity check before committing.
 
-    Use --compression gzip to reduce adapter storage by 40-60% (no extra deps).
-    Use --compression zstd for faster compression with similar ratios (pip install zstandard).
+    Snapshot compression (--compression) shrinks the saved LoRA adapter weights on disk:
+      - none  (default): no compression, fastest snapshot/load.
+      - gzip: reduces adapter storage by 40-60%, no extra deps.
+      - zstd: similar compression ratio to gzip but faster (pip install zstandard).
+      - lz4: fastest compression/decompression, smaller size reduction than gzip/zstd
+        (pip install lz4) — best when snapshotting frequently (e.g. --watch).
     Use --push to immediately upload the snapshot to Hugging Face Hub after saving.
 
     Use --watch to continuously monitor for checkpoint changes during training.
