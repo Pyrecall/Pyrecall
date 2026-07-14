@@ -263,6 +263,17 @@ def init(
         float,
         typer.Option("--lora-dropout", help="LoRA dropout rate"),
     ] = 0.1,
+    lora_preset: Annotated[
+        str,
+        typer.Option(
+            "--lora-preset",
+            help=(
+                "Per-layer rank/alpha preset: 'uniform' (default, applies --lora-r/"
+                "--lora-alpha to every layer) or 'qv_heavy' (higher rank on "
+                "q_proj/v_proj than k_proj/o_proj)."
+            ),
+        ),
+    ] = "uniform",
     learning_rate: Annotated[
         float,
         typer.Option("--learning-rate", help="AdamW learning rate for fine-tuning"),
@@ -353,6 +364,8 @@ def init(
         errors.append(
             f"--scoring-method must be 'log_likelihood' or 'cosine', got '{scoring_method}'"
         )
+    if lora_preset not in ("uniform", "qv_heavy"):
+        errors.append(f"--lora-preset must be 'uniform' or 'qv_heavy', got '{lora_preset}'")
     if errors:
         for msg in errors:
             console.print(f"[red]Error:[/red] {msg}")
@@ -390,6 +403,7 @@ def init(
         "target_modules": (
             [m.strip() for m in target_modules.split(",") if m.strip()] if target_modules else None
         ),
+        "lora_preset": lora_preset,
     }
 
     config.update({k: v for k, v in config_values.items() if v is not None})
@@ -760,6 +774,7 @@ def learn(
             scoring_method=config.get("scoring_method", "log_likelihood"),
             category_thresholds=config.get("category_thresholds", {}),
             target_modules=config.get("target_modules"),
+            lora_preset=config.get("lora_preset", "uniform"),
         )
     except PyrecallError as exc:
         console.print(f"[red]Error:[/red] {exc}")
@@ -971,6 +986,7 @@ def snapshot(
         benchmark_batch_size=benchmark_batch_size,
         benchmark_mode=config.get("benchmark_mode", "standard"),
         target_modules=config.get("target_modules"),
+        lora_preset=config.get("lora_preset", "uniform"),
     )
     tracker = _build_trackers(log_wandb, log_mlflow, log_neptune, neptune_project)
 
