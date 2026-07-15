@@ -341,12 +341,15 @@ class Model:
                 architecture-based auto-detection. Use this for architectures not
                 covered by auto-detection, or to restrict adaptation to specific layers.
         """
-        if strategy not in ("lora", "qlora"):
+        if strategy not in ("lora", "qlora", "full"):
             raise PyrecallError(
                 f"Unknown strategy '{strategy}'. "
                 "pyrecall supports strategy='lora' or strategy='qlora'. "
                 "Example: Model('meta-llama/Llama-3.2-1B', strategy='qlora', load_in_4bit=True)"
             )
+
+        if strategy == "full" and (load_in_4bit):
+            raise PyrecallError("strategy 'full' cannot be used with quantanized models")
 
         if scoring_method not in ("log_likelihood", "cosine"):
             raise PyrecallError(
@@ -453,15 +456,30 @@ class Model:
         if bnb_config:
             base = prepare_model_for_kbit_training(base)
 
-        resolved_target_modules = target_modules or self._lora_targets(model_name)
-        lora_cfg = LoraConfig(
-            task_type=TaskType.CAUSAL_LM,
-            r=lora_r,
-            lora_alpha=lora_alpha,
-            lora_dropout=lora_dropout,
-            target_modules=resolved_target_modules,
-            bias="none",
-        )
+        if strategy == "full":
+            self.target_modules = []
+            self.model = base
+            for p in self.model.parameters():
+                p.requires_grad = True
+        else:
+            resolved_target_modules = target_modules or self._lora_targets(model_name)
+            lora_cfg = LoraConfig(
+                task_type=TaskType.CAUSAL_LM,
+                r=lora_r,
+                lora_alpha=lora_alpha,
+                lora_dropout=lora_dropout,
+                target_modules=resolved_target_modules,
+                bias="none",
+            )
+
+        num_params = sum(p.numel() for p in base.parameters())
+
+        if strategy == "full" and num_params > 1_000_000_000:
+            console.print(
+                "[warning]Full fine-tuning is intended for smaller models. "
+                "This model has over 1B parameters. "
+                "LoRA is recommended.[/warning]"
+            )
         self.target_modules = resolved_target_modules
         self.model: Any = get_peft_model(base, lora_cfg)
         if not bnb_config:
@@ -906,6 +924,12 @@ class Model:
         streaming_cb = next((cb for cb in callbacks if isinstance(cb, _StreamingCallback)), None)
         with self._model_lock:
             self.model.train()
+            trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+            total = sum(p.numel() for p in self.model.parameters())
+            console.print(
+                f"[info]Trainable Parameters: {trainable:,}/{total:,}"
+                f"({100 * trainable / total:.2f}%)[/info]"
+            )
             try:
                 trainer.train(resume_from_checkpoint=resume_from)
             except _WatchStopSignal as exc:
@@ -1057,13 +1081,22 @@ class Model:
         from .compress import decompressed_adapter
 
         dtype = torch.float16 if self.device == "cuda" else torch.float32
-        base_model = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            dtype=dtype,
-            device_map=None if self.device != "cuda" else "auto",
-        )
-        with decompressed_adapter(snap.adapter_path, snap.adapter_compression) as adapter_dir:
-            new_model = PeftModel.from_pretrained(base_model, str(adapter_dir), is_trainable=False)
+        if self.strategy == "full":
+            new_model = AutoModelForCausalLM.from_pretrained(
+                str(snap.adapter_path),
+                torch_dtype=dtype,
+                device_map=None if self.device != "cuda" else "auto",
+            )
+        else:
+            base_model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                torch_dtype=dtype,
+                device_map=None if self.device != "cuda" else "auto",
+            )
+            with decompressed_adapter(snap.adapter_path, snap.adapter_compression) as adapter_dir:
+                new_model = PeftModel.from_pretrained(
+                    base_model, str(adapter_dir), is_trainable=False
+                )
         if self.device not in ("cuda",):
             new_model = new_model.to(self.device)
 
