@@ -1490,6 +1490,8 @@ def serve(
             replay_mix_ratio=config.get("replay_mix_ratio", 0.3),
             scoring_method=config.get("scoring_method", "log_likelihood"),
             category_thresholds=config.get("category_thresholds", {}),
+            target_modules=config.get("target_modules"),
+            lora_preset=config.get("lora_preset", "uniform"),
         )
     except PyrecallError as exc:
         console.print(f"[red]Error:[/red] {exc}")
@@ -1497,6 +1499,7 @@ def serve(
 
     model_obj.serve(
         port=port,
+        host=host,
         live_learning=live_learning,
         live_batch_size=live_batch_size,
     )
