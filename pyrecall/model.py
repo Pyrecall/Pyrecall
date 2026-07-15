@@ -1195,9 +1195,9 @@ class Model:
     def serve(
         self,
         port: int = 8000,
+        host: str = "0.0.0.0",
         live_learning: bool = False,
         live_batch_size: int = 50,
-        streaming: bool = True,
     ) -> None:
         """
         Start a FastAPI inference server.
@@ -1205,12 +1205,13 @@ class Model:
         Exposes two endpoints:
 
         * ``POST /generate`` — accepts ``{"prompt": "...", "max_new_tokens": 200}``,
-          returns ``{"response": "...", "model": "<name>"}``.
+          streams the response as Server-Sent Events (``data: {"token": ..., "done": ...}``).
         * ``GET /health`` — returns server status and, when *live_learning* is
           enabled, the count of pending training examples.
 
         Args:
             port: TCP port to bind.
+            host: Host/interface to bind.
             live_learning: When True, every inference request is stored and the
                 model is fine-tuned automatically once *live_batch_size* interactions
                 accumulate.
@@ -1259,11 +1260,6 @@ class Model:
             prompt: str
             max_new_tokens: int = 200
 
-        class GenerateResponse(_Base):
-            response: str
-            model: str
-
-        @app.post("/generate")
         async def _generate_stream(req: GenerateRequest):
 
             def event_stream():
@@ -1303,6 +1299,15 @@ class Model:
                 },
             )
 
+        # `from __future__ import annotations` makes every annotation in this module a
+        # string, including "GenerateRequest" above. FastAPI resolves string annotations
+        # via typing.get_type_hints() against the *function's* module globals — but
+        # GenerateRequest is a closure-local class, so it can't be found there, and
+        # FastAPI silently falls back to treating `req` as a bare required query param.
+        # Overwriting __annotations__ with the real class object sidesteps that lookup.
+        _generate_stream.__annotations__["req"] = GenerateRequest
+        app.add_api_route("/generate", _generate_stream, methods=["POST"])
+
         @app.get("/health")
         async def _health() -> dict[str, Any]:
             info: dict[str, Any] = {
@@ -1316,11 +1321,11 @@ class Model:
                 info["total_interactions"] = learner.total_count()
             return info
 
-        console.print(f"[success]✓ Server starting on http://0.0.0.0:{port}[/success]")
+        console.print(f"[success]✓ Server starting on http://{host}:{port}[/success]")
         console.print("[dim]  POST /generate   — run inference[/dim]")
         console.print("[dim]  GET  /health     — server status[/dim]")
 
-        uvicorn.run(app, host="0.0.0.0", port=port)
+        uvicorn.run(app, host=host, port=port)
 
     # ── hub ────────────────────────────────────────────────────────────────────
 
