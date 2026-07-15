@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import math
 import threading
 import warnings
@@ -69,6 +70,17 @@ _LORA_TARGETS: dict[str, list[str]] = {
     "gpt-j": ["q_proj", "v_proj"],
     "opt": ["q_proj", "v_proj"],
     "default": ["q_proj", "v_proj"],
+}
+
+# ── LoRA per-layer rank/alpha presets ──────────────────────────────────────────
+# Maps a preset name to (rank_pattern, alpha_pattern) dicts passed to LoraConfig.
+# "uniform" (default) applies lora_r/lora_alpha to every target module equally.
+_LORA_PRESETS: dict[str, tuple[dict[str, int], dict[str, int]]] = {
+    "uniform": ({}, {}),
+    "qv_heavy": (
+        {"q_proj": 32, "v_proj": 32, "k_proj": 8, "o_proj": 8},
+        {"q_proj": 64, "v_proj": 64, "k_proj": 16, "o_proj": 16},
+    ),
 }
 
 
@@ -295,6 +307,9 @@ class Model:
         benchmark_batch_size: int = 8,
         benchmark_mode: str = "standard",
         target_modules: list[str] | None = None,
+        lora_rank_pattern: dict[str, int] | None = None,
+        lora_alpha_pattern: dict[str, int] | None = None,
+        lora_preset: str = "uniform",
     ) -> None:
         """
         Load *model_name* from HuggingFace Hub (or local cache) and wrap it with LoRA.
@@ -340,6 +355,16 @@ class Model:
                 e.g. ``["q_proj", "v_proj", "gate_proj"]``. Overrides pyrecall's
                 architecture-based auto-detection. Use this for architectures not
                 covered by auto-detection, or to restrict adaptation to specific layers.
+            lora_rank_pattern: Per-module rank overrides, e.g. ``{"q_proj": 32,
+                "k_proj": 8}``. Modules not listed use *lora_r*. Passed straight to
+                PEFT's ``LoraConfig(rank_pattern=...)``.
+            lora_alpha_pattern: Per-module alpha overrides, same shape as
+                *lora_rank_pattern*. Modules not listed use *lora_alpha*.
+            lora_preset: Convenience shortcut for common rank/alpha patterns —
+                ``"uniform"`` (default, applies *lora_r*/*lora_alpha* to every
+                module) or ``"qv_heavy"`` (higher rank on q_proj/v_proj than
+                k_proj/o_proj). Ignored if *lora_rank_pattern* or
+                *lora_alpha_pattern* is passed explicitly.
         """
         if strategy not in ("lora", "qlora"):
             raise PyrecallError(
@@ -353,6 +378,17 @@ class Model:
                 f"Unknown scoring_method '{scoring_method}'. "
                 "Use 'log_likelihood' (recommended) or 'cosine' (legacy)."
             )
+
+        if lora_preset not in _LORA_PRESETS:
+            raise PyrecallError(
+                f"Unknown lora_preset '{lora_preset}'. Choose from: {sorted(_LORA_PRESETS)}"
+            )
+        if lora_rank_pattern is not None or lora_alpha_pattern is not None:
+            resolved_rank_pattern = lora_rank_pattern or {}
+            resolved_alpha_pattern = lora_alpha_pattern or {}
+        else:
+            resolved_rank_pattern, resolved_alpha_pattern = _LORA_PRESETS[lora_preset]
+
         self.rollback_manager = RollbackManager(model_name=model_name, base_dir=snapshot_dir)
         self.base_dir = snapshot_dir or (Path.home() / ".pyrecall")
         self._baseline_snapshot_name: str | None = None
@@ -460,9 +496,14 @@ class Model:
             lora_alpha=lora_alpha,
             lora_dropout=lora_dropout,
             target_modules=resolved_target_modules,
+            rank_pattern=resolved_rank_pattern,
+            alpha_pattern=resolved_alpha_pattern,
             bias="none",
         )
         self.target_modules = resolved_target_modules
+        self.lora_preset = lora_preset
+        self.lora_rank_pattern = resolved_rank_pattern
+        self.lora_alpha_pattern = resolved_alpha_pattern
         self.model: Any = get_peft_model(base, lora_cfg)
         if not bnb_config:
             self.model = self.model.to(self.device)
@@ -523,11 +564,17 @@ class Model:
             console.print(f"[info]Taking snapshot '{name}'…[/info]")
 
         scores = self._run_benchmarks(mode=benchmark_mode)
+        snap_tags = dict(tags or {})
+        snap_tags.setdefault("lora_preset", getattr(self, "lora_preset", "uniform"))
+        if rank_pattern := getattr(self, "lora_rank_pattern", None):
+            snap_tags.setdefault("lora_rank_pattern", json.dumps(rank_pattern))
+        if alpha_pattern := getattr(self, "lora_alpha_pattern", None):
+            snap_tags.setdefault("lora_alpha_pattern", json.dumps(alpha_pattern))
         snap = SkillSnapshot(
             name=name,
             model_name=self.model_name,
             scores=scores,
-            tags=tags or {},
+            tags=snap_tags,
             benchmark_mode=benchmark_mode,
         )
 
