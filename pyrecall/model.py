@@ -280,6 +280,8 @@ class Model:
     rollback_manager: RollbackManager
     _baseline_file: Path
     _baseline_snapshot_name: str | None
+    model: Any
+    target_modules: list[str]
 
     def __init__(
         self,
@@ -487,6 +489,9 @@ class Model:
             self.model = base
             for p in self.model.parameters():
                 p.requires_grad = True
+            self.lora_preset = lora_preset
+            self.lora_rank_pattern = resolved_rank_pattern
+            self.lora_alpha_pattern = resolved_alpha_pattern
         else:
             resolved_target_modules = target_modules or self._lora_targets(model_name)
             lora_cfg = LoraConfig(
@@ -497,6 +502,15 @@ class Model:
                 target_modules=resolved_target_modules,
                 bias="none",
             )
+            self.target_modules = resolved_target_modules
+            self.lora_preset = lora_preset
+            self.lora_rank_pattern = resolved_rank_pattern
+            self.lora_alpha_pattern = resolved_alpha_pattern
+            self.model = get_peft_model(base, lora_cfg)
+
+        if not bnb_config:
+            self.model = self.model.to(self.device)
+        self.model.eval()
 
         num_params = sum(p.numel() for p in base.parameters())
 
@@ -506,14 +520,6 @@ class Model:
                 "This model has over 1B parameters. "
                 "LoRA is recommended.[/warning]"
             )
-        self.target_modules = resolved_target_modules
-        self.lora_preset = lora_preset
-        self.lora_rank_pattern = resolved_rank_pattern
-        self.lora_alpha_pattern = resolved_alpha_pattern
-        self.model: Any = get_peft_model(base, lora_cfg)
-        if not bnb_config:
-            self.model = self.model.to(self.device)
-        self.model.eval()
         # Thread-safety lock: protects model weights from concurrent read/write
         self._model_lock = threading.RLock()
         self.detector = ForgettingDetector(
@@ -1131,13 +1137,13 @@ class Model:
             with decompressed_adapter(snap.adapter_path, snap.adapter_compression) as adapter_dir:
                 new_model = PeftModel.from_pretrained(
                     base_model, str(adapter_dir), is_trainable=False
-                )
+                )  # type: ignore[assignment]
         if self.device not in ("cuda",):
-            new_model = new_model.to(self.device)
+            new_model = new_model.to(self.device)  # type: ignore[arg-type]
 
         # ── 3. Swap — only delete old model after new one is ready ────────────────
         del self.model
-        self.model = new_model
+        self.model = new_model  # type: ignore[assignment]
         self.model.eval()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
