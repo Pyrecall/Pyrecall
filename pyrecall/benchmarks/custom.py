@@ -8,7 +8,9 @@ from pathlib import Path
 
 from .default import Benchmark
 
-_DEFAULT_BENCHMARK_DIR = Path.home() / ".pyrecall" / "benchmarks"
+def _default_benchmark_dir() -> Path:
+    # Resolved lazily so changes to HOME (e.g. in tests) take effect.
+    return Path.home() / ".pyrecall" / "benchmarks"
 
 
 def _validate_suite_name(name: str) -> str:
@@ -39,7 +41,7 @@ class CustomBenchmarkManager:
     """
 
     def __init__(self, base_dir: Path | None = None) -> None:
-        self.base_dir = base_dir or _DEFAULT_BENCHMARK_DIR
+        self.base_dir = base_dir or _default_benchmark_dir()
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
     # ── public API ─────────────────────────────────────────────────────────────
