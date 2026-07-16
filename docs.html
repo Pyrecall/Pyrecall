@@ -631,6 +631,8 @@
           <li><a href="#cli-replay">pyrecall replay</a></li>
           <li><a href="#cli-benchmark">pyrecall benchmark</a></li>
           <li><a href="#cli-delete">pyrecall delete</a></li>
+          <li><a href="#cli-serve">pyrecall serve</a></li>
+          <li><a href="#cli-models">pyrecall models</a></li>
         </ul>
       </div>
 
@@ -1010,9 +1012,10 @@
         </p>
 
         <!-- serve -->
-        <h3 id="model-serve">model.serve(port, live_learning, live_batch_size)</h3>
+        <h3 id="model-serve">model.serve(port, host, live_learning, live_batch_size)</h3>
         <div class="method-sig">model.serve(
     port: int = 8000,
+    host: str = "0.0.0.0",
     live_learning: bool = False,
     live_batch_size: int = 50,
 ) → None</div>
@@ -1021,7 +1024,7 @@
           Two endpoints are exposed:
         </p>
         <ul>
-          <li><code>POST /generate</code> — body: <code>{"prompt": "...", "max_new_tokens": 200}</code>, returns <code>{"response": "...", "model": "..."}</code></li>
+          <li><code>POST /generate</code> — body: <code>{"prompt": "...", "max_new_tokens": 200}</code>, streams the response as Server-Sent Events: a <code>data: {"token": "...", "model": "...", "done": false}</code> line per token, followed by a final line with <code>"done": true</code>.</li>
           <li><code>GET /health</code> — returns server status, model name, device, and (when live learning is enabled) pending interaction count.</li>
         </ul>
         <p>
@@ -1434,6 +1437,41 @@
         </div>
         <div class="callout callout-warn">
           <strong>Warning:</strong> Deletion is permanent. The adapter weights cannot be recovered once deleted.
+        </div>
+
+        <!-- serve -->
+        <h3 id="cli-serve">pyrecall serve <span class="badge badge-new">new</span></h3>
+        <p>
+          Start a FastAPI inference server for the project's model. Blocks until the
+          process is killed. See <a href="#model-serve" style="color:var(--accent);">model.serve()</a>
+          for the endpoint contract.
+        </p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall serve</span><span class="comment"> &nbsp;# binds 0.0.0.0:8000</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall serve --port 9000 --host 127.0.0.1</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall serve --live-learning --live-batch-size 100</span></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td>--port, -p</td><td>8000</td><td>TCP port to bind.</td></tr>
+              <tr><td>--host</td><td>0.0.0.0</td><td>Host/interface to bind.</td></tr>
+              <tr><td>--live-learning</td><td>False</td><td>Collect requests and auto fine-tune once <code>--live-batch-size</code> interactions accumulate.</td></tr>
+              <tr><td>--live-batch-size</td><td>50</td><td>Interactions before triggering a live fine-tune run. Only used with <code>--live-learning</code>.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- models -->
+        <h3 id="cli-models">pyrecall models <span class="badge badge-new">new</span></h3>
+        <p>
+          List HuggingFace models pyrecall has architecture-based LoRA target-module
+          detection for, flagging which ones are gated (require accepting a license /
+          <code>huggingface-cli login</code>) versus freely downloadable.
+        </p>
+        <div class="cli-block">
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall models</span></div>
         </div>
 
       </div>
