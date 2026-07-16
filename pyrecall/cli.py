@@ -467,7 +467,7 @@ AVBL_MODELS = {
     },
     "qwen": {
         "description": "Alibaba's Qwen series - strong multilingual capabilities",
-        "gated": True,
+        "gated": False,
         "examples": [
             "Qwen/Qwen2.5-0.5B-Instruct",
             "Qwen/Qwen2.5-1.5B-Instruct",
@@ -518,7 +518,7 @@ AVBL_MODELS = {
         "description": "EleutherAI's GPT-J 6B - open 6B parameter model",
         "gated": False,
         "examples": [
-            "EleutherAI/gptj-500M-v4",
+            "EleutherAI/gpt-j-6b",
         ],
     },
     "opt": {
@@ -537,10 +537,10 @@ AVBL_MODELS = {
         "description": "TII's Falcon models - trained on RefinedWeb dataset",
         "gated": False,
         "examples": [
-            "tii/falcon-7b",
-            "tii/falcon-7b-instruct",
-            "tii/falcon-40b",
-            "tii/falcon-180b",
+            "tiiuae/falcon-7b",
+            "tiiuae/falcon-7b-instruct",
+            "tiiuae/falcon-40b",
+            "tiiuae/falcon-180B",
         ],
     },
     "mpt": {
@@ -549,7 +549,7 @@ AVBL_MODELS = {
         "examples": [
             "mosaicml/mpt-7b",
             "mosaicml/mpt-7b-instruct",
-            "mosaicml/mpt-7b-8k-8bit",
+            "mosaicml/mpt-7b-8k",
             "mosaicml/mpt-30b",
         ],
     },
@@ -558,10 +558,10 @@ AVBL_MODELS = {
         "gated": False,
         "examples": [
             "bigscience/bloom-560m",
-            "bigscience/bloom-1.1b",
-            "bigscience/bloom-1.7b",
+            "bigscience/bloom-1b1",
+            "bigscience/bloom-1b7",
             "bigscience/bloom-3b",
-            "bigscience/bloom-7.1b",
+            "bigscience/bloom-7b1",
             "bigscience/bloom",
         ],
     },
