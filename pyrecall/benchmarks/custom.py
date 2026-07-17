@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .default import Benchmark
 
+
 def _default_benchmark_dir() -> Path:
     # Resolved lazily so changes to HOME (e.g. in tests) take effect.
     return Path.home() / ".pyrecall" / "benchmarks"
