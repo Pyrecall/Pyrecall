@@ -137,7 +137,7 @@ class TestModelInit:
             from pyrecall.model import Model, PyrecallError
 
             with pytest.raises(PyrecallError, match="strategy"):
-                Model("test/model", strategy="full", snapshot_dir=tmp_snapshot_dir)
+                Model("test/model", strategy="invalid", snapshot_dir=tmp_snapshot_dir)
 
     def test_pad_token_set_when_missing(self, patched_model) -> None:
         # Tokenizer pad_token was None; should have been set to eos_token.
@@ -542,7 +542,7 @@ class TestQLoRA:
             from pyrecall.model import Model, PyrecallError
 
             with pytest.raises(PyrecallError, match="strategy"):
-                Model("test/model", strategy="full", snapshot_dir=tmp_snapshot_dir)
+                Model("test/model", strategy="invalid", snapshot_dir=tmp_snapshot_dir)
 
 
 class TestResumeTraining:

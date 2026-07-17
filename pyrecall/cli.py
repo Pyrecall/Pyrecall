@@ -263,6 +263,17 @@ def init(
         float,
         typer.Option("--lora-dropout", help="LoRA dropout rate"),
     ] = 0.1,
+    lora_preset: Annotated[
+        str,
+        typer.Option(
+            "--lora-preset",
+            help=(
+                "Per-layer rank/alpha preset: 'uniform' (default, applies --lora-r/"
+                "--lora-alpha to every layer) or 'qv_heavy' (higher rank on "
+                "q_proj/v_proj than k_proj/o_proj)."
+            ),
+        ),
+    ] = "uniform",
     learning_rate: Annotated[
         float,
         typer.Option("--learning-rate", help="AdamW learning rate for fine-tuning"),
@@ -353,6 +364,8 @@ def init(
         errors.append(
             f"--scoring-method must be 'log_likelihood' or 'cosine', got '{scoring_method}'"
         )
+    if lora_preset not in ("uniform", "qv_heavy"):
+        errors.append(f"--lora-preset must be 'uniform' or 'qv_heavy', got '{lora_preset}'")
     if errors:
         for msg in errors:
             console.print(f"[red]Error:[/red] {msg}")
@@ -390,6 +403,7 @@ def init(
         "target_modules": (
             [m.strip() for m in target_modules.split(",") if m.strip()] if target_modules else None
         ),
+        "lora_preset": lora_preset,
     }
 
     config.update({k: v for k, v in config_values.items() if v is not None})
@@ -453,7 +467,7 @@ AVBL_MODELS = {
     },
     "qwen": {
         "description": "Alibaba's Qwen series - strong multilingual capabilities",
-        "gated": True,
+        "gated": False,
         "examples": [
             "Qwen/Qwen2.5-0.5B-Instruct",
             "Qwen/Qwen2.5-1.5B-Instruct",
@@ -504,7 +518,7 @@ AVBL_MODELS = {
         "description": "EleutherAI's GPT-J 6B - open 6B parameter model",
         "gated": False,
         "examples": [
-            "EleutherAI/gptj-500M-v4",
+            "EleutherAI/gpt-j-6b",
         ],
     },
     "opt": {
@@ -523,10 +537,10 @@ AVBL_MODELS = {
         "description": "TII's Falcon models - trained on RefinedWeb dataset",
         "gated": False,
         "examples": [
-            "tii/falcon-7b",
-            "tii/falcon-7b-instruct",
-            "tii/falcon-40b",
-            "tii/falcon-180b",
+            "tiiuae/falcon-7b",
+            "tiiuae/falcon-7b-instruct",
+            "tiiuae/falcon-40b",
+            "tiiuae/falcon-180B",
         ],
     },
     "mpt": {
@@ -535,7 +549,7 @@ AVBL_MODELS = {
         "examples": [
             "mosaicml/mpt-7b",
             "mosaicml/mpt-7b-instruct",
-            "mosaicml/mpt-7b-8k-8bit",
+            "mosaicml/mpt-7b-8k",
             "mosaicml/mpt-30b",
         ],
     },
@@ -544,10 +558,10 @@ AVBL_MODELS = {
         "gated": False,
         "examples": [
             "bigscience/bloom-560m",
-            "bigscience/bloom-1.1b",
-            "bigscience/bloom-1.7b",
+            "bigscience/bloom-1b1",
+            "bigscience/bloom-1b7",
             "bigscience/bloom-3b",
-            "bigscience/bloom-7.1b",
+            "bigscience/bloom-7b1",
             "bigscience/bloom",
         ],
     },
@@ -760,6 +774,7 @@ def learn(
             scoring_method=config.get("scoring_method", "log_likelihood"),
             category_thresholds=config.get("category_thresholds", {}),
             target_modules=config.get("target_modules"),
+            lora_preset=config.get("lora_preset", "uniform"),
         )
     except PyrecallError as exc:
         console.print(f"[red]Error:[/red] {exc}")
@@ -924,8 +939,12 @@ def snapshot(
     Pass --dry-run to score without saving adapter weights. Faster and uses no
     extra disk space — useful for a quick sanity check before committing.
 
-    Use --compression gzip to reduce adapter storage by 40-60% (no extra deps).
-    Use --compression zstd for faster compression with similar ratios (pip install zstandard).
+    Snapshot compression (--compression) shrinks the saved LoRA adapter weights on disk:
+      - none  (default): no compression, fastest snapshot/load.
+      - gzip: reduces adapter storage by 40-60%, no extra deps.
+      - zstd: similar compression ratio to gzip but faster (pip install zstandard).
+      - lz4: fastest compression/decompression, smaller size reduction than gzip/zstd
+        (pip install lz4) — best when snapshotting frequently (e.g. --watch).
     Use --push to immediately upload the snapshot to Hugging Face Hub after saving.
 
     Use --watch to continuously monitor for checkpoint changes during training.
@@ -967,6 +986,7 @@ def snapshot(
         benchmark_batch_size=benchmark_batch_size,
         benchmark_mode=config.get("benchmark_mode", "standard"),
         target_modules=config.get("target_modules"),
+        lora_preset=config.get("lora_preset", "uniform"),
     )
     tracker = _build_trackers(log_wandb, log_mlflow, log_neptune, neptune_project)
 
@@ -1458,7 +1478,7 @@ def serve(
     try:
         model_obj = Model(
             config["model_name"],
-            strategy=config.get("strategy", "lora"),
+            strategy=config.get("strategy", "lora", "full"),
             lora_r=config.get("lora_r", 16),
             lora_alpha=config.get("lora_alpha", 32),
             lora_dropout=config.get("lora_dropout", 0.1),
@@ -1470,6 +1490,8 @@ def serve(
             replay_mix_ratio=config.get("replay_mix_ratio", 0.3),
             scoring_method=config.get("scoring_method", "log_likelihood"),
             category_thresholds=config.get("category_thresholds", {}),
+            target_modules=config.get("target_modules"),
+            lora_preset=config.get("lora_preset", "uniform"),
         )
     except PyrecallError as exc:
         console.print(f"[red]Error:[/red] {exc}")
@@ -1477,6 +1499,7 @@ def serve(
 
     model_obj.serve(
         port=port,
+        host=host,
         live_learning=live_learning,
         live_batch_size=live_batch_size,
     )

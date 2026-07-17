@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import math
 import threading
 import warnings
@@ -25,6 +26,10 @@ from rich.progress import (
 )
 from transformers import (
     AutoModelForCausalLM,
+    LlavaForConditionalGeneration,
+    Qwen2VLForConditionalGeneration,
+    AutoProcessor,
+    AutoConfig,
     AutoTokenizer,
     BitsAndBytesConfig,
     DataCollatorForLanguageModeling,
@@ -69,6 +74,22 @@ _LORA_TARGETS: dict[str, list[str]] = {
     "gpt-j": ["q_proj", "v_proj"],
     "opt": ["q_proj", "v_proj"],
     "default": ["q_proj", "v_proj"],
+}
+
+VLM_MODELS = {
+    'llava',
+    'qwen2_vl'
+}
+
+# ── LoRA per-layer rank/alpha presets ──────────────────────────────────────────
+# Maps a preset name to (rank_pattern, alpha_pattern) dicts passed to LoraConfig.
+# "uniform" (default) applies lora_r/lora_alpha to every target module equally.
+_LORA_PRESETS: dict[str, tuple[dict[str, int], dict[str, int]]] = {
+    "uniform": ({}, {}),
+    "qv_heavy": (
+        {"q_proj": 32, "v_proj": 32, "k_proj": 8, "o_proj": 8},
+        {"q_proj": 64, "v_proj": 64, "k_proj": 16, "o_proj": 16},
+    ),
 }
 
 
@@ -295,6 +316,9 @@ class Model:
         benchmark_batch_size: int = 8,
         benchmark_mode: str = "standard",
         target_modules: list[str] | None = None,
+        lora_rank_pattern: dict[str, int] | None = None,
+        lora_alpha_pattern: dict[str, int] | None = None,
+        lora_preset: str = "uniform",
     ) -> None:
         """
         Load *model_name* from HuggingFace Hub (or local cache) and wrap it with LoRA.
@@ -340,8 +364,18 @@ class Model:
                 e.g. ``["q_proj", "v_proj", "gate_proj"]``. Overrides pyrecall's
                 architecture-based auto-detection. Use this for architectures not
                 covered by auto-detection, or to restrict adaptation to specific layers.
+            lora_rank_pattern: Per-module rank overrides, e.g. ``{"q_proj": 32,
+                "k_proj": 8}``. Modules not listed use *lora_r*. Passed straight to
+                PEFT's ``LoraConfig(rank_pattern=...)``.
+            lora_alpha_pattern: Per-module alpha overrides, same shape as
+                *lora_rank_pattern*. Modules not listed use *lora_alpha*.
+            lora_preset: Convenience shortcut for common rank/alpha patterns —
+                ``"uniform"`` (default, applies *lora_r*/*lora_alpha* to every
+                module) or ``"qv_heavy"`` (higher rank on q_proj/v_proj than
+                k_proj/o_proj). Ignored if *lora_rank_pattern* or
+                *lora_alpha_pattern* is passed explicitly.
         """
-        if strategy not in ("lora", "qlora", "full"):
+        if strategy not in ("lora", "qlora"):
             raise PyrecallError(
                 f"Unknown strategy '{strategy}'. "
                 "pyrecall supports strategy='lora' or strategy='qlora'. "
@@ -356,6 +390,17 @@ class Model:
                 f"Unknown scoring_method '{scoring_method}'. "
                 "Use 'log_likelihood' (recommended) or 'cosine' (legacy)."
             )
+
+        if lora_preset not in _LORA_PRESETS:
+            raise PyrecallError(
+                f"Unknown lora_preset '{lora_preset}'. Choose from: {sorted(_LORA_PRESETS)}"
+            )
+        if lora_rank_pattern is not None or lora_alpha_pattern is not None:
+            resolved_rank_pattern = lora_rank_pattern or {}
+            resolved_alpha_pattern = lora_alpha_pattern or {}
+        else:
+            resolved_rank_pattern, resolved_alpha_pattern = _LORA_PRESETS[lora_preset]
+
         self.rollback_manager = RollbackManager(model_name=model_name, base_dir=snapshot_dir)
         self.base_dir = snapshot_dir or (Path.home() / ".pyrecall")
         self._baseline_snapshot_name: str | None = None
@@ -389,98 +434,99 @@ class Model:
             if replay_buffer_size > 0
             else None
         )
+        config = AutoConfig.from_pretrained(model_name)
+        self.is_vlm = config.model_type in VLM_MODELS
 
         console.print(f"[info]Loading {model_name} on {self.device}…[/info]")
 
-        try:
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        except OSError as exc:
-            msg = str(exc)
-            if "401" in msg or "gated" in msg.lower() or "access" in msg.lower():
-                raise PyrecallError(
-                    f"Access to '{model_name}' is restricted on Hugging Face.\n\n"
-                    "To fix this:\n"
-                    "  1. Accept the model license at https://huggingface.co/" + model_name + "\n"
-                    "  2. Log in:  huggingface-cli login\n"
-                    "     or set:  export HF_TOKEN=<your_token>"
-                ) from exc
-            raise
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
 
-        # QLoRA: quantize base weights, keep adapters in float16.
-        # strategy="qlora" implies 4-bit unless the caller explicitly requested 8-bit.
-        if strategy == "qlora" and not load_in_4bit and not load_in_8bit:
-            load_in_4bit = True
+        if self.is_vlm:
+            self.processor = AutoProcessor.from_pretrained(model_name)
 
-        bnb_config = None
-        if load_in_4bit or load_in_8bit:
-            if load_in_4bit and load_in_8bit:
-                raise PyrecallError("Cannot use load_in_4bit and load_in_8bit together.")
-            try:
-                from bitsandbytes import __version__  # noqa: F401
-            except ImportError as exc:
-                raise PyrecallError(
-                    "4-bit/8-bit quantization requires bitsandbytes. "
-                    "Install it with: pip install pyrecall[qlora] (or pyrecall[quantization])"
-                ) from exc
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=load_in_4bit,
-                load_in_8bit=load_in_8bit,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_use_double_quant=True,
-            )
+            if config.model_type == 'llava':
+                base = LlavaForConditionalGeneration.from_pretrained(...)
+            if config.model_type == "qwen2_vl":
+                base = LlavaForConditionalGeneration.from_pretrained(...)
+            else:
+                try:
+                    self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+                except OSError as exc:
+                    msg = str(exc)
+                    if "401" in msg or "gated" in msg.lower() or "access" in msg.lower():
+                        raise PyrecallError(
+                            f"Access to '{model_name}' is restricted on Hugging Face.\n\n"
+                            "To fix this:\n"
+                            "  1. Accept the model license at https://huggingface.co/" + model_name + "\n"
+                            "  2. Log in:  huggingface-cli login\n"
+                            "     or set:  export HF_TOKEN=<your_token>"
+                        ) from exc
+                    raise
+                if self.tokenizer.pad_token is None:
+                    self.tokenizer.pad_token = self.tokenizer.eos_token
+                    self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
 
-        dtype = torch.float16 if self.device != "cpu" else torch.float32
-        try:
-            base = AutoModelForCausalLM.from_pretrained(
-                model_name,
-                dtype=dtype,
-                quantization_config=bnb_config,
-                device_map="auto" if bnb_config else None,
-            )
-        except OSError as exc:
-            msg = str(exc)
-            if "401" in msg or "gated" in msg.lower() or "access" in msg.lower():
-                raise PyrecallError(
-                    f"Access to '{model_name}' is restricted on Hugging Face.\n\n"
-                    "To fix this:\n"
-                    "  1. Accept the model license at https://huggingface.co/" + model_name + "\n"
-                    "  2. Log in:  huggingface-cli login\n"
-                    "     or set:  export HF_TOKEN=<your_token>"
-                ) from exc
-            raise
+                # QLoRA: quantize base weights, keep adapters in float16.
+                # strategy="qlora" implies 4-bit unless the caller explicitly requested 8-bit.
+                if strategy == "qlora" and not load_in_4bit and not load_in_8bit:
+                    load_in_4bit = True
+
+                bnb_config = None
+                if load_in_4bit or load_in_8bit:
+                    if load_in_4bit and load_in_8bit:
+                        raise PyrecallError("Cannot use load_in_4bit and load_in_8bit together.")
+                    try:
+                        from bitsandbytes import __version__  # noqa: F401
+                    except ImportError as exc:
+                        raise PyrecallError(
+                            "4-bit/8-bit quantization requires bitsandbytes. "
+                            "Install it with: pip install pyrecall[qlora] (or pyrecall[quantization])"
+                        ) from exc
+                    bnb_config = BitsAndBytesConfig(
+                        load_in_4bit=load_in_4bit,
+                        load_in_8bit=load_in_8bit,
+                        bnb_4bit_quant_type="nf4",
+                        bnb_4bit_compute_dtype=torch.float16,
+                        bnb_4bit_use_double_quant=True,
+                    )
+
+                dtype = torch.float16 if self.device != "cpu" else torch.float32
+                try:
+                    base = AutoModelForCausalLM.from_pretrained(
+                        model_name,
+                        dtype=dtype,
+                        quantization_config=bnb_config,
+                        device_map="auto" if bnb_config else None,
+                    )
+                except OSError as exc:
+                    msg = str(exc)
+                    if "401" in msg or "gated" in msg.lower() or "access" in msg.lower():
+                        raise PyrecallError(
+                            f"Access to '{model_name}' is restricted on Hugging Face.\n\n"
+                            "To fix this:\n"
+                            "  1. Accept the model license at https://huggingface.co/" + model_name + "\n"
+                            "  2. Log in:  huggingface-cli login\n"
+                            "     or set:  export HF_TOKEN=<your_token>"
+                        ) from exc
+                    raise
 
         if bnb_config:
             base = prepare_model_for_kbit_training(base)
 
-        if strategy == "full":
-            self.target_modules = []
-            self.model = base
-            for p in self.model.parameters():
-                p.requires_grad = True
-        else:
-            resolved_target_modules = target_modules or self._lora_targets(model_name)
-            lora_cfg = LoraConfig(
-                task_type=TaskType.CAUSAL_LM,
-                r=lora_r,
-                lora_alpha=lora_alpha,
-                lora_dropout=lora_dropout,
-                target_modules=resolved_target_modules,
-                bias="none",
-            )
-
-        num_params = sum(p.numel() for p in base.parameters())
-
-        if strategy == "full" and num_params > 1_000_000_000:
-            console.print(
-                "[warning]Full fine-tuning is intended for smaller models. "
-                "This model has over 1B parameters. "
-                "LoRA is recommended.[/warning]"
-            )
+        resolved_target_modules = target_modules or self._lora_targets(model_name)
+        lora_cfg = LoraConfig(
+            task_type=TaskType.CAUSAL_LM,
+            r=lora_r,
+            lora_alpha=lora_alpha,
+            lora_dropout=lora_dropout,
+            target_modules=resolved_target_modules,
+            rank_pattern=resolved_rank_pattern,
+            alpha_pattern=resolved_alpha_pattern,
+            bias="none",
+        )
         self.target_modules = resolved_target_modules
+        self.lora_preset = lora_preset
+        self.lora_rank_pattern = resolved_rank_pattern
+        self.lora_alpha_pattern = resolved_alpha_pattern
         self.model: Any = get_peft_model(base, lora_cfg)
         if not bnb_config:
             self.model = self.model.to(self.device)
@@ -541,11 +587,17 @@ class Model:
             console.print(f"[info]Taking snapshot '{name}'…[/info]")
 
         scores = self._run_benchmarks(mode=benchmark_mode)
+        snap_tags = dict(tags or {})
+        snap_tags.setdefault("lora_preset", getattr(self, "lora_preset", "uniform"))
+        if rank_pattern := getattr(self, "lora_rank_pattern", None):
+            snap_tags.setdefault("lora_rank_pattern", json.dumps(rank_pattern))
+        if alpha_pattern := getattr(self, "lora_alpha_pattern", None):
+            snap_tags.setdefault("lora_alpha_pattern", json.dumps(alpha_pattern))
         snap = SkillSnapshot(
             name=name,
             model_name=self.model_name,
             scores=scores,
-            tags=tags or {},
+            tags=snap_tags,
             benchmark_mode=benchmark_mode,
         )
 
@@ -1123,24 +1175,31 @@ class Model:
         Returns:
             The generated text (only the new tokens, not the prompt itself).
         """
-        with self._model_lock:
+        if self.is_vlm:
             inputs = self.tokenizer(
-                prompt,
+                text=prompt,
+                images=image,
                 return_tensors="pt",
-                truncation=True,
-                max_length=self.max_length,
-            ).to(self.device)
+            )
+        else:
+            with self._model_lock:
+                inputs = self.tokenizer(
+                    prompt,
+                    return_tensors="pt",
+                    truncation=True,
+                    max_length=self.max_length,
+                ).to(self.device)
 
-            with torch.no_grad():
-                output_ids = self.model.generate(
-                    **inputs,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    pad_token_id=self.tokenizer.eos_token_id,
-                )
+                with torch.no_grad():
+                    output_ids = self.model.generate(
+                        **inputs,
+                        max_new_tokens=max_new_tokens,
+                        do_sample=False,
+                        pad_token_id=self.tokenizer.eos_token_id,
+                    )
 
-            new_tokens = output_ids[0][inputs["input_ids"].shape[1] :]
-            return self.tokenizer.decode(new_tokens, skip_special_tokens=True)  # type: ignore[return-value]
+                new_tokens = output_ids[0][inputs["input_ids"].shape[1] :]
+                return self.tokenizer.decode(new_tokens, skip_special_tokens=True)  # type: ignore[return-value]
 
     def generate_stream(
         self,
@@ -1181,9 +1240,9 @@ class Model:
     def serve(
         self,
         port: int = 8000,
+        host: str = "0.0.0.0",
         live_learning: bool = False,
         live_batch_size: int = 50,
-        streaming: bool = True,
     ) -> None:
         """
         Start a FastAPI inference server.
@@ -1191,12 +1250,13 @@ class Model:
         Exposes two endpoints:
 
         * ``POST /generate`` — accepts ``{"prompt": "...", "max_new_tokens": 200}``,
-          returns ``{"response": "...", "model": "<name>"}``.
+          streams the response as Server-Sent Events (``data: {"token": ..., "done": ...}``).
         * ``GET /health`` — returns server status and, when *live_learning* is
           enabled, the count of pending training examples.
 
         Args:
             port: TCP port to bind.
+            host: Host/interface to bind.
             live_learning: When True, every inference request is stored and the
                 model is fine-tuned automatically once *live_batch_size* interactions
                 accumulate.
@@ -1245,11 +1305,6 @@ class Model:
             prompt: str
             max_new_tokens: int = 200
 
-        class GenerateResponse(_Base):
-            response: str
-            model: str
-
-        @app.post("/generate")
         async def _generate_stream(req: GenerateRequest):
 
             def event_stream():
@@ -1289,6 +1344,15 @@ class Model:
                 },
             )
 
+        # `from __future__ import annotations` makes every annotation in this module a
+        # string, including "GenerateRequest" above. FastAPI resolves string annotations
+        # via typing.get_type_hints() against the *function's* module globals — but
+        # GenerateRequest is a closure-local class, so it can't be found there, and
+        # FastAPI silently falls back to treating `req` as a bare required query param.
+        # Overwriting __annotations__ with the real class object sidesteps that lookup.
+        _generate_stream.__annotations__["req"] = GenerateRequest
+        app.add_api_route("/generate", _generate_stream, methods=["POST"])
+
         @app.get("/health")
         async def _health() -> dict[str, Any]:
             info: dict[str, Any] = {
@@ -1302,11 +1366,11 @@ class Model:
                 info["total_interactions"] = learner.total_count()
             return info
 
-        console.print(f"[success]✓ Server starting on http://0.0.0.0:{port}[/success]")
+        console.print(f"[success]✓ Server starting on http://{host}:{port}[/success]")
         console.print("[dim]  POST /generate   — run inference[/dim]")
         console.print("[dim]  GET  /health     — server status[/dim]")
 
-        uvicorn.run(app, host="0.0.0.0", port=port)
+        uvicorn.run(app, host=host, port=port)
 
     # ── hub ────────────────────────────────────────────────────────────────────
 
