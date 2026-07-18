@@ -1137,6 +1137,7 @@ class Model:
 
         dtype = torch.float16 if self.device == "cuda" else torch.float32
         snap_strategy = snap.tags.get("strategy", self.strategy)
+        new_model: Any
         if snap_strategy == "full":
             # Full snapshots store the complete model, not an adapter.
             with decompressed_adapter(snap.adapter_path, snap.adapter_compression) as weights_dir:
