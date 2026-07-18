@@ -249,7 +249,7 @@ def init(
     ] = "Qwen/Qwen2.5-1.5b-Instruct",
     strategy: Annotated[
         str,
-        typer.Option("--strategy", "-s", help="Fine-tuning strategy: 'lora' or 'qlora'"),
+        typer.Option("--strategy", "-s", help="Fine-tuning strategy: 'lora', 'qlora', or 'full'"),
     ] = "lora",
     lora_r: Annotated[
         int,
@@ -334,8 +334,8 @@ def init(
         errors.append(
             f"--model must be a HuggingFace model ID (e.g. 'Qwen/Qwen2.5-1.5b-Instruct'), got '{model}'"
         )
-    if strategy not in ("lora", "qlora"):
-        errors.append(f"--strategy must be 'lora' or 'qlora', got '{strategy}'")
+    if strategy not in ("lora", "qlora", "full"):
+        errors.append(f"--strategy must be 'lora', 'qlora', or 'full', got '{strategy}'")
     if lora_r < 1:
         errors.append(f"--lora-r must be >= 1, got {lora_r}")
     if not 0.0 <= lora_dropout < 1.0:
@@ -414,8 +414,10 @@ def init(
     _final_threshold: float = float(_ft) if isinstance(_ft, (int, float)) else threshold
     if not 0.0 < _final_threshold <= 1.0:
         config_errors.append(f"forgetting_threshold must be > 0 and <= 1, got {_final_threshold}")
-    if config.get("strategy") not in ("lora", "qlora"):
-        config_errors.append(f"strategy must be 'lora' or 'qlora', got '{config.get('strategy')}'")
+    if config.get("strategy") not in ("lora", "qlora", "full"):
+        config_errors.append(
+            f"strategy must be 'lora', 'qlora', or 'full', got '{config.get('strategy')}'"
+        )
     if config.get("scoring_method") not in ("log_likelihood", "cosine"):
         config_errors.append(
             f"scoring_method must be 'log_likelihood' or 'cosine', got '{config.get('scoring_method')}'"
@@ -608,7 +610,9 @@ def learn(
     strategy: Annotated[
         str | None,
         typer.Option(
-            "--strategy", "-s", help="Override fine-tuning strategy from config: 'lora' or 'qlora'"
+            "--strategy",
+            "-s",
+            help="Override fine-tuning strategy from config: 'lora', 'qlora', or 'full'",
         ),
     ] = None,
     batch_size: Annotated[
@@ -750,9 +754,10 @@ def learn(
 
     # Validate the effective strategy (CLI override or config value)
     effective_strategy = strategy or config.get("strategy", "lora")
-    if effective_strategy not in ("lora", "qlora"):
+    if effective_strategy not in ("lora", "qlora", "full"):
         console.print(
-            f"[red]Error:[/red] strategy must be 'lora' or 'qlora', got '{effective_strategy}'"
+            f"[red]Error:[/red] strategy must be 'lora', 'qlora', or 'full', "
+            f"got '{effective_strategy}'"
         )
         raise typer.Exit(1)
 

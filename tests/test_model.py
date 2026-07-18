@@ -137,7 +137,7 @@ class TestModelInit:
             from pyrecall.model import Model, PyrecallError
 
             with pytest.raises(PyrecallError, match="strategy"):
-                Model("test/model", strategy="full", snapshot_dir=tmp_snapshot_dir)
+                Model("test/model", strategy="bogus", snapshot_dir=tmp_snapshot_dir)
 
     def test_pad_token_set_when_missing(self, patched_model) -> None:
         # Tokenizer pad_token was None; should have been set to eos_token.
@@ -542,7 +542,84 @@ class TestQLoRA:
             from pyrecall.model import Model, PyrecallError
 
             with pytest.raises(PyrecallError, match="strategy"):
-                Model("test/model", strategy="full", snapshot_dir=tmp_snapshot_dir)
+                Model("test/model", strategy="bogus", snapshot_dir=tmp_snapshot_dir)
+
+
+class TestFullStrategy:
+    def _load(self, tmp_snapshot_dir: Path, **kwargs):
+        mock_tok = _make_mock_tokenizer()
+        mock_base = _make_mock_base_model()
+        mock_base.to.return_value = mock_base
+        mock_base.parameters.return_value = [torch.nn.Parameter(torch.randn(10, 10))]
+
+        with (
+            patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
+            patch("pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
+            patch("pyrecall.model.get_peft_model") as mock_peft_wrap,
+        ):
+            from pyrecall.model import Model
+
+            m = Model("test/model", strategy="full", snapshot_dir=tmp_snapshot_dir, **kwargs)
+        return m, mock_base, mock_peft_wrap
+
+    def test_full_strategy_accepted_without_peft_wrapping(self, tmp_snapshot_dir: Path) -> None:
+        m, mock_base, mock_peft_wrap = self._load(tmp_snapshot_dir)
+        assert m.strategy == "full"
+        assert m.model is mock_base
+        mock_peft_wrap.assert_not_called()
+
+    def test_full_strategy_all_params_trainable(self, tmp_snapshot_dir: Path) -> None:
+        m, mock_base, _ = self._load(tmp_snapshot_dir)
+        assert all(p.requires_grad for p in mock_base.parameters())
+
+    def test_full_strategy_with_4bit_raises(self, tmp_snapshot_dir: Path) -> None:
+        from pyrecall.model import PyrecallError
+
+        with pytest.raises(PyrecallError, match="quantiz"):
+            self._load(tmp_snapshot_dir, load_in_4bit=True)
+
+    def test_full_strategy_with_8bit_raises(self, tmp_snapshot_dir: Path) -> None:
+        from pyrecall.model import PyrecallError
+
+        with pytest.raises(PyrecallError, match="quantiz"):
+            self._load(tmp_snapshot_dir, load_in_8bit=True)
+
+    def test_snapshot_tagged_with_full_strategy(self, tmp_snapshot_dir: Path) -> None:
+        m, mock_base, _ = self._load(tmp_snapshot_dir)
+        mock_base.save_pretrained = MagicMock()
+        with (
+            patch("pyrecall.model.compute_log_likelihood_batch", return_value=[0.5]),
+            patch.object(type(m), "generate", return_value="ok"),
+        ):
+            snap = m.snapshot("full_snap", benchmark_mode="fast")
+        assert snap.tags["strategy"] == "full"
+        assert "lora_preset" not in snap.tags
+
+    def test_rollback_full_snapshot_loads_whole_model(self, tmp_snapshot_dir: Path) -> None:
+        m, mock_base, _ = self._load(tmp_snapshot_dir)
+        mock_base.save_pretrained = MagicMock(
+            side_effect=lambda d: (Path(d) / "model.safetensors").write_bytes(b"w")
+        )
+        with (
+            patch("pyrecall.model.compute_log_likelihood_batch", return_value=[0.5]),
+            patch.object(type(m), "generate", return_value="ok"),
+        ):
+            m.snapshot("full_v1", benchmark_mode="fast")
+
+        restored = MagicMock()
+        restored.to.return_value = restored
+        with (
+            patch(
+                "pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=restored
+            ) as mock_load,
+            patch("pyrecall.model.PeftModel") as mock_peft_cls,
+        ):
+            m.rollback("full_v1")
+
+        mock_peft_cls.from_pretrained.assert_not_called()
+        loaded_path = Path(mock_load.call_args[0][0])
+        assert loaded_path.name == "adapter"
+        assert m.model is restored
 
 
 class TestResumeTraining:
