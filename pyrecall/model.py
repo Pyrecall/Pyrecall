@@ -25,14 +25,14 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 from transformers import (
-    AutoModelForCausalLM,
-    LlavaForConditionalGeneration,
-    Qwen2VLForConditionalGeneration,
-    AutoProcessor,
     AutoConfig,
+    AutoModelForCausalLM,
+    AutoProcessor,
     AutoTokenizer,
     BitsAndBytesConfig,
     DataCollatorForLanguageModeling,
+    LlavaForConditionalGeneration,
+    Qwen2VLForConditionalGeneration,
     TextIteratorStreamer,
     Trainer,
     TrainerCallback,
@@ -76,10 +76,7 @@ _LORA_TARGETS: dict[str, list[str]] = {
     "default": ["q_proj", "v_proj"],
 }
 
-VLM_MODELS = {
-    'llava',
-    'qwen2_vl'
-}
+VLM_MODELS = {"llava", "qwen2_vl"}
 
 # ── LoRA per-layer rank/alpha presets ──────────────────────────────────────────
 # Maps a preset name to (rank_pattern, alpha_pattern) dicts passed to LoraConfig.
@@ -439,14 +436,21 @@ class Model:
 
         console.print(f"[info]Loading {model_name} on {self.device}…[/info]")
 
-
         if self.is_vlm:
             self.processor = AutoProcessor.from_pretrained(model_name)
 
-            if config.model_type == 'llava':
-                base = LlavaForConditionalGeneration.from_pretrained(...)
-            if config.model_type == "qwen2_vl":
-                base = LlavaForConditionalGeneration.from_pretrained(...)
+            if config.model_type == "llava":
+                base: Any = LlavaForConditionalGeneration.from_pretrained(
+                    model_name,
+                    torch_dtype=torch.float16,
+                    device_map="auto",
+                )
+            elif config.model_type == "qwen2_vl":
+                base = Qwen2VLForConditionalGeneration.from_pretrained(
+                    model_name,
+                    torch_dtype=torch.float16,
+                    device_map="auto",
+                )
             else:
                 try:
                     self.tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -456,7 +460,9 @@ class Model:
                         raise PyrecallError(
                             f"Access to '{model_name}' is restricted on Hugging Face.\n\n"
                             "To fix this:\n"
-                            "  1. Accept the model license at https://huggingface.co/" + model_name + "\n"
+                            "  1. Accept the model license at https://huggingface.co/"
+                            + model_name
+                            + "\n"
                             "  2. Log in:  huggingface-cli login\n"
                             "     or set:  export HF_TOKEN=<your_token>"
                         ) from exc
@@ -503,7 +509,9 @@ class Model:
                         raise PyrecallError(
                             f"Access to '{model_name}' is restricted on Hugging Face.\n\n"
                             "To fix this:\n"
-                            "  1. Accept the model license at https://huggingface.co/" + model_name + "\n"
+                            "  1. Accept the model license at https://huggingface.co/"
+                            + model_name
+                            + "\n"
                             "  2. Log in:  huggingface-cli login\n"
                             "     or set:  export HF_TOKEN=<your_token>"
                         ) from exc
@@ -1133,6 +1141,7 @@ class Model:
         from .compress import decompressed_adapter
 
         dtype = torch.float16 if self.device == "cuda" else torch.float32
+        new_model: Any
         if self.strategy == "full":
             new_model = AutoModelForCausalLM.from_pretrained(
                 str(snap.adapter_path),
@@ -1175,14 +1184,23 @@ class Model:
         Returns:
             The generated text (only the new tokens, not the prompt itself).
         """
-        if self.is_vlm:
-            inputs = self.tokenizer(
-                text=prompt,
-                images=image,
-                return_tensors="pt",
-            )
-        else:
-            with self._model_lock:
+        with self._model_lock:
+            if self.is_vlm:
+                inputs = self.processor(
+                    text=prompt,
+                    return_tensors="pt",
+                ).to(self.device)
+
+                with torch.no_grad():
+                    output_ids = self.model.generate(
+                        **inputs,
+                        max_new_tokens=max_new_tokens,
+                        do_sample=False,
+                        pad_token_id=self.tokenizer.eos_token_id if self.tokenizer else None,
+                    )
+
+                return self.processor.decode(output_ids[0], skip_special_tokens=True)
+            else:
                 inputs = self.tokenizer(
                     prompt,
                     return_tensors="pt",

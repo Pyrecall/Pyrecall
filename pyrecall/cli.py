@@ -761,7 +761,7 @@ def learn(
     try:
         model_obj = Model(
             config["model_name"],
-            strategy=effective_strategy,
+            strategy=config.get("strategy", "lora"),
             lora_r=config.get("lora_r", 16),
             lora_alpha=config.get("lora_alpha", 32),
             lora_dropout=config.get("lora_dropout", 0.1),
@@ -1478,7 +1478,7 @@ def serve(
     try:
         model_obj = Model(
             config["model_name"],
-            strategy=config.get("strategy", "lora", "full"),
+            strategy=config.get("strategy", "lora"),
             lora_r=config.get("lora_r", 16),
             lora_alpha=config.get("lora_alpha", 32),
             lora_dropout=config.get("lora_dropout", 0.1),

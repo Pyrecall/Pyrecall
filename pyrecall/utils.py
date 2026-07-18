@@ -14,7 +14,6 @@ from rich.theme import Theme
 
 if TYPE_CHECKING:
     from PIL import Image
-
     from transformers import PreTrainedModel, PreTrainedTokenizerBase, ProcessorMixin
 
 
@@ -131,7 +130,11 @@ def _prepare_model_inputs(
         )
         prompt_len = prompt_enc["input_ids"].shape[1]
 
-    return {"input_ids": full_enc["input_ids"], "attention_mask": full_enc["attention_mask"], "prompt_len": prompt_len}
+    return {
+        "input_ids": full_enc["input_ids"],
+        "attention_mask": full_enc["attention_mask"],
+        "prompt_len": prompt_len,
+    }
 
 
 def compute_embeddings(
