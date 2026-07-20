@@ -216,7 +216,6 @@ class TestModelCheck:
             patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
             patch("pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
             patch("pyrecall.model.get_peft_model", return_value=mock_peft),
-            ...,
         ):
             from pyrecall.model import Model, PyrecallError
 
