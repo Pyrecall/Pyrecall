@@ -85,6 +85,12 @@ def _make_mock_peft_model() -> MagicMock:
     return peft
 
 
+def _make_mock_config() -> MagicMock:
+    config = MagicMock()
+    config.model_type = "gpt2"
+    return config
+
+
 @pytest.fixture()
 def tmp_snapshot_dir(tmp_path: Path) -> Path:
     d = tmp_path / "snapshots"
@@ -94,6 +100,7 @@ def tmp_snapshot_dir(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def patched_model(tmp_snapshot_dir: Path):
+    mock_config = _make_mock_config()
     mock_tokenizer = _make_mock_tokenizer()
     mock_base = _make_mock_base_model()
     mock_peft = _make_mock_peft_model()
@@ -101,6 +108,7 @@ def patched_model(tmp_snapshot_dir: Path):
     mock_peft.to = MagicMock(return_value=mock_peft)
 
     with (
+        patch("transformers.AutoConfig.from_pretrained", return_value=mock_config),
         patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tokenizer),
         patch("pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
         patch("pyrecall.model.get_peft_model", return_value=mock_peft),
@@ -122,14 +130,18 @@ def patched_model(tmp_snapshot_dir: Path):
 
 class TestModelInit:
     def test_invalid_strategy_raises(self, tmp_snapshot_dir: Path) -> None:
+        mock_config = _make_mock_config()
         mock_tok = _make_mock_tokenizer()
         mock_base = _make_mock_base_model()
         mock_peft = _make_mock_peft_model()
-
         mock_peft.to = MagicMock(return_value=mock_peft)
         mock_peft.config = MagicMock()
 
         with (
+            patch(
+                "transformers.AutoConfig.from_pretrained",
+                return_value=mock_config,
+            ),
             patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
             patch("pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
             patch("pyrecall.model.get_peft_model", return_value=mock_peft),
@@ -137,7 +149,7 @@ class TestModelInit:
             from pyrecall.model import Model, PyrecallError
 
             with pytest.raises(PyrecallError, match="strategy"):
-                Model("test/model", strategy="full", snapshot_dir=tmp_snapshot_dir)
+                Model("test/model", strategy="invalid", snapshot_dir=tmp_snapshot_dir)
 
     def test_pad_token_set_when_missing(self, patched_model) -> None:
         # Tokenizer pad_token was None; should have been set to eos_token.
@@ -191,16 +203,19 @@ class TestModelSnapshot:
 
 class TestModelCheck:
     def test_check_raises_without_baseline(self, tmp_snapshot_dir: Path) -> None:
+        mock_config = _make_mock_config()
         mock_tok = _make_mock_tokenizer()
         mock_base = _make_mock_base_model()
         mock_peft = _make_mock_peft_model()
 
         with (
+            patch(
+                "transformers.AutoConfig.from_pretrained",
+                return_value=mock_config,
+            ),
             patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
             patch("pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
             patch("pyrecall.model.get_peft_model", return_value=mock_peft),
-            patch("pyrecall.model.compute_embeddings", return_value=torch.randn(32)),
-            patch("pyrecall.model.cosine_similarity", return_value=0.75),
         ):
             from pyrecall.model import Model, PyrecallError
 
@@ -265,11 +280,16 @@ class TestModelConstructorDefaults:
         assert patched_model.max_length == 512
 
     def test_custom_constructor_defaults_stored(self, tmp_snapshot_dir: Path) -> None:
+        mock_config = _make_mock_config()
         mock_tok = _make_mock_tokenizer()
         mock_base = _make_mock_base_model()
         mock_peft = _make_mock_peft_model()
 
         with (
+            patch(
+                "transformers.AutoConfig.from_pretrained",
+                return_value=mock_config,
+            ),
             patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
             patch("pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
             patch("pyrecall.model.get_peft_model", return_value=mock_peft),
@@ -438,11 +458,16 @@ class TestLearnDataFormats:
 
 class TestQLoRA:
     def test_qlora_strategy_accepted(self, tmp_snapshot_dir: Path) -> None:
+        mock_config = _make_mock_config()
         mock_tok = _make_mock_tokenizer()
         mock_base = _make_mock_base_model()
         mock_peft = _make_mock_peft_model()
 
         with (
+            patch(
+                "transformers.AutoConfig.from_pretrained",
+                return_value=mock_config,
+            ),
             patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
             patch("pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
             patch("pyrecall.model.get_peft_model", return_value=mock_peft),
@@ -461,11 +486,16 @@ class TestQLoRA:
             mock_bnb.assert_called_once()
 
     def test_4bit_and_8bit_together_raises(self, tmp_snapshot_dir: Path) -> None:
+        mock_config = _make_mock_config()
         mock_tok = _make_mock_tokenizer()
         mock_base = _make_mock_base_model()
         mock_peft = _make_mock_peft_model()
 
         with (
+            patch(
+                "transformers.AutoConfig.from_pretrained",
+                return_value=mock_config,
+            ),
             patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
             patch("pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
             patch("pyrecall.model.get_peft_model", return_value=mock_peft),
@@ -483,11 +513,16 @@ class TestQLoRA:
 
     def test_qlora_strategy_alone_enables_4bit(self, tmp_snapshot_dir: Path) -> None:
         """strategy='qlora' with no explicit bit flags must default to load_in_4bit=True."""
+        mock_config = _make_mock_config()
         mock_tok = _make_mock_tokenizer()
         mock_base = _make_mock_base_model()
         mock_peft = _make_mock_peft_model()
 
         with (
+            patch(
+                "transformers.AutoConfig.from_pretrained",
+                return_value=mock_config,
+            ),
             patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
             patch("pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
             patch("pyrecall.model.get_peft_model", return_value=mock_peft),
@@ -505,11 +540,17 @@ class TestQLoRA:
 
     def test_qlora_strategy_with_8bit_uses_8bit(self, tmp_snapshot_dir: Path) -> None:
         """strategy='qlora' + load_in_8bit=True should not override to 4-bit."""
+
+        mock_config = _make_mock_config()
         mock_tok = _make_mock_tokenizer()
         mock_base = _make_mock_base_model()
         mock_peft = _make_mock_peft_model()
 
         with (
+            patch(
+                "transformers.AutoConfig.from_pretrained",
+                return_value=mock_config,
+            ),
             patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
             patch("pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
             patch("pyrecall.model.get_peft_model", return_value=mock_peft),
@@ -530,11 +571,16 @@ class TestQLoRA:
         assert call_kwargs["load_in_8bit"] is True
 
     def test_invalid_strategy_still_raises(self, tmp_snapshot_dir: Path) -> None:
+        mock_config = _make_mock_config()
         mock_tok = _make_mock_tokenizer()
         mock_base = _make_mock_base_model()
         mock_peft = _make_mock_peft_model()
 
         with (
+            patch(
+                "transformers.AutoConfig.from_pretrained",
+                return_value=mock_config,
+            ),
             patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
             patch("pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
             patch("pyrecall.model.get_peft_model", return_value=mock_peft),
@@ -542,7 +588,7 @@ class TestQLoRA:
             from pyrecall.model import Model, PyrecallError
 
             with pytest.raises(PyrecallError, match="strategy"):
-                Model("test/model", strategy="full", snapshot_dir=tmp_snapshot_dir)
+                Model("test/model", strategy="invalid", snapshot_dir=tmp_snapshot_dir)
 
 
 class TestResumeTraining:

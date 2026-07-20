@@ -5,15 +5,13 @@ from __future__ import annotations
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
 
 from filelock import FileLock
+from peft import PeftModel
 
 from .snapshot import SkillSnapshot
 from .utils import get_logger, safe_model_name
-
-if TYPE_CHECKING:
-    from peft import PeftModel
 
 logger = get_logger(__name__)
 
@@ -69,7 +67,7 @@ class RollbackManager:
     def save(
         self,
         snapshot: SkillSnapshot,
-        peft_model: PeftModel,
+        model: Any,
         compression: str = "none",
     ) -> Path:
         """
@@ -102,7 +100,10 @@ class RollbackManager:
                 shutil.rmtree(adapter_staging)
             adapter_staging.mkdir(parents=True, exist_ok=True)
 
-            peft_model.save_pretrained(str(adapter_staging))
+            if isinstance(model, PeftModel):
+                model.save_pretrained(str(adapter_staging))
+            else:
+                model.save_pretrained(str(adapter_staging))
             logger.debug("Adapter staged to %s", adapter_staging)
 
             if compression != "none":

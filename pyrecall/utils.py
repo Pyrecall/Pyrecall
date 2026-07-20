@@ -13,7 +13,9 @@ from rich.console import Console
 from rich.theme import Theme
 
 if TYPE_CHECKING:
-    from transformers import PreTrainedModel, PreTrainedTokenizerBase
+    from PIL import Image
+    from transformers import PreTrainedModel, PreTrainedTokenizerBase, ProcessorMixin
+
 
 # Shared rich console used across the package for user-facing output.
 console = Console(
@@ -41,6 +43,98 @@ def get_logger(name: str) -> logging.Logger:
 
 
 logger = get_logger(__name__)
+
+
+def _prepare_model_inputs(
+    tokenizer_or_processor: PreTrainedTokenizerBase | ProcessorMixin,
+    prompt: str,
+    completion: str,
+    image: Image.Image | None = None,
+    max_length: int = 512,
+) -> dict[str, torch.Tensor]:
+    """Prepare model inputs for log-likelihood computation.
+
+    Supports both text-only and multimodal (VLM) models.
+
+    Args:
+        tokenizer_or_processor: Either a tokenizer (text-only) or processor (VLM).
+        prompt: The input prompt text.
+        completion: The completion text to score.
+        image: Optional PIL Image for VLM models. If None, uses text-only path.
+        max_length: Maximum sequence length.
+
+    Returns:
+        Dictionary with input_ids, attention_mask, and any vision tensors
+        (e.g., pixel_values) needed by the model.
+    """
+    full_text = prompt + completion
+    prompt_char_len = len(prompt)
+
+    # Check if this is a processor (VLM) with an image, or a tokenizer (text-only)
+    is_processor = hasattr(tokenizer_or_processor, "image_processor") or hasattr(
+        tokenizer_or_processor, "feature_extractor"
+    )
+
+    if image is not None and is_processor:
+        # VLM path: use processor with image
+        # Processors typically accept text and images together
+        full_enc = tokenizer_or_processor(
+            text=full_text,
+            images=image,
+            return_tensors="pt",
+            truncation=True,
+            max_length=max_length,
+            add_special_tokens=True,
+        )
+        # For VLM, we still need to find the prompt boundary
+        # Use token count approach since offset mapping may not be available
+        prompt_enc = tokenizer_or_processor(
+            text=prompt,
+            images=image,
+            return_tensors="pt",
+            truncation=True,
+            max_length=max_length,
+            add_special_tokens=True,
+        )
+        prompt_len = prompt_enc["input_ids"].shape[1]
+    elif getattr(tokenizer_or_processor, "is_fast", False) is True:
+        # Fast tokenizer path: use offset mapping for accurate prompt boundary
+        full_enc = tokenizer_or_processor(
+            full_text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=max_length,
+            add_special_tokens=True,
+            return_offsets_mapping=True,
+        )
+        offsets = full_enc.pop("offset_mapping")[0].tolist()
+        prompt_len = next(
+            (i for i, (_, end) in enumerate(offsets) if end > prompt_char_len),
+            len(offsets),
+        )
+    else:
+        # Slow tokenizer or mock: fall back to separate tokenisation
+        prompt_enc = tokenizer_or_processor(
+            prompt,
+            return_tensors="pt",
+            truncation=True,
+            max_length=max_length,
+            add_special_tokens=True,
+        )
+        full_enc = tokenizer_or_processor(
+            full_text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=max_length,
+            add_special_tokens=True,
+        )
+        prompt_len = prompt_enc["input_ids"].shape[1]
+
+    return {
+        "input_ids": full_enc["input_ids"],
+        "attention_mask": full_enc["attention_mask"],
+        "prompt_len": prompt_len,
+    }
 
 
 def compute_embeddings(
@@ -94,6 +188,8 @@ def compute_log_likelihood(
     completion: str,
     device: str = "cpu",
     max_length: int = 512,
+    processor: ProcessorMixin | None = None,
+    image: Image.Image | None = None,
 ) -> float:
     """Return the per-token log-likelihood of *completion* given *prompt*.
 
@@ -102,50 +198,23 @@ def compute_log_likelihood(
 
     Uses a single causal-LM forward pass with the prompt tokens masked out of the
     loss so only the completion tokens contribute to the NLL.
+
+    For VLM models, pass a processor and image to enable multimodal scoring.
     """
-    prompt_char_len = len(prompt)
+    # Use processor if provided and image is given, otherwise use tokenizer
+    tok_or_proc = processor if processor is not None else tokenizer
 
-    # Fast tokenizers expose character-level offsets, which let us find the exact
-    # prompt/completion boundary in the *combined* encoding and avoid BPE
-    # re-segmentation errors (closes #99).
-    if getattr(tokenizer, "is_fast", False) is True:
-        full_enc = tokenizer(
-            prompt + completion,
-            return_tensors="pt",
-            truncation=True,
-            max_length=max_length,
-            add_special_tokens=True,
-            return_offsets_mapping=True,
-        )
-        offsets = full_enc.pop("offset_mapping")[0].tolist()
-        # First token that extends *beyond* the prompt boundary (its end > prompt length).
-        # Tokens ending exactly at prompt_char_len are still prompt tokens; tokens
-        # straddling the boundary are treated as completion tokens (scored, not masked).
-        prompt_len = next(
-            (i for i, (_, end) in enumerate(offsets) if end > prompt_char_len),
-            len(offsets),
-        )
-    else:
-        # Slow tokenizer or mock: fall back to separate tokenisation. BPE boundary
-        # mismatch is possible but unavoidable without offset support.
-        prompt_enc = tokenizer(
-            prompt,
-            return_tensors="pt",
-            truncation=True,
-            max_length=max_length,
-            add_special_tokens=True,
-        )
-        full_enc = tokenizer(
-            prompt + completion,
-            return_tensors="pt",
-            truncation=True,
-            max_length=max_length,
-            add_special_tokens=True,
-        )
-        prompt_len = prompt_enc["input_ids"].shape[1]
+    inputs = _prepare_model_inputs(
+        tokenizer_or_processor=tok_or_proc,
+        prompt=prompt,
+        completion=completion,
+        image=image,
+        max_length=max_length,
+    )
 
-    input_ids = full_enc["input_ids"].to(device)
-    attention_mask = full_enc["attention_mask"].to(device)
+    input_ids = inputs["input_ids"].to(device)
+    attention_mask = inputs["attention_mask"].to(device)
+    prompt_len = inputs["prompt_len"]
 
     # Labels: -100 masks prompt tokens so they don't contribute to loss.
     labels = input_ids.clone()
@@ -161,12 +230,14 @@ def compute_log_likelihood(
         )
         return float("nan")
 
+    # Build model kwargs, including any vision tensors from the processor
+    model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}
+    for key, value in inputs.items():
+        if key not in ("input_ids", "attention_mask", "prompt_len"):
+            model_kwargs[key] = value.to(device)
+
     with torch.no_grad():
-        outputs = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            labels=labels,
-        )
+        outputs = model(**model_kwargs)
 
     mean_nll: float = outputs.loss.item()
     if mean_nll <= 0.0:
@@ -181,58 +252,51 @@ def compute_log_likelihood_batch(
     completions: list[str],
     device: str = "cpu",
     max_length: int = 512,
+    processor: ProcessorMixin | None = None,
+    image_paths: list[Image.Image | None] | None = None,
 ) -> list[float]:
     """Batched variant of :func:`compute_log_likelihood`.
 
     Tokenises all (prompt, completion) pairs, right-pads to the longest sequence
     in the batch, and runs a single forward pass to compute per-item NLL.
     Returns a list of scores in the same order as the inputs.
+
+    For VLM models, pass a processor and image_paths to enable multimodal scoring.
     """
     if not prompts:
         return []
 
+    # Use processor if provided, otherwise use tokenizer
+    tok_or_proc = processor if processor is not None else tokenizer
+
     all_input_ids: list[list[int]] = []
     all_labels: list[list[int]] = []
+    all_vision_tensors: dict[str, list[torch.Tensor]] = {}
 
-    for prompt, completion in zip(prompts, completions):
-        prompt_char_len = len(prompt)
-        if getattr(tokenizer, "is_fast", False) is True:
-            enc = tokenizer(
-                prompt + completion,
-                return_tensors="pt",
-                truncation=True,
-                max_length=max_length,
-                add_special_tokens=True,
-                return_offsets_mapping=True,
-            )
-            offsets = enc.pop("offset_mapping")[0].tolist()
-            prompt_len = next(
-                (i for i, (_, end) in enumerate(offsets) if end > prompt_char_len),
-                len(offsets),
-            )
-        else:
-            prompt_enc = tokenizer(
-                prompt,
-                return_tensors="pt",
-                truncation=True,
-                max_length=max_length,
-                add_special_tokens=True,
-            )
-            enc = tokenizer(
-                prompt + completion,
-                return_tensors="pt",
-                truncation=True,
-                max_length=max_length,
-                add_special_tokens=True,
-            )
-            prompt_len = prompt_enc["input_ids"].shape[1]
+    for i, (prompt, completion) in enumerate(zip(prompts, completions)):
+        image = image_paths[i] if image_paths is not None else None
+        inputs = _prepare_model_inputs(
+            tokenizer_or_processor=tok_or_proc,
+            prompt=prompt,
+            completion=completion,
+            image=image,
+            max_length=max_length,
+        )
 
-        ids = enc["input_ids"][0].tolist()
+        ids = inputs["input_ids"][0].tolist()
+        prompt_len = inputs["prompt_len"]
         labels = ids[:]
-        for i in range(prompt_len):
-            labels[i] = -100
+        for j in range(prompt_len):
+            labels[j] = -100
         all_input_ids.append(ids)
         all_labels.append(labels)
+
+        # Collect any vision tensors for VLM support
+        for key, value in inputs.items():
+            if key not in ("input_ids", "attention_mask", "prompt_len"):
+                if key not in all_vision_tensors:
+                    all_vision_tensors[key] = []
+                all_vision_tensors[key].append(value)
 
     pad_id = tokenizer.pad_token_id or 0
     max_len = max(len(ids) for ids in all_input_ids)
@@ -249,11 +313,14 @@ def compute_log_likelihood_batch(
     padded_labels = padded_labels.to(device)
     attn_mask = attn_mask.to(device)
 
+    # Build model kwargs, including any vision tensors
+    model_kwargs = {"input_ids": padded_ids, "attention_mask": attn_mask}
+    for key, tensors in all_vision_tensors.items():
+        # Stack vision tensors for batch processing
+        model_kwargs[key] = torch.cat(tensors, dim=0).to(device)
+
     with torch.no_grad():
-        outputs = model(
-            input_ids=padded_ids,
-            attention_mask=attn_mask,
-        )
+        outputs = model(**model_kwargs)
 
     logits = outputs.logits
 
@@ -275,8 +342,10 @@ def compute_log_likelihood_batch(
                 completion,
                 device=device,
                 max_length=max_length,
+                processor=processor,
+                image=image_paths[i] if image_paths is not None else None,
             )
-            for prompt, completion in zip(prompts, completions)
+            for i, (prompt, completion) in enumerate(zip(prompts, completions))
         ]
 
     # Shift: logits[t] predicts token[t+1].

@@ -25,10 +25,14 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 from transformers import (
+    AutoConfig,
     AutoModelForCausalLM,
+    AutoProcessor,
     AutoTokenizer,
     BitsAndBytesConfig,
     DataCollatorForLanguageModeling,
+    LlavaForConditionalGeneration,
+    Qwen2VLForConditionalGeneration,
     TextIteratorStreamer,
     Trainer,
     TrainerCallback,
@@ -71,6 +75,8 @@ _LORA_TARGETS: dict[str, list[str]] = {
     "opt": ["q_proj", "v_proj"],
     "default": ["q_proj", "v_proj"],
 }
+
+VLM_MODELS = {"llava", "qwen2_vl"}
 
 # ── LoRA per-layer rank/alpha presets ──────────────────────────────────────────
 # Maps a preset name to (rank_pattern, alpha_pattern) dicts passed to LoraConfig.
@@ -373,6 +379,9 @@ class Model:
                 "Example: Model('meta-llama/Llama-3.2-1B', strategy='qlora', load_in_4bit=True)"
             )
 
+        if strategy == "full" and (load_in_4bit):
+            raise PyrecallError("strategy 'full' cannot be used with quantanized models")
+
         if scoring_method not in ("log_likelihood", "cosine"):
             raise PyrecallError(
                 f"Unknown scoring_method '{scoring_method}'. "
@@ -422,69 +431,92 @@ class Model:
             if replay_buffer_size > 0
             else None
         )
+        config = AutoConfig.from_pretrained(model_name)
+        self.is_vlm = config.model_type in VLM_MODELS
 
         console.print(f"[info]Loading {model_name} on {self.device}…[/info]")
-
-        try:
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        except OSError as exc:
-            msg = str(exc)
-            if "401" in msg or "gated" in msg.lower() or "access" in msg.lower():
-                raise PyrecallError(
-                    f"Access to '{model_name}' is restricted on Hugging Face.\n\n"
-                    "To fix this:\n"
-                    "  1. Accept the model license at https://huggingface.co/" + model_name + "\n"
-                    "  2. Log in:  huggingface-cli login\n"
-                    "     or set:  export HF_TOKEN=<your_token>"
-                ) from exc
-            raise
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
-
-        # QLoRA: quantize base weights, keep adapters in float16.
-        # strategy="qlora" implies 4-bit unless the caller explicitly requested 8-bit.
-        if strategy == "qlora" and not load_in_4bit and not load_in_8bit:
-            load_in_4bit = True
-
         bnb_config = None
-        if load_in_4bit or load_in_8bit:
-            if load_in_4bit and load_in_8bit:
-                raise PyrecallError("Cannot use load_in_4bit and load_in_8bit together.")
-            try:
-                from bitsandbytes import __version__  # noqa: F401
-            except ImportError as exc:
-                raise PyrecallError(
-                    "4-bit/8-bit quantization requires bitsandbytes. "
-                    "Install it with: pip install pyrecall[qlora] (or pyrecall[quantization])"
-                ) from exc
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=load_in_4bit,
-                load_in_8bit=load_in_8bit,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_use_double_quant=True,
-            )
+        base: Any  # Type annotation for the model base (VLM or causal LM)
 
-        dtype = torch.float16 if self.device != "cpu" else torch.float32
-        try:
-            base = AutoModelForCausalLM.from_pretrained(
-                model_name,
-                dtype=dtype,
-                quantization_config=bnb_config,
-                device_map="auto" if bnb_config else None,
-            )
-        except OSError as exc:
-            msg = str(exc)
-            if "401" in msg or "gated" in msg.lower() or "access" in msg.lower():
-                raise PyrecallError(
-                    f"Access to '{model_name}' is restricted on Hugging Face.\n\n"
-                    "To fix this:\n"
-                    "  1. Accept the model license at https://huggingface.co/" + model_name + "\n"
-                    "  2. Log in:  huggingface-cli login\n"
-                    "     or set:  export HF_TOKEN=<your_token>"
-                ) from exc
-            raise
+        if self.is_vlm:
+            self.processor = AutoProcessor.from_pretrained(model_name)
+
+            if config.model_type == "llava":
+                base = LlavaForConditionalGeneration.from_pretrained(
+                    model_name,
+                    torch_dtype=torch.float16,
+                    device_map="auto",
+                )
+            elif config.model_type == "qwen2_vl":
+                base = Qwen2VLForConditionalGeneration.from_pretrained(
+                    model_name,
+                    torch_dtype=torch.float16,
+                    device_map="auto",
+                )
+        else:
+            try:
+                self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            except OSError as exc:
+                msg = str(exc)
+                if "401" in msg or "gated" in msg.lower() or "access" in msg.lower():
+                    raise PyrecallError(
+                        f"Access to '{model_name}' is restricted on Hugging Face.\n\n"
+                        "To fix this:\n"
+                        "  1. Accept the model license at https://huggingface.co/"
+                        + model_name
+                        + "\n"
+                        "  2. Log in:  huggingface-cli login\n"
+                        "     or set:  export HF_TOKEN=<your_token>"
+                    ) from exc
+                raise
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+                self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+
+            # QLoRA: quantize base weights, keep adapters in float16.
+            # strategy="qlora" implies 4-bit unless the caller explicitly requested 8-bit.
+            if strategy == "qlora" and not load_in_4bit and not load_in_8bit:
+                load_in_4bit = True
+
+            if load_in_4bit or load_in_8bit:
+                if load_in_4bit and load_in_8bit:
+                    raise PyrecallError("Cannot use load_in_4bit and load_in_8bit together.")
+                try:
+                    from bitsandbytes import __version__  # noqa: F401
+                except ImportError as exc:
+                    raise PyrecallError(
+                        "4-bit/8-bit quantization requires bitsandbytes. "
+                        "Install it with: pip install pyrecall[qlora] (or pyrecall[quantization])"
+                    ) from exc
+                bnb_config = BitsAndBytesConfig(
+                    load_in_4bit=load_in_4bit,
+                    load_in_8bit=load_in_8bit,
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_use_double_quant=True,
+                )
+
+            dtype = torch.float16 if self.device != "cpu" else torch.float32
+            try:
+                base = AutoModelForCausalLM.from_pretrained(
+                    model_name,
+                    dtype=dtype,
+                    quantization_config=bnb_config,
+                    device_map="auto" if bnb_config else None,
+                )
+            except OSError as exc:
+                msg = str(exc)
+                if "401" in msg or "gated" in msg.lower() or "access" in msg.lower():
+                    raise PyrecallError(
+                        f"Access to '{model_name}' is restricted on Hugging Face.\n\n"
+                        "To fix this:\n"
+                        "  1. Accept the model license at https://huggingface.co/"
+                        + model_name
+                        + "\n"
+                        "  2. Log in:  huggingface-cli login\n"
+                        "     or set:  export HF_TOKEN=<your_token>"
+                    ) from exc
+                raise
 
         if bnb_config:
             base = prepare_model_for_kbit_training(base)
@@ -953,6 +985,12 @@ class Model:
         streaming_cb = next((cb for cb in callbacks if isinstance(cb, _StreamingCallback)), None)
         with self._model_lock:
             self.model.train()
+            trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+            total = sum(p.numel() for p in self.model.parameters())
+            console.print(
+                f"[info]Trainable Parameters: {trainable:,}/{total:,}"
+                f"({100 * trainable / total:.2f}%)[/info]"
+            )
             try:
                 trainer.train(resume_from_checkpoint=resume_from)
             except _WatchStopSignal as exc:
@@ -1104,13 +1142,23 @@ class Model:
         from .compress import decompressed_adapter
 
         dtype = torch.float16 if self.device == "cuda" else torch.float32
-        base_model = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            dtype=dtype,
-            device_map=None if self.device != "cuda" else "auto",
-        )
-        with decompressed_adapter(snap.adapter_path, snap.adapter_compression) as adapter_dir:
-            new_model = PeftModel.from_pretrained(base_model, str(adapter_dir), is_trainable=False)
+        new_model: Any = None  # type: ignore[assignment]
+        if self.strategy == "full":
+            new_model = AutoModelForCausalLM.from_pretrained(
+                str(snap.adapter_path),
+                torch_dtype=dtype,
+                device_map=None if self.device != "cuda" else "auto",
+            )
+        else:
+            base_model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                torch_dtype=dtype,
+                device_map=None if self.device != "cuda" else "auto",
+            )
+            with decompressed_adapter(snap.adapter_path, snap.adapter_compression) as adapter_dir:
+                new_model = PeftModel.from_pretrained(
+                    base_model, str(adapter_dir), is_trainable=False
+                )
         if self.device not in ("cuda",):
             new_model = new_model.to(self.device)
 
@@ -1138,23 +1186,39 @@ class Model:
             The generated text (only the new tokens, not the prompt itself).
         """
         with self._model_lock:
-            inputs = self.tokenizer(
-                prompt,
-                return_tensors="pt",
-                truncation=True,
-                max_length=self.max_length,
-            ).to(self.device)
+            if self.is_vlm:
+                inputs = self.processor(
+                    text=prompt,
+                    return_tensors="pt",
+                ).to(self.device)
 
-            with torch.no_grad():
-                output_ids = self.model.generate(
-                    **inputs,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    pad_token_id=self.tokenizer.eos_token_id,
-                )
+                with torch.no_grad():
+                    output_ids = self.model.generate(
+                        **inputs,
+                        max_new_tokens=max_new_tokens,
+                        do_sample=False,
+                        pad_token_id=self.tokenizer.eos_token_id if self.tokenizer else None,
+                    )
 
-            new_tokens = output_ids[0][inputs["input_ids"].shape[1] :]
-            return self.tokenizer.decode(new_tokens, skip_special_tokens=True)  # type: ignore[return-value]
+                return self.processor.decode(output_ids[0], skip_special_tokens=True)
+            else:
+                inputs = self.tokenizer(
+                    prompt,
+                    return_tensors="pt",
+                    truncation=True,
+                    max_length=self.max_length,
+                ).to(self.device)
+
+                with torch.no_grad():
+                    output_ids = self.model.generate(
+                        **inputs,
+                        max_new_tokens=max_new_tokens,
+                        do_sample=False,
+                        pad_token_id=self.tokenizer.eos_token_id,
+                    )
+
+                new_tokens = output_ids[0][inputs["input_ids"].shape[1] :]
+                return self.tokenizer.decode(new_tokens, skip_special_tokens=True)  # type: ignore[return-value]
 
     def generate_stream(
         self,
