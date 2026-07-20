@@ -85,6 +85,12 @@ def _make_mock_peft_model() -> MagicMock:
     return peft
 
 
+def _make_mock_config() -> MagicMock:
+    config = MagicMock()
+    config.model_type = "gpt2"
+    return config
+
+
 @pytest.fixture()
 def tmp_snapshot_dir(tmp_path: Path) -> Path:
     d = tmp_path / "snapshots"
@@ -94,6 +100,7 @@ def tmp_snapshot_dir(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def patched_model(tmp_snapshot_dir: Path):
+    mock_config = _make_mock_config()
     mock_tokenizer = _make_mock_tokenizer()
     mock_base = _make_mock_base_model()
     mock_peft = _make_mock_peft_model()
@@ -101,6 +108,7 @@ def patched_model(tmp_snapshot_dir: Path):
     mock_peft.to = MagicMock(return_value=mock_peft)
 
     with (
+        patch("transformers.AutoConfig.from_pretrained", return_value=mock_config),
         patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tokenizer),
         patch("pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
         patch("pyrecall.model.get_peft_model", return_value=mock_peft),

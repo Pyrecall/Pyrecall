@@ -256,15 +256,23 @@ def _make_mock_peft_model() -> MagicMock:
     return peft
 
 
+def _make_mock_config() -> MagicMock:
+    config = MagicMock()
+    config.model_type = "gpt2"
+    return config
+
+
 @pytest.fixture()
 def patched_model_with_replay(tmp_path: Path):
     snap_dir = tmp_path / "snapshots"
     snap_dir.mkdir()
+    mock_config = _make_mock_config()
     mock_tok = _make_mock_tokenizer()
     mock_base = _make_mock_base_model()
     mock_peft = _make_mock_peft_model()
 
     with (
+        patch("transformers.AutoConfig.from_pretrained", return_value=mock_config),
         patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
         patch("pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
         patch("pyrecall.model.get_peft_model", return_value=mock_peft),
@@ -319,7 +327,9 @@ class TestLearnReplayIntegration:
         mock_base = _make_mock_base_model()
         mock_peft = _make_mock_peft_model()
 
+        mock_config = _make_mock_config()
         with (
+            patch("transformers.AutoConfig.from_pretrained", return_value=mock_config),
             patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
             patch("pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
             patch("pyrecall.model.get_peft_model", return_value=mock_peft),

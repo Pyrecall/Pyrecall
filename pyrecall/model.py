@@ -435,6 +435,7 @@ class Model:
         self.is_vlm = config.model_type in VLM_MODELS
 
         console.print(f"[info]Loading {model_name} on {self.device}…[/info]")
+        bnb_config = None
 
         if self.is_vlm:
             self.processor = AutoProcessor.from_pretrained(model_name)
@@ -451,71 +452,70 @@ class Model:
                     torch_dtype=torch.float16,
                     device_map="auto",
                 )
-            else:
+        else:
+            try:
+                self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            except OSError as exc:
+                msg = str(exc)
+                if "401" in msg or "gated" in msg.lower() or "access" in msg.lower():
+                    raise PyrecallError(
+                        f"Access to '{model_name}' is restricted on Hugging Face.\n\n"
+                        "To fix this:\n"
+                        "  1. Accept the model license at https://huggingface.co/"
+                        + model_name
+                        + "\n"
+                        "  2. Log in:  huggingface-cli login\n"
+                        "     or set:  export HF_TOKEN=<your_token>"
+                    ) from exc
+                raise
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+                self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+
+            # QLoRA: quantize base weights, keep adapters in float16.
+            # strategy="qlora" implies 4-bit unless the caller explicitly requested 8-bit.
+            if strategy == "qlora" and not load_in_4bit and not load_in_8bit:
+                load_in_4bit = True
+
+            if load_in_4bit or load_in_8bit:
+                if load_in_4bit and load_in_8bit:
+                    raise PyrecallError("Cannot use load_in_4bit and load_in_8bit together.")
                 try:
-                    self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-                except OSError as exc:
-                    msg = str(exc)
-                    if "401" in msg or "gated" in msg.lower() or "access" in msg.lower():
-                        raise PyrecallError(
-                            f"Access to '{model_name}' is restricted on Hugging Face.\n\n"
-                            "To fix this:\n"
-                            "  1. Accept the model license at https://huggingface.co/"
-                            + model_name
-                            + "\n"
-                            "  2. Log in:  huggingface-cli login\n"
-                            "     or set:  export HF_TOKEN=<your_token>"
-                        ) from exc
-                    raise
-                if self.tokenizer.pad_token is None:
-                    self.tokenizer.pad_token = self.tokenizer.eos_token
-                    self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+                    from bitsandbytes import __version__  # noqa: F401
+                except ImportError as exc:
+                    raise PyrecallError(
+                        "4-bit/8-bit quantization requires bitsandbytes. "
+                        "Install it with: pip install pyrecall[qlora] (or pyrecall[quantization])"
+                    ) from exc
+                bnb_config = BitsAndBytesConfig(
+                    load_in_4bit=load_in_4bit,
+                    load_in_8bit=load_in_8bit,
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_use_double_quant=True,
+                )
 
-                # QLoRA: quantize base weights, keep adapters in float16.
-                # strategy="qlora" implies 4-bit unless the caller explicitly requested 8-bit.
-                if strategy == "qlora" and not load_in_4bit and not load_in_8bit:
-                    load_in_4bit = True
-
-                bnb_config = None
-                if load_in_4bit or load_in_8bit:
-                    if load_in_4bit and load_in_8bit:
-                        raise PyrecallError("Cannot use load_in_4bit and load_in_8bit together.")
-                    try:
-                        from bitsandbytes import __version__  # noqa: F401
-                    except ImportError as exc:
-                        raise PyrecallError(
-                            "4-bit/8-bit quantization requires bitsandbytes. "
-                            "Install it with: pip install pyrecall[qlora] (or pyrecall[quantization])"
-                        ) from exc
-                    bnb_config = BitsAndBytesConfig(
-                        load_in_4bit=load_in_4bit,
-                        load_in_8bit=load_in_8bit,
-                        bnb_4bit_quant_type="nf4",
-                        bnb_4bit_compute_dtype=torch.float16,
-                        bnb_4bit_use_double_quant=True,
-                    )
-
-                dtype = torch.float16 if self.device != "cpu" else torch.float32
-                try:
-                    base = AutoModelForCausalLM.from_pretrained(
-                        model_name,
-                        dtype=dtype,
-                        quantization_config=bnb_config,
-                        device_map="auto" if bnb_config else None,
-                    )
-                except OSError as exc:
-                    msg = str(exc)
-                    if "401" in msg or "gated" in msg.lower() or "access" in msg.lower():
-                        raise PyrecallError(
-                            f"Access to '{model_name}' is restricted on Hugging Face.\n\n"
-                            "To fix this:\n"
-                            "  1. Accept the model license at https://huggingface.co/"
-                            + model_name
-                            + "\n"
-                            "  2. Log in:  huggingface-cli login\n"
-                            "     or set:  export HF_TOKEN=<your_token>"
-                        ) from exc
-                    raise
+            dtype = torch.float16 if self.device != "cpu" else torch.float32
+            try:
+                base = AutoModelForCausalLM.from_pretrained(
+                    model_name,
+                    dtype=dtype,
+                    quantization_config=bnb_config,
+                    device_map="auto" if bnb_config else None,
+                )
+            except OSError as exc:
+                msg = str(exc)
+                if "401" in msg or "gated" in msg.lower() or "access" in msg.lower():
+                    raise PyrecallError(
+                        f"Access to '{model_name}' is restricted on Hugging Face.\n\n"
+                        "To fix this:\n"
+                        "  1. Accept the model license at https://huggingface.co/"
+                        + model_name
+                        + "\n"
+                        "  2. Log in:  huggingface-cli login\n"
+                        "     or set:  export HF_TOKEN=<your_token>"
+                    ) from exc
+                raise
 
         if bnb_config:
             base = prepare_model_for_kbit_training(base)
