@@ -436,12 +436,13 @@ class Model:
 
         console.print(f"[info]Loading {model_name} on {self.device}…[/info]")
         bnb_config = None
+        base: Any  # Type annotation for the model base (VLM or causal LM)
 
         if self.is_vlm:
             self.processor = AutoProcessor.from_pretrained(model_name)
 
             if config.model_type == "llava":
-                base: Any = LlavaForConditionalGeneration.from_pretrained(
+                base = LlavaForConditionalGeneration.from_pretrained(
                     model_name,
                     torch_dtype=torch.float16,
                     device_map="auto",
@@ -1141,7 +1142,7 @@ class Model:
         from .compress import decompressed_adapter
 
         dtype = torch.float16 if self.device == "cuda" else torch.float32
-        new_model: Any
+        new_model: Any = None  # type: ignore[assignment]
         if self.strategy == "full":
             new_model = AutoModelForCausalLM.from_pretrained(
                 str(snap.adapter_path),

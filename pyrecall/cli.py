@@ -761,7 +761,7 @@ def learn(
     try:
         model_obj = Model(
             config["model_name"],
-            strategy=config.get("strategy", "lora"),
+            strategy=effective_strategy,
             lora_r=config.get("lora_r", 16),
             lora_alpha=config.get("lora_alpha", 32),
             lora_dropout=config.get("lora_dropout", 0.1),
@@ -968,9 +968,11 @@ def snapshot(
 
     from pyrecall.model import Model
 
+    # Use config value for strategy (no CLI override in snapshot command)
+    effective_strategy = config.get("strategy", "lora")
     model_obj = Model(
         config["model_name"],
-        strategy=config.get("strategy", "lora"),
+        strategy=effective_strategy,
         lora_r=config.get("lora_r", 16),
         lora_alpha=config.get("lora_alpha", 32),
         lora_dropout=config.get("lora_dropout", 0.1),
