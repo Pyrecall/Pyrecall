@@ -895,6 +895,10 @@
               <tr><td>lora_r</td><td>int</td><td>16</td><td>LoRA rank. Lower = fewer parameters, higher = more capacity.</td></tr>
               <tr><td>lora_alpha</td><td>int</td><td>32</td><td>LoRA scaling factor. Typically 2× rank.</td></tr>
               <tr><td>lora_dropout</td><td>float</td><td>0.1</td><td>Dropout applied to LoRA layers.</td></tr>
+              <tr><td>target_modules</td><td>list[str] | None</td><td>None</td><td>Explicit module names to attach LoRA adapters to, e.g. <code>["q_proj", "v_proj"]</code>. Overrides architecture auto-detection.</td></tr>
+              <tr><td>lora_preset</td><td>str</td><td>"uniform"</td><td><code>"uniform"</code> (applies <code>lora_r</code>/<code>lora_alpha</code> to every layer) or <code>"qv_heavy"</code> (higher rank on q_proj/v_proj than k_proj/o_proj). Ignored if <code>lora_rank_pattern</code>/<code>lora_alpha_pattern</code> is passed.</td></tr>
+              <tr><td>lora_rank_pattern</td><td>dict[str, int] | None</td><td>None</td><td>Per-module rank overrides, e.g. <code>{"q_proj": 32, "k_proj": 8}</code>. Modules not listed use <code>lora_r</code>.</td></tr>
+              <tr><td>lora_alpha_pattern</td><td>dict[str, int] | None</td><td>None</td><td>Per-module alpha overrides, same shape as <code>lora_rank_pattern</code>.</td></tr>
               <tr><td>learning_rate</td><td>float</td><td>2e-4</td><td>Default AdamW learning rate for <code>model.learn()</code>. Can be overridden per-call.</td></tr>
               <tr><td>batch_size</td><td>int</td><td>4</td><td>Default per-device batch size for <code>model.learn()</code>. Can be overridden per-call.</td></tr>
               <tr><td>max_length</td><td>int</td><td>512</td><td>Default tokenization truncation length for <code>model.learn()</code>. Can be overridden per-call.</td></tr>
@@ -1146,11 +1150,13 @@
           <table>
             <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
             <tbody>
-              <tr><td>--model, -m</td><td>meta-llama/Llama-3.2-1B</td><td>HuggingFace model identifier to use for this project.</td></tr>
+              <tr><td>--model, -m</td><td>Qwen/Qwen2.5-1.5b-Instruct</td><td>HuggingFace model identifier to use for this project.</td></tr>
               <tr><td>--strategy, -s</td><td>lora</td><td>Fine-tuning strategy: <code>lora</code> or <code>qlora</code>.</td></tr>
               <tr><td>--lora-r</td><td>16</td><td>LoRA rank. Higher = more expressive but more memory.</td></tr>
               <tr><td>--lora-alpha</td><td>32</td><td>LoRA scaling factor (typically 2× rank).</td></tr>
               <tr><td>--lora-dropout</td><td>0.1</td><td>Dropout rate applied inside LoRA layers.</td></tr>
+              <tr><td>--target-modules</td><td>—</td><td>Comma-separated module names to attach LoRA adapters to, e.g. <code>q_proj,v_proj,k_proj,o_proj</code>. Overrides architecture auto-detection.</td></tr>
+              <tr><td>--lora-preset</td><td>uniform</td><td>Per-layer rank/alpha preset: <code>uniform</code> or <code>qv_heavy</code>.</td></tr>
               <tr><td>--learning-rate</td><td>2e-4</td><td>AdamW learning rate for fine-tuning.</td></tr>
               <tr><td>--batch-size</td><td>4</td><td>Per-device training batch size.</td></tr>
               <tr><td>--max-length</td><td>512</td><td>Tokenisation truncation length.</td></tr>
