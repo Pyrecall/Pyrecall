@@ -316,7 +316,9 @@ class Model:
 
         Args:
             model_name: HuggingFace model identifier, e.g. ``"meta-llama/Llama-3.2-1B"``.
-            strategy: Fine-tuning strategy — ``"lora"`` or ``"qlora"``.
+            strategy: Fine-tuning strategy — ``"lora"``, ``"qlora"``, or ``"full"``.
+                ``"full"`` updates every weight (no adapters) and stores the whole
+                model per snapshot; recommended only for small models (<500M params).
             lora_r: LoRA rank (lower = fewer parameters, higher = more capacity).
             lora_alpha: LoRA scaling factor (usually 2× rank).
             lora_dropout: Dropout applied to LoRA layers.
@@ -366,11 +368,18 @@ class Model:
                 k_proj/o_proj). Ignored if *lora_rank_pattern* or
                 *lora_alpha_pattern* is passed explicitly.
         """
-        if strategy not in ("lora", "qlora"):
+        if strategy not in ("lora", "qlora", "full"):
             raise PyrecallError(
                 f"Unknown strategy '{strategy}'. "
-                "pyrecall supports strategy='lora' or strategy='qlora'. "
+                "pyrecall supports strategy='lora', strategy='qlora', or strategy='full'. "
                 "Example: Model('meta-llama/Llama-3.2-1B', strategy='qlora', load_in_4bit=True)"
+            )
+
+        if strategy == "full" and (load_in_4bit or load_in_8bit):
+            raise PyrecallError(
+                "strategy='full' cannot be combined with load_in_4bit or load_in_8bit: "
+                "quantized weights cannot be fully fine-tuned. "
+                "Use strategy='qlora' for quantized training."
             )
 
         if scoring_method not in ("log_likelihood", "cosine"):
@@ -489,22 +498,35 @@ class Model:
         if bnb_config:
             base = prepare_model_for_kbit_training(base)
 
-        resolved_target_modules = target_modules or self._lora_targets(model_name)
-        lora_cfg = LoraConfig(
-            task_type=TaskType.CAUSAL_LM,
-            r=lora_r,
-            lora_alpha=lora_alpha,
-            lora_dropout=lora_dropout,
-            target_modules=resolved_target_modules,
-            rank_pattern=resolved_rank_pattern,
-            alpha_pattern=resolved_alpha_pattern,
-            bias="none",
-        )
-        self.target_modules = resolved_target_modules
+        if strategy == "full":
+            n_base_params = sum(p.numel() for p in base.parameters())
+            if n_base_params > 1_000_000_000:
+                console.print(
+                    f"[warning]⚠ strategy='full' with a {n_base_params / 1e9:.1f}B-parameter "
+                    "model: every snapshot stores the entire model and training updates all "
+                    "weights. LoRA is recommended for models this large.[/warning]"
+                )
+            for p in base.parameters():
+                p.requires_grad = True
+            self.target_modules = None
+            self.model: Any = base
+        else:
+            resolved_target_modules = target_modules or self._lora_targets(model_name)
+            lora_cfg = LoraConfig(
+                task_type=TaskType.CAUSAL_LM,
+                r=lora_r,
+                lora_alpha=lora_alpha,
+                lora_dropout=lora_dropout,
+                target_modules=resolved_target_modules,
+                rank_pattern=resolved_rank_pattern,
+                alpha_pattern=resolved_alpha_pattern,
+                bias="none",
+            )
+            self.target_modules = resolved_target_modules
+            self.model = get_peft_model(base, lora_cfg)
         self.lora_preset = lora_preset
         self.lora_rank_pattern = resolved_rank_pattern
         self.lora_alpha_pattern = resolved_alpha_pattern
-        self.model: Any = get_peft_model(base, lora_cfg)
         if not bnb_config:
             self.model = self.model.to(self.device)
         self.model.eval()
@@ -565,11 +587,14 @@ class Model:
 
         scores = self._run_benchmarks(mode=benchmark_mode)
         snap_tags = dict(tags or {})
-        snap_tags.setdefault("lora_preset", getattr(self, "lora_preset", "uniform"))
-        if rank_pattern := getattr(self, "lora_rank_pattern", None):
-            snap_tags.setdefault("lora_rank_pattern", json.dumps(rank_pattern))
-        if alpha_pattern := getattr(self, "lora_alpha_pattern", None):
-            snap_tags.setdefault("lora_alpha_pattern", json.dumps(alpha_pattern))
+        strategy = getattr(self, "strategy", "lora")
+        snap_tags.setdefault("strategy", strategy)
+        if strategy != "full":
+            snap_tags.setdefault("lora_preset", getattr(self, "lora_preset", "uniform"))
+            if rank_pattern := getattr(self, "lora_rank_pattern", None):
+                snap_tags.setdefault("lora_rank_pattern", json.dumps(rank_pattern))
+            if alpha_pattern := getattr(self, "lora_alpha_pattern", None):
+                snap_tags.setdefault("lora_alpha_pattern", json.dumps(alpha_pattern))
         snap = SkillSnapshot(
             name=name,
             model_name=self.model_name,
@@ -581,6 +606,13 @@ class Model:
         _overall = snap.overall_score()
         _overall_str = "-" if math.isnan(_overall) else f"{_overall:.3f}"
         if not dry_run:
+            if strategy == "full":
+                size_gb = sum(p.numel() * p.element_size() for p in self.model.parameters()) / 1e9
+                console.print(
+                    f"[warning]⚠ Full strategy saves the entire model "
+                    f"(~{size_gb:.1f} GB per snapshot). Consider dry_run=True "
+                    "(--no-weights) if you only need score tracking.[/warning]"
+                )
             self.rollback_manager.save(snap, self.model, compression=self._snapshot_compression)
             self._set_baseline(name)
             console.print(
@@ -1104,13 +1136,26 @@ class Model:
         from .compress import decompressed_adapter
 
         dtype = torch.float16 if self.device == "cuda" else torch.float32
-        base_model = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            dtype=dtype,
-            device_map=None if self.device != "cuda" else "auto",
-        )
-        with decompressed_adapter(snap.adapter_path, snap.adapter_compression) as adapter_dir:
-            new_model = PeftModel.from_pretrained(base_model, str(adapter_dir), is_trainable=False)
+        snap_strategy = snap.tags.get("strategy", self.strategy)
+        new_model: Any
+        if snap_strategy == "full":
+            # Full snapshots store the complete model, not an adapter.
+            with decompressed_adapter(snap.adapter_path, snap.adapter_compression) as weights_dir:
+                new_model = AutoModelForCausalLM.from_pretrained(
+                    str(weights_dir),
+                    dtype=dtype,
+                    device_map=None if self.device != "cuda" else "auto",
+                )
+        else:
+            base_model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                dtype=dtype,
+                device_map=None if self.device != "cuda" else "auto",
+            )
+            with decompressed_adapter(snap.adapter_path, snap.adapter_compression) as adapter_dir:
+                new_model = PeftModel.from_pretrained(
+                    base_model, str(adapter_dir), is_trainable=False
+                )
         if self.device not in ("cuda",):
             new_model = new_model.to(self.device)
 
