@@ -27,4 +27,4 @@ jobs:
               }
             ]
           }' \
-          ${{ secrets.DISCORD_ISSUES_WEBHOOK }}
+          ${{ secrets.DISCORD_ISSUES_SECRET }}
