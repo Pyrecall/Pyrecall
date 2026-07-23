@@ -13,7 +13,7 @@ jobs:
         run: |
           curl -H "Content-Type: application/json" \
           -d '{
-            "content":"@everyone",
+            "content":"@maintainers",
             "embeds":[
               {
                 "title":"New Pull Request",
