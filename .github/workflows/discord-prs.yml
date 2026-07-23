@@ -39,4 +39,4 @@ jobs:
               }
             ]
           }' \
-          ${{ secrets.DISCORD_ISSUES_WEBHOOK }}
+          ${{ secrets.DISCORD_PULL_REQUEST_DISCORD}}
