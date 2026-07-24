@@ -2,29 +2,70 @@ name: Discord Issue Notifications
 
 on:
   issues:
-      types: [opened]
+    types:
+      - opened
+
 jobs:
   notify:
     runs-on: ubuntu-latest
 
     steps:
       - name: Send Discord notification
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_ISSUES_SECRET }}
         run: |
-          curl -H "Content-Type: application/json" \
-          -d '{
-            "content":"@everyone",
-            "embeds":[
-              {
-                "title":"New Pyrecall Issue",
-                "description":"**#${{ github.event.issue.number }}** - ${{ github.event.issue.title }}",
-                "url":"${{ github.event.issue.html_url }}",
-                "fields":[
-                  {
-                    "name":"Author",
-                    "value":"${{ github.event.issue.user.login }}"
-                  }
-                ]
-              }
-            ]
-          }' \
-          ${{ secrets.DISCORD_ISSUES_SECRET }}
+          LABELS=$(jq -r '[.issue.labels[].name] | join(", ")' "$GITHUB_EVENT_PATH")
+
+          if [ -z "$LABELS" ]; then
+            LABELS="None"
+          fi
+
+          BODY=$(jq -r '.issue.body // "No description provided."' "$GITHUB_EVENT_PATH")
+
+          # Discord embed descriptions are limited to 4096 characters
+          BODY="${BODY:0:4000}"
+
+          jq -n \
+            --arg content "@everyone" \
+            --arg title "🐞 New Pyrecall Issue" \
+            --arg url "${{ github.event.issue.html_url }}" \
+            --arg desc "**#${{ github.event.issue.number }}** - ${{ github.event.issue.title }}\n\n$BODY" \
+            --arg author "${{ github.event.issue.user.login }}" \
+            --arg repo "${{ github.repository }}" \
+            --arg labels "$LABELS" \
+            --arg timestamp "${{ github.event.issue.created_at }}" \
+            '{
+              content: $content,
+              username: "Pyrecall",
+              embeds: [
+                {
+                  title: $title,
+                  url: $url,
+                  description: $desc,
+                  color: 15158332,
+                  fields: [
+                    {
+                      name: "👤 Author",
+                      value: $author,
+                      inline: true
+                    },
+                    {
+                      name: "🏷️ Labels",
+                      value: $labels,
+                      inline: true
+                    },
+                    {
+                      name: "📦 Repository",
+                      value: $repo,
+                      inline: true
+                    }
+                  ],
+                  footer: {
+                    text: "Pyrecall GitHub Notifications"
+                  },
+                  timestamp: $timestamp
+                }
+              ]
+            }' | curl -X POST "$WEBHOOK_URL" \
+                -H "Content-Type: application/json" \
+                -d @-
