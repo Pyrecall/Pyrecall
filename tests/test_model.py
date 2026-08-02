@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -436,6 +437,11 @@ class TestLearnDataFormats:
             patched_model.learn(str(f), epochs=1)
 
 
+def _patch_bitsandbytes():
+    """Stub the bitsandbytes import so quantization tests run without it installed."""
+    return patch.dict(sys.modules, {"bitsandbytes": MagicMock(__version__="0.43.0")})
+
+
 class TestQLoRA:
     def test_qlora_strategy_accepted(self, tmp_snapshot_dir: Path) -> None:
         mock_tok = _make_mock_tokenizer()
@@ -448,6 +454,7 @@ class TestQLoRA:
             patch("pyrecall.model.get_peft_model", return_value=mock_peft),
             patch("pyrecall.model.prepare_model_for_kbit_training", return_value=mock_base),
             patch("pyrecall.model.BitsAndBytesConfig") as mock_bnb,
+            _patch_bitsandbytes(),
         ):
             from pyrecall.model import Model
 
@@ -493,6 +500,7 @@ class TestQLoRA:
             patch("pyrecall.model.get_peft_model", return_value=mock_peft),
             patch("pyrecall.model.prepare_model_for_kbit_training", return_value=mock_base),
             patch("pyrecall.model.BitsAndBytesConfig") as mock_bnb,
+            _patch_bitsandbytes(),
         ):
             from pyrecall.model import Model
 
@@ -515,6 +523,7 @@ class TestQLoRA:
             patch("pyrecall.model.get_peft_model", return_value=mock_peft),
             patch("pyrecall.model.prepare_model_for_kbit_training", return_value=mock_base),
             patch("pyrecall.model.BitsAndBytesConfig") as mock_bnb,
+            _patch_bitsandbytes(),
         ):
             from pyrecall.model import Model
 
