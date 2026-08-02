@@ -40,7 +40,7 @@ jobs:
 
       - name: Install CPU-only PyTorch
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install torch --index-url https://download.pytorch.org/whl/cpu
 
       - name: Install project and dev dependencies
