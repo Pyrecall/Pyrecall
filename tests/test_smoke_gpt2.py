@@ -90,6 +90,38 @@ def test_full_lifecycle(tmp_path: Path, training_jsonl: Path) -> None:
     assert isinstance(response, str), "generate() must return a string after rollback"
 
 
+def test_full_strategy_lifecycle(tmp_path: Path, training_jsonl: Path) -> None:
+    """strategy='full' on gpt2: snapshot, learn, check, rollback end-to-end."""
+    from pyrecall.model import Model
+
+    model = Model(
+        "gpt2",
+        strategy="full",
+        batch_size=1,
+        max_length=128,
+        snapshot_dir=tmp_path / "snapshots",
+    )
+
+    n_params = sum(p.numel() for p in model.model.parameters())
+    trainable = sum(p.numel() for p in model.model.parameters() if p.requires_grad)
+    assert trainable == n_params, "strategy='full' must make every parameter trainable"
+
+    before = model.snapshot("before", benchmark_mode="fast")
+    assert before.tags["strategy"] == "full"
+    assert before.adapter_path is not None and before.adapter_path.exists(), (
+        "Full model weights not saved"
+    )
+
+    model.learn(str(training_jsonl), epochs=1)
+
+    report = model.check(benchmark_mode="fast")
+    assert hasattr(report, "is_healthy")
+
+    model.rollback(to="before")
+    response = model.generate("What is 2 + 2?", max_new_tokens=20)
+    assert isinstance(response, str), "generate() must return a string after rollback"
+
+
 def test_snapshot_persisted_to_disk(tmp_path: Path) -> None:
     """Snapshot JSON and adapter weights must exist on disk after snapshot()."""
     from pyrecall.model import Model
