@@ -73,7 +73,7 @@ jobs:
 
       - name: Install pyrecall
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           if [ -n "${{ inputs.pyrecall_version }}" ]; then
             pip install "pyrecall==${{ inputs.pyrecall_version }}"
           else
