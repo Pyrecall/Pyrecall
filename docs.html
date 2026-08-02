@@ -1306,10 +1306,10 @@
 
         <!-- status -->
         <h3 id="cli-status">pyrecall status</h3>
-        <p>Show all saved snapshots and their per-category skill scores in a table. The current baseline is marked with ★. Use <code>--json</code> for machine-readable output.</p>
+        <p>Show all saved snapshots and their per-category skill scores in a table. The current baseline is marked with ★. Use <code>--output status.json</code> for machine-readable output (add <code>--plain</code> for compact JSON).</p>
         <div class="cli-block">
           <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall status</span></div>
-          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall status --json | jq '.snapshots[].overall'</span></div>
+          <div class="cli-line"><span class="prompt">$</span><span class="cmd">pyrecall status --output status.json && jq '.snapshots[].overall' status.json</span></div>
         </div>
         <p>JSON output shape:</p>
         <div class="code-block">

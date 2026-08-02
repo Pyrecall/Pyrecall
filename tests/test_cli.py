@@ -2404,6 +2404,48 @@ class TestStatusOutput:
         assert len(data["snapshots"]) == 1
         assert data["snapshots"][0]["name"] == "v1"
 
+    def test_output_json_plain_is_compact(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        mgr = _make_mock_manager(snapshots=[_make_snapshot("v1", {"coding": 0.8})])
+        out = tmp_path / "status.json"
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["status", "--output", str(out), "--plain"])
+
+        assert result.exit_code == 0
+        content = out.read_text()
+        assert "\n" not in content
+        data = json.loads(content)
+        assert data["snapshots"][0]["name"] == "v1"
+
+    def test_plain_without_output_errors(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        mgr = _make_mock_manager(snapshots=[_make_snapshot("v1")])
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["status", "--plain"])
+
+        assert result.exit_code == 1
+
+    def test_plain_with_non_json_output_errors(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path)
+        mgr = _make_mock_manager(snapshots=[_make_snapshot("v1")])
+        out = tmp_path / "status.csv"
+
+        with patch("pyrecall.rollback.RollbackManager", return_value=mgr):
+            result = runner.invoke(app, ["status", "--output", str(out), "--plain"])
+
+        assert result.exit_code == 1
+
     def test_output_csv_creates_file(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.chdir(tmp_path)
         _write_config(tmp_path)

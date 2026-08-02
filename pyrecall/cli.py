@@ -1940,6 +1940,7 @@ def _write_status_output(
     model_name: str | None,
     baseline: str | None,
     path: str,
+    plain: bool = False,
 ) -> None:
     """Write status output to a file in JSON, CSV, or HTML format.
 
@@ -1950,12 +1951,15 @@ def _write_status_output(
     out = _Path(path)
     fmt = out.suffix.lstrip(".").lower()
 
+    if plain and fmt != "json":
+        raise ValueError("--plain is only valid when the output file is JSON.")
+
     if fmt in ("htm", "html"):
         content = _status_to_html(snapshots, model_name, baseline)
     elif fmt == "csv":
         content = _status_to_csv(snapshots, baseline)
     elif fmt == "json":
-        content = _status_to_json(snapshots, model_name, baseline)
+        content = _status_to_json(snapshots, model_name, baseline, plain=plain)
     else:
         raise ValueError(
             f"Unknown format '{fmt}'. Use 'html', 'csv', or 'json' "
@@ -1972,6 +1976,7 @@ def _status_to_json(
     snapshots: list,
     model_name: str | None,
     baseline: str | None,
+    plain: bool = False,
 ) -> str:
     """Return status data as JSON string."""
 
@@ -1995,6 +2000,8 @@ def _status_to_json(
             for snap in snapshots
         ],
     }
+    if plain:
+        return json.dumps(out, separators=(",", ":"))
     return json.dumps(out, indent=2)
 
 
@@ -2160,10 +2167,6 @@ def _status_to_html(snapshots: list, model_name: str | None, baseline: str | Non
 
 @app.command()
 def status(
-    json_output: Annotated[
-        bool,
-        typer.Option("--json", help="Output results as JSON instead of a rich table."),
-    ] = False,
     output: Annotated[
         str | None,
         typer.Option(
@@ -2172,6 +2175,13 @@ def status(
             help="Save the report to a file. Format inferred from extension: .csv, .html, or .json.",
         ),
     ] = None,
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Write compact/minified JSON. Only valid with a .json --output file.",
+        ),
+    ] = False,
 ) -> None:
     """
     Show all saved snapshots and their per-category skill scores.
@@ -2180,12 +2190,17 @@ def status(
 
         pyrecall status --output status.csv
         pyrecall status --output status.json
+        pyrecall status --output status.json --plain
         pyrecall status --output status.html
     """
     config = _read_config()
     mgr = _build_rollback_manager(config)
     all_snaps = mgr.list_snapshots()
     baseline = config.get("baseline_snapshot")
+
+    if plain and not output:
+        console.print("[red]Error:[/red] --plain requires --output pointing at a .json file.")
+        raise typer.Exit(1)
 
     # If --output is specified, write to file and return
     if output:
@@ -2195,35 +2210,11 @@ def status(
                 config.get("model_name"),
                 baseline,
                 output,
+                plain=plain,
             )
         except ValueError as exc:
             console.print(f"[red]Error:[/red] {exc}")
             raise typer.Exit(1)
-        return
-
-    if json_output:
-
-        def _nan_safe(v: float) -> float | None:
-            return None if math.isnan(v) else v
-
-        out = {
-            "model_name": config.get("model_name"),
-            "baseline_snapshot": baseline,
-            "snapshots": [
-                {
-                    "name": snap.name,
-                    "created_at": snap.created_at.isoformat(),
-                    "overall": _nan_safe(snap.overall_score()),
-                    "scores": {k: _nan_safe(v) for k, v in snap.category_scores().items()},
-                    "adapter_ok": bool(snap.adapter_path and snap.adapter_path.exists()),
-                    "is_baseline": snap.name == baseline,
-                    "hub_repo": snap.hub_repo,
-                    "tags": snap.tags,
-                }
-                for snap in all_snaps
-            ],
-        }
-        typer.echo(json.dumps(out, indent=2))
         return
 
     if not all_snaps:
