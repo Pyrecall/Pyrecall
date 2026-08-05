@@ -8,7 +8,7 @@
 
 **Forgetting detection and skill rollback for fine-tuned LLMs.**
 
-Fine-tune on new data and your model quietly loses what it already knew — coding ability, reasoning, safety guardrails. pyrecall catches it before it ships.
+Fine-tune on new data and your model might quietly loses what it already knew — coding ability, reasoning, safety guardrails, and much more. Pyrecall catches it and helps you fix it.
 
 ---
 
@@ -52,15 +52,15 @@ pyrecall check --watch
 
 ## How it works
 
-Benchmarks 180 prompts across 9 skill categories (reasoning, coding, safety, math, multilingual, and more) using log-likelihood scoring. After training, `check` diffs the scores and flags any category that drops past your threshold (default 10%). Only the LoRA adapter is stored per snapshot — a few hundred MB, not the full model.
+Benchmarks 20, 90, or 180 prompts across 9 skill categories (reasoning, coding, safety, math, multilingual, and more) using log-likelihood scoring. After training, `check` diffs the scores and flags any category that drops past your threshold (default 10%). Only the LoRA adapter is stored per snapshot — a few hundred MB, not the full model.
 
-Any causal LM on HuggingFace Hub is supported — Llama, Mistral, Phi, Gemma, Qwen, Falcon, GPT-2/Neo/J, and more. LoRA targets are auto-detected.
+Any causal LM on HuggingFace Hub is supported(Llama, Mistral, Phi, Gemma, Qwen, Falcon, GPT-2/Neo/J, and more). LoRA targets are auto-detected.
 
 ---
 
 ## Docs
 
-Full CLI reference, Python API, experiment tracker integrations (W&B, MLflow, Neptune), custom benchmarks, per-category thresholds, and more:
+Full CLI reference, Python API, experiment tracker integrations (W&B, MLflow, Neptune), custom benchmarks, per-category thresholds, and more
 
 **[pyrecall.github.io/Pyrecall](https://pyrecall.github.io/Pyrecall/)**
 
@@ -74,4 +74,4 @@ pip install -e ".[dev]"
 pytest
 ```
 
-Open an issue before large changes. MIT — [LICENSE](LICENSE).
+MIT — [LICENSE](LICENSE).
