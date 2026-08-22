@@ -8,7 +8,7 @@
 
 **Forgetting detection and skill rollback for fine-tuned LLMs.**
 
-Fine-tuning always comes with risks. Everytime you fine-tune, your model may lose some of the knowledge it had. 
+Fine-tuning always comes with risks. Everytime you fine-tune, your model may lose some of the knowledge it previously had. 
 
 ---
 
@@ -69,4 +69,7 @@ git clone https://github.com/Pyrecall/Pyrecall
 pip install -e ".[dev]"
 ```
 
-MIT — [LICENSE](LICENSE).
+
+MIT — [LICENSE](LICENSE)
+
+Contributors: @Arths17, @Sid294, @shreyasgandhe, Claude
