@@ -8,37 +8,33 @@
 
 **Forgetting detection and skill rollback for fine-tuned LLMs.**
 
-Fine-tune on new data and your model might quietly loses what it already knew — coding ability, reasoning, safety guardrails, and much more. Pyrecall catches it and helps you fix it.
+Fine-tuning always comes with risks. Everytime you fine-tune, your model may lose some of the knowledge it previously had. 
 
 ---
 
-## Install
+## How to Install
 
 ```bash
-pip install pyrecall   # Python 3.11–3.14 · CUDA, MPS, and CPU
+pip install pyrecall
 ```
 
 ---
 
-## Quickstart
+## To Get Started
 
 ```python
 from pyrecall import Model
 
 model = Model("Qwen/Qwen2.5-1.5b-Instruct")
-model.snapshot("before")
+model.snapshot("baseline")
 model.learn("data.jsonl", epochs=3)
-
-if not model.check().is_healthy:
-    model.rollback(to="before")
 ```
 
 ```bash
-pyrecall init                                      # default model used is Qwen/Qwen2.5-1.5B-Instruct
-pyrecall snapshot before_v1                        # baseline before training
-pyrecall learn train.jsonl --snapshot-after after_v1  # train + snapshot in one step
-pyrecall check                                     # compares last two snapshots
-# exit 0 → ship   exit 2 → pyrecall rollback before_v1
+pyrecall init                                      
+pyrecall snapshot baseline
+pyrecall learn train.jsonl --snapshot-after after_training
+pyrecall check        
 ```
 
 ## To continuously monitor for new snapshots
@@ -52,15 +48,15 @@ pyrecall check --watch
 
 ## How it works
 
-Benchmarks 20, 90, or 180 prompts across 9 skill categories (reasoning, coding, safety, math, multilingual, and more) using log-likelihood scoring. After training, `check` diffs the scores and flags any category that drops past your threshold (default 10%). Only the LoRA adapter is stored per snapshot — a few hundred MB, not the full model.
+Benchmarks 20, 90, or 180 prompts across 9 categories using log-likelihood scoring. After the model finishes training, you can use the `check` command to find any differences in the new model after fine-tuning. It will flag if any benhcmark categories drops past your threshold. Each snapshot stores a LoRA adapter.
 
-Any causal LM on HuggingFace Hub is supported(Llama, Mistral, Phi, Gemma, Qwen, Falcon, GPT-2/Neo/J, and more). LoRA targets are auto-detected.
+Any LM on HuggingFace Hub is supported(the default model is Qwen/Qwen2.5-1.5b-Instruct.
 
 ---
 
 ## Docs
 
-Full CLI reference, Python API, experiment tracker integrations (W&B, MLflow, Neptune), custom benchmarks, per-category thresholds, and more
+Access our Pyrecall's documentation here
 
 **[pyrecall.github.io/Pyrecall](https://pyrecall.github.io/Pyrecall/)**
 
@@ -69,9 +65,11 @@ Full CLI reference, Python API, experiment tracker integrations (W&B, MLflow, Ne
 ## Contributing
 
 ```bash
-git clone https://github.com/Arths17/Pyrecall
+git clone https://github.com/Pyrecall/Pyrecall
 pip install -e ".[dev]"
-pytest
 ```
 
-MIT — [LICENSE](LICENSE).
+
+MIT — [LICENSE](LICENSE)
+
+Contributors: @Arths17, @Sid294, @shreyasgandhe, Claude
