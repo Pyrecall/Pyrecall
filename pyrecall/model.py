@@ -42,7 +42,7 @@ from .rollback import RollbackManager
 from .snapshot import SkillScore, SkillSnapshot
 from .trackers import SnapshotTracker
 from .utils import (
-    compute_embeddings,
+    compute_embeddings_batch,
     compute_log_likelihood_batch,
     console,
     cosine_similarity,
@@ -1507,38 +1507,49 @@ class Model:
                         )
                         progress.advance(task)
             else:
+                # Generation is inherently sequential (autoregressive), but embedding
+                # the responses/references doesn't need to be: batch those forward
+                # passes instead of doing one pass per text.
+                responses: list[str] = []
                 for bench in all_benchmarks:
                     progress.update(
                         task,
-                        description=f"Benchmarking  [dim cyan]{bench.category}[/dim cyan]",
+                        description=f"Generating  [dim cyan]{bench.category}[/dim cyan]",
                     )
                     response = self.generate(bench.prompt)
                     if not response.strip():
                         response = "[no response]"
-                    resp_emb = compute_embeddings(
-                        self.model,
-                        self.tokenizer,
-                        response,
-                        device=self.device,  # type: ignore[arg-type]
-                    )
-                    ref_emb = compute_embeddings(
-                        self.model,
-                        self.tokenizer,
-                        bench.reference_answer,
-                        device=self.device,  # type: ignore[arg-type]
-                    )
-                    raw_sim = cosine_similarity(resp_emb, ref_emb)
-                    score = (raw_sim + 1.0) / 2.0
-                    scores.append(
-                        SkillScore(
-                            category=bench.category,
-                            prompt=bench.prompt,
-                            response=response,
-                            score=score,
-                            scoring_method=self.scoring_method,
-                        )
-                    )
+                    responses.append(response)
                     progress.advance(task)
+
+                progress.reset(task, total=len(all_benchmarks), description="Embedding")
+                batch_size = max(1, self._benchmark_batch_size)
+                for batch_start in range(0, len(all_benchmarks), batch_size):
+                    batch = all_benchmarks[batch_start : batch_start + batch_size]
+                    batch_responses = responses[batch_start : batch_start + batch_size]
+                    batch_texts = batch_responses + [b.reference_answer for b in batch]
+                    embeddings = compute_embeddings_batch(
+                        self.model,
+                        self.tokenizer,
+                        batch_texts,
+                        device=self.device,  # type: ignore[arg-type]
+                    )
+                    resp_embs, ref_embs = embeddings[: len(batch)], embeddings[len(batch) :]
+                    for bench, response, resp_emb, ref_emb in zip(
+                        batch, batch_responses, resp_embs, ref_embs
+                    ):
+                        raw_sim = cosine_similarity(resp_emb, ref_emb)
+                        score = (raw_sim + 1.0) / 2.0
+                        scores.append(
+                            SkillScore(
+                                category=bench.category,
+                                prompt=bench.prompt,
+                                response=response,
+                                score=score,
+                                scoring_method=self.scoring_method,
+                            )
+                        )
+                        progress.advance(task)
 
         return scores
 

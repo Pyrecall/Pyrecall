@@ -105,7 +105,10 @@ def patched_model(tmp_snapshot_dir: Path):
         patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tokenizer),
         patch("pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
         patch("pyrecall.model.get_peft_model", return_value=mock_peft),
-        patch("pyrecall.model.compute_embeddings", return_value=torch.randn(32)),
+        patch(
+            "pyrecall.model.compute_embeddings_batch",
+            side_effect=lambda model, tokenizer, texts, **kw: [torch.randn(32) for _ in texts],
+        ),
         patch("pyrecall.model.cosine_similarity", return_value=0.75),
     ):
         from pyrecall.model import Model
@@ -200,7 +203,10 @@ class TestModelCheck:
             patch("pyrecall.model.AutoTokenizer.from_pretrained", return_value=mock_tok),
             patch("pyrecall.model.AutoModelForCausalLM.from_pretrained", return_value=mock_base),
             patch("pyrecall.model.get_peft_model", return_value=mock_peft),
-            patch("pyrecall.model.compute_embeddings", return_value=torch.randn(32)),
+            patch(
+                "pyrecall.model.compute_embeddings_batch",
+                side_effect=lambda model, tokenizer, texts, **kw: [torch.randn(32) for _ in texts],
+            ),
             patch("pyrecall.model.cosine_similarity", return_value=0.75),
         ):
             from pyrecall.model import Model, PyrecallError

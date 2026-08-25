@@ -31,15 +31,19 @@ Open an issue at [github.com/Pyrecall/Pyrecall/issues](https://github.com/Pyreca
    ```bash
    pytest
    ```
+   Most tests use small mocked models and don't need a GPU or network access.
+   `torch` installs its default (CPU-only on most platforms unless you've
+   configured a CUDA index yourself) — that's fine for the default test suite.
 5. Lint with ruff:
    ```bash
    ruff check pyrecall/
+   mypy pyrecall --ignore-missing-imports --no-strict-optional
    ```
 6. Open a pull request against `main` with a clear description of what changed and why.
 
 ### Slow / Integration Tests
 
-End-to-end tests that load real models are marked `slow` and excluded from the default run. To include them:
+End-to-end tests that load real models are marked `slow` and excluded from the default run. They download a small model (e.g. GPT-2) from the Hugging Face Hub on first run, so they need network access. To include them:
 ```bash
 pytest -m slow
 ```

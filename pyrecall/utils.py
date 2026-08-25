@@ -82,6 +82,45 @@ def compute_embeddings(
     return pooled.squeeze(0).cpu()
 
 
+def compute_embeddings_batch(
+    model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizerBase,
+    texts: list[str],
+    device: str = "cpu",
+    max_length: int = 256,
+) -> list[torch.Tensor]:
+    """
+    Compute one mean-pooled embedding per entry in *texts* using a single batched
+    forward pass instead of one forward pass per text.
+
+    Returns embeddings in the same order as *texts*, each on CPU in float32.
+    """
+    if not texts:
+        return []
+
+    inputs = tokenizer(
+        texts,
+        return_tensors="pt",
+        truncation=True,
+        max_length=max_length,
+        padding=True,
+    ).to(device)
+
+    with torch.no_grad():
+        outputs = model(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            output_hidden_states=True,
+            return_dict=True,
+        )
+
+    last_hidden: torch.Tensor = outputs.hidden_states[-1]
+    mask = inputs["attention_mask"].unsqueeze(-1).float()  # (batch, seq_len, 1)
+    pooled = (last_hidden.float() * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
+
+    return [vec.cpu() for vec in pooled]
+
+
 def cosine_similarity(a: torch.Tensor, b: torch.Tensor) -> float:
     """Return cosine similarity between two 1-D embedding vectors, in range [-1, 1]."""
     return F.cosine_similarity(a.unsqueeze(0), b.unsqueeze(0)).item()

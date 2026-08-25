@@ -23,7 +23,7 @@ class Encryptor:
 
     salt: bytes  # set by from_passphrase; not present on direct __init__
 
-    def __init__(self, key: bytes) -> None:
+    def __init__(self, key: bytes | None = None) -> None:
         try:
             from cryptography.fernet import Fernet
         except ImportError as exc:
@@ -32,7 +32,9 @@ class Encryptor:
                 "Install it with: pip install pyrecall[privacy]"
             ) from exc
 
-        if not key:
+        if key is None:
+            key = Fernet.generate_key()
+        elif not key:
             raise ValueError("Encryption key must not be empty.")
         self.key = key
         self._fernet = Fernet(self.key)

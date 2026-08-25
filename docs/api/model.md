@@ -1,0 +1,3 @@
+# Model
+
+::: pyrecall.model.Model

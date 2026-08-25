@@ -1,0 +1,25 @@
+site_name: Pyrecall
+site_description: Forgetting detection and skill rollback for fine-tuned LLMs.
+repo_url: https://github.com/Pyrecall/Pyrecall
+
+theme:
+  name: material
+
+nav:
+  - Home: index.md
+  - API Reference:
+      - Model: api/model.md
+      - Detector: api/detector.md
+      - Rollback: api/rollback.md
+      - Snapshot: api/snapshot.md
+      - Trackers: api/trackers.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: sphinx
+            show_source: false
+            show_root_heading: true
