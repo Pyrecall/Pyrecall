@@ -82,3 +82,6 @@ dmypy.json
 
 .pyrecall.json
 .aider*
+
+# mkdocs build output
+site/
