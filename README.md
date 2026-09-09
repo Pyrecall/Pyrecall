@@ -37,20 +37,11 @@ pyrecall learn train.jsonl --snapshot-after after_training
 pyrecall check
 ```
 
-See [examples/basic_workflow.py](examples/basic_workflow.py) for a complete
-end-to-end script (snapshot → learn → check → rollback).
-
-## To continuously monitor for new snapshots
-
-```bash
-pyrecall check --watch
-```
-
----
+Look at [examples/basic_workflow.py](examples/basic_workflow.py) for an idea of how the workflow works
 
 ## How it works
 
-Benchmarks 20, 90, or 180 prompts across 9 categories using log-likelihood scoring. After the model finishes training, you can use the `check` command to find any differences in the new model after fine-tuning. It will flag if any benchmark category drops past your threshold. Each snapshot stores a LoRA adapter.
+Benchmarks 20, 90, or 180 prompts across 9 categories using log-likelihood scoring. After the model finishes training, you can use the `check` command to find any differences in the new model after fine-tuning. It will flag any benchmark categories that drop past your threshold. Each snapshot stores a LoRA adapter or a QLoRa adapter.
 
 Any LM on HuggingFace Hub is supported (the default model is Qwen/Qwen2.5-1.5b-Instruct).
 
