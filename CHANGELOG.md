@@ -9,11 +9,10 @@ See [GitHub Releases](https://github.com/Pyrecall/Pyrecall/releases) and
 `git log` for changes from v0.12.0 onward; this section will be kept current
 going forward.
 
-## [0.11.2] - bug fixes and doc corrections
+## 0.10.1 - 0.11.2
 
-## [0.11.1] - patch fixes
-
-## [0.10.1] - patch fixes
+Patch releases (bug fixes and doc corrections); no per-release notes were
+recorded. See `git log` for details.
 
 ## [0.10.0] - log-likelihood scoring
 

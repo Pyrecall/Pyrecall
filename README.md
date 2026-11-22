@@ -27,13 +27,13 @@ pip install pyrecall
 ```python
 from pyrecall import Model
 
-model = Model("Qwen/Qwen2.5-1.5b-Instruct")
+model = Model("Qwen/Qwen2.5-1.5B-Instruct")
 model.snapshot("baseline")
 model.learn("data.jsonl", epochs=3)
 ```
 
 
-**This initializes the model(default is Qwen/Qwen2.5-1.5b-Instruct), analyzes and stores all of the models current skills, and then goes through the fine-tuning process**
+**The same workflow from the command line:**
 
 ```bash
 pyrecall init
@@ -45,7 +45,7 @@ Look at [examples/basic_workflow.py](examples/basic_workflow.py) for an idea of 
 
 ## How the snapshots work
 
-Benchmarks 20, 90, or 180 prompts across 9 categories using log-likelihood scoring. After the model finishes training, you can use the `check` command to find any differences in the new model after fine-tuning. It will flag any benchmark categories that drop past your threshold. Each snapshot stores a LoRA adapter or a QLoRa adapter.
+Benchmarks 27 (`fast`), 90 (`standard`), or 180 (`full`) prompts across 9 categories using log-likelihood scoring. After the model finishes training, you can use the `check` command to find any differences in the new model after fine-tuning. It will flag any benchmark categories that drop past your threshold. Each snapshot stores a LoRA adapter or a QLoRa adapter.
 
 Any LM on HuggingFace Hub is supported (the default model is Qwen/Qwen2.5-1.5b-Instruct).
 
